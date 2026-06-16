@@ -1,25 +1,36 @@
 package com.sol.common.response;
 
+import com.sol.common.exception.ErrorCode;
+import lombok.Builder;
 import lombok.Getter;
 
 @Getter
 public class ApiResponse<T> {
 
-    private final boolean success;
+    private final String code;
     private final String message;
     private final T data;
 
-    private ApiResponse(boolean success, String message, T data) {
-        this.success = success;
+    @Builder
+    private ApiResponse(String code, String message, T data) {
+        this.code = code;
         this.message = message;
         this.data = data;
     }
 
     public static <T> ApiResponse<T> ok(T data) {
-        return new ApiResponse<>(true, "성공", data);
+        return ApiResponse.<T>builder()
+                .code("SUCCESS")
+                .message("성공")
+                .data(data)
+                .build();
     }
 
-    public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(false, message, null);
+    public static <T> ApiResponse<T> error(ErrorCode errorCode) {
+        return ApiResponse.<T>builder()
+                .code(errorCode.getCode())
+                .message(errorCode.getMessage())
+                .data(null)
+                .build();
     }
 }
