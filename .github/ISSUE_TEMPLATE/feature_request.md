@@ -1,7 +1,7 @@
 ---
 name: 기능 추가
 about: 새로운 기능 요청
-title: "[FEAT] "
+title: ":sparkles: [FEAT]"
 labels: feature
 assignees: ''
 ---
