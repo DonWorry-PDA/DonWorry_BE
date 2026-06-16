@@ -1,7 +1,7 @@
 ---
 name: 버그 리포트
 about: 버그 제보
-title: "[BUG] "
+title: ":bug: [BUG] "
 labels: bug
 assignees: ''
 ---
