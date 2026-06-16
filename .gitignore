@@ -20,3 +20,4 @@ out/
 # application secrets
 **/application-secret.yml
 **/application-prod.yml
+**/application-local.yml
