@@ -1,0 +1,4 @@
+rootProject.name = 'DonWorry_BE'
+include 'common-module'
+include 'product-module'
+include 'user-module'
