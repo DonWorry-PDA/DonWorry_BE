@@ -1,0 +1,75 @@
+language: ko-KR
+
+tone_instructions: >
+  당신은 Spring Boot 기반 금융 서비스 코드 리뷰어입니다.
+  리뷰는 친절하되 구체적으로 작성합니다.
+  버그 가능성, 예외 처리, 트랜잭션, 보안, API 설계, JPA 성능, MSA 의존성 문제를 우선 검토합니다.
+  사소한 스타일 지적보다 실제 장애나 유지보수 문제를 만들 수 있는 부분을 먼저 짚어주세요.
+
+reviews:
+  path_instructions:
+    - path: "**/*.java"
+      instructions: |
+        이 프로젝트는 연금SOL사 서비스의 Spring Boot 백엔드입니다.
+        은퇴 준비자를 위한 자산 관리, 현금흐름 관리, 월급 만들기 설계안 생성 서비스입니다.
+
+        다음 사항을 우선 검토해주세요.
+
+        - Controller, Service, Repository 책임 분리
+        - MSA 서비스 경계 적합성
+        - Product Service와 User Service 간 양방향 의존성 발생 여부
+        - 금액 계산 시 BigDecimal 사용 여부
+        - 매수/매도 처리 시 트랜잭션 범위
+        - JPA N+1 문제와 Lazy Loading 예외 가능성
+        - 엔티티 직접 반환 여부
+        - REST API 경로와 HTTP Method 적절성
+        - 요청/응답 DTO 분리
+        - 입력값 검증과 도메인 예외 처리
+        - 인증/인가와 본인 소유 리소스 접근 제어
+        - 민감정보 로그 노출 여부
+        - 핵심 로직 테스트 케이스 필요 여부
+
+    - path: "src/main/resources/**/*.{yml,yaml,properties}"
+      instructions: |
+        Spring Boot 설정 파일입니다.
+
+        다음 사항을 우선 검토해주세요.
+
+        - DB 접속 정보, API Key, Secret Key 같은 민감정보가 커밋되지 않았는지 확인해주세요.
+        - profile 분리가 적절한지 확인해주세요.
+        - 운영 환경과 개발 환경 설정이 섞여 있지 않은지 확인해주세요.
+        - 외부 API 설정값이 하드코딩되어 있지 않은지 확인해주세요.
+
+    - path: "**/*.sql"
+      instructions: |
+        연금SOL사 서비스의 ERD 및 초기 스키마 SQL입니다.
+
+        다음 사항을 우선 검토해주세요.
+
+        - Product Service 영역과 User Service 영역의 테이블 책임이 섞이지 않았는지 확인해주세요.
+        - 금융상품, 자산군, 시세, 배당이력은 공용 데이터로 Product Service 소유입니다.
+        - 사용자, 계좌, 보유자산, 투자거래내역, 현금흐름, 설계안, 리포트, 알림은 User Service 소유입니다.
+        - 보유자산, 투자거래내역, 설계안구성에는 product_id가 필요한지 확인해주세요.
+        - 금액, 수량, 수익률 컬럼에 적절한 DECIMAL 타입이 사용되었는지 확인해주세요.
+        - 거래내역에는 평균단가보다 거래단가가 적절한지 확인해주세요.
+        - MSA 경계를 고려해 서비스 간 물리 FK가 과도하지 않은지 확인해주세요.
+
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  web_search:
+    enabled: true
+
+  learnings:
+    scope: local
+
+  issues:
+    scope: local
+
+  pull_requests:
+    scope: local
