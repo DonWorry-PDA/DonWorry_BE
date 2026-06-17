@@ -76,4 +76,17 @@ public class DailyPrice {
 
     @Column(name = "index_change_rate", precision = 7, scale = 2)
     private BigDecimal indexChangeRate;    // FLUC_RT_IDX
+
+    // 수익률 (채권 전용)
+    @Column(name = "closing_yield", precision = 10, scale = 4)
+    private BigDecimal closingYield;       // CLSPRC_YD
+
+    @Column(name = "open_yield", precision = 10, scale = 4)
+    private BigDecimal openYield;          // OPNPRC_YD
+
+    @Column(name = "high_yield", precision = 10, scale = 4)
+    private BigDecimal highYield;          // HGPRC_YD
+
+    @Column(name = "low_yield", precision = 10, scale = 4)
+    private BigDecimal lowYield;           // LWPRC_YD
 }
