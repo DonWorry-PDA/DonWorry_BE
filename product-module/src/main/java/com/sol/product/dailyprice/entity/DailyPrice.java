@@ -89,4 +89,17 @@ public class DailyPrice {
 
     @Column(name = "low_yield", precision = 10, scale = 4)
     private BigDecimal lowYield;           // LWPRC_YD
+
+    // 밸류에이션 / 가격 제한 (주식 전용)
+    @Column(name = "per", precision = 10, scale = 2)
+    private BigDecimal per;                // PER
+
+    @Column(name = "pbr", precision = 10, scale = 2)
+    private BigDecimal pbr;                // PBR
+
+    @Column(name = "upper_limit_price", precision = 15, scale = 2)
+    private BigDecimal upperLimitPrice;    // 상한가
+
+    @Column(name = "lower_limit_price", precision = 15, scale = 2)
+    private BigDecimal lowerLimitPrice;    // 하한가
 }
