@@ -40,4 +40,7 @@ public class TradeHistory {
 
     @Column(name = "수수료", precision = 10, scale = 2)
     private BigDecimal fee;
+
+    @Column(name = "product_id")
+    private Long productId;
 }
