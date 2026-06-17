@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "사용자목표")
+@Table(name = "user_goal")
 @Getter
 @NoArgsConstructor
 public class UserGoal {
@@ -23,10 +23,10 @@ public class UserGoal {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "월목표생활비", precision = 15, scale = 0)
+    @Column(name = "monthly_target_living_cost", precision = 15, scale = 0)
     private BigDecimal monthlyTargetLivingCost;
 
-    @Column(name = "월예상의료비", precision = 15, scale = 0)
+    @Column(name = "monthly_expected_medical_cost", precision = 15, scale = 0)
     private BigDecimal monthlyExpectedMedicalCost;
 
     @Column(name = "created_at")

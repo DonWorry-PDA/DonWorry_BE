@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "생활안정도점수")
+@Table(name = "stability_score")
 @Getter
 @NoArgsConstructor
 public class StabilityScore {
@@ -23,27 +23,27 @@ public class StabilityScore {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "생활비충당률", precision = 5, scale = 2)
+    @Column(name = "living_cost_coverage_rate", precision = 5, scale = 2)
     private BigDecimal livingCostCoverageRate;
 
-    @Column(name = "필수지출부담률", precision = 5, scale = 2)
+    @Column(name = "essential_expense_burden_rate", precision = 5, scale = 2)
     private BigDecimal essentialExpenseBurdenRate;
 
-    @Column(name = "유동성")
+    @Column(name = "liquidity")
     private Integer liquidity;
 
-    @Column(name = "의료비대비력", precision = 5, scale = 2)
+    @Column(name = "medical_cost_preparedness", precision = 5, scale = 2)
     private BigDecimal medicalCostPreparedness;
 
-    @Column(name = "부채부담률", precision = 5, scale = 2)
+    @Column(name = "debt_burden_rate", precision = 5, scale = 2)
     private BigDecimal debtBurdenRate;
 
-    @Column(name = "위험자산의존도", precision = 5, scale = 2)
+    @Column(name = "risky_asset_dependency", precision = 5, scale = 2)
     private BigDecimal riskyAssetDependency;
 
-    @Column(name = "안정등급", length = 10)
+    @Column(name = "stability_grade", length = 10)
     private String stabilityGrade;
 
-    @Column(name = "계산시각")
+    @Column(name = "calculated_at")
     private LocalDateTime calculatedAt;
 }

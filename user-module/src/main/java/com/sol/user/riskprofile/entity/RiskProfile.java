@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "투자성향")
+@Table(name = "risk_profile")
 @Getter
 @NoArgsConstructor
 public class RiskProfile {
@@ -23,27 +23,27 @@ public class RiskProfile {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "유동성요구도")
+    @Column(name = "liquidity_requirement")
     private Integer liquidityRequirement;
 
-    @Column(name = "위험감내력")
+    @Column(name = "risk_tolerance")
     private Integer riskTolerance;
 
-    @Column(name = "위험선호", length = 20)
+    @Column(name = "risk_preference", length = 20)
     private String riskPreference;
 
-    @Column(name = "현금흐름안정요구", length = 20)
+    @Column(name = "cash_flow_stability_requirement", length = 20)
     private String cashFlowStabilityRequirement;
 
-    @Column(name = "floor충족률", precision = 5, scale = 2)
+    @Column(name = "floor_satisfaction_rate", precision = 5, scale = 2)
     private BigDecimal floorSatisfactionRate;
 
-    @Column(name = "행동가드레일")
+    @Column(name = "behavior_guardrail")
     private Integer behaviorGuardrail;
 
-    @Column(name = "최종투자성향", length = 20)
+    @Column(name = "final_risk_preference", length = 20)
     private String finalRiskPreference;
 
-    @Column(name = "계산시각")
+    @Column(name = "calculated_at")
     private LocalDateTime calculatedAt;
 }

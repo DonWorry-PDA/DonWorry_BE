@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "현금흐름이벤트")
+@Table(name = "cash_flow_event")
 @Getter
 @NoArgsConstructor
 public class CashFlowEvent {
@@ -23,18 +23,18 @@ public class CashFlowEvent {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "이벤트발생날짜")
+    @Column(name = "event_date")
     private LocalDate eventDate;
 
-    @Column(name = "이벤트유형", length = 20)
+    @Column(name = "event_type", length = 20)
     private String eventType;
 
-    @Column(name = "금액", precision = 15, scale = 0)
+    @Column(name = "amount", precision = 15, scale = 0)
     private BigDecimal amount;
 
-    @Column(name = "입출금구분", length = 10)
+    @Column(name = "flow_type", length = 10)
     private String flowType;
 
-    @Column(name = "상태", length = 10)
+    @Column(name = "status", length = 10)
     private String status;
 }

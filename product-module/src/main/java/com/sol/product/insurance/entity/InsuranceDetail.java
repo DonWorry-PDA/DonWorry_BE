@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "보험형")
+@Table(name = "insurance_detail")
 @Getter
 @NoArgsConstructor
 public class InsuranceDetail {
@@ -20,12 +20,12 @@ public class InsuranceDetail {
     @JoinColumn(name = "product_id", nullable = false)
     private FinancialProduct product;
 
-    @Column(name = "보험유형", length = 30)
+    @Column(name = "insurance_type", length = 30)
     private String insuranceType;
 
-    @Column(name = "보장금액")
+    @Column(name = "coverage_amount")
     private Integer coverageAmount;
 
-    @Column(name = "자기부담금비율")
+    @Column(name = "self_pay_ratio")
     private Integer selfPayRatio;
 }

@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "연금")
+@Table(name = "pension")
 @Getter
 @NoArgsConstructor
 public class Pension {
@@ -22,15 +22,15 @@ public class Pension {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "퇴직연금유형", length = 20)
+    @Column(name = "pension_type", length = 20)
     private String pensionType;
 
-    @Column(name = "예상월수령액", precision = 15, scale = 0)
+    @Column(name = "expected_monthly_amount", precision = 15, scale = 0)
     private BigDecimal expectedMonthlyAmount;
 
-    @Column(name = "변동여부")
+    @Column(name = "variable")
     private Boolean variable;
 
-    @Column(name = "수령시작나이")
+    @Column(name = "start_age")
     private Integer startAge;
 }

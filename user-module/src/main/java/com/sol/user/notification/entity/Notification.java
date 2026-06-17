@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "알림")
+@Table(name = "notification")
 @Getter
 @NoArgsConstructor
 public class Notification {
@@ -22,18 +22,18 @@ public class Notification {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "알림유형", length = 20)
+    @Column(name = "notification_type", length = 20)
     private String notificationType;
 
-    @Column(name = "알림내용", length = 300)
+    @Column(name = "content", length = 300)
     private String content;
 
     @Column(name = "link_target", length = 100)
     private String linkTarget;
 
-    @Column(name = "읽음여부")
+    @Column(name = "is_read")
     private Boolean read;
 
-    @Column(name = "생성시간")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

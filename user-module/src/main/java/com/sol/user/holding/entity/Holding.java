@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "보유자산")
+@Table(name = "holding")
 @Getter
 @NoArgsConstructor
 public class Holding {
@@ -25,18 +25,18 @@ public class Holding {
     @Column(name = "product_id")
     private Long productId;
 
-    @Column(name = "평가금액", precision = 15, scale = 0)
+    @Column(name = "evaluation_amount", precision = 15, scale = 0)
     private BigDecimal evaluationAmount;
 
-    @Column(name = "보유수량", precision = 18, scale = 4)
+    @Column(name = "quantity", precision = 18, scale = 4)
     private BigDecimal quantity;
 
-    @Column(name = "평균매입단가", length = 255)
+    @Column(name = "avg_purchase_price", length = 255)
     private String avgPurchasePrice;
 
-    @Column(name = "평가손익", length = 255)
+    @Column(name = "unrealized_gain_loss", length = 255)
     private String unrealizedGainLoss;
 
-    @Column(name = "동결여부")
+    @Column(name = "frozen")
     private Boolean frozen;
 }

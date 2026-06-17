@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "설계안구성")
+@Table(name = "recommendation_item")
 @Getter
 @NoArgsConstructor
 public class RecommendationItem {
@@ -24,15 +24,15 @@ public class RecommendationItem {
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
-    @Column(name = "비중", precision = 5, scale = 2)
+    @Column(name = "weight", precision = 5, scale = 2)
     private BigDecimal weight;
 
-    @Column(name = "배분금액", precision = 15, scale = 0)
+    @Column(name = "allocated_amount", precision = 15, scale = 0)
     private BigDecimal allocatedAmount;
 
-    @Column(name = "상품기여도", precision = 15, scale = 0)
+    @Column(name = "product_contribution", precision = 15, scale = 0)
     private BigDecimal productContribution;
 
-    @Column(name = "추천계좌유형", length = 20)
+    @Column(name = "recommended_account_type", length = 20)
     private String recommendedAccountType;
 }

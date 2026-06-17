@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "월간리포트")
+@Table(name = "monthly_report")
 @Getter
 @NoArgsConstructor
 public class MonthlyReport {
@@ -23,25 +23,25 @@ public class MonthlyReport {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "현재월", length = 7)
+    @Column(name = "current_month", length = 7)
     private String currentMonth;
 
-    @Column(name = "자산변동량", precision = 18, scale = 2)
+    @Column(name = "asset_change_amount", precision = 18, scale = 2)
     private BigDecimal assetChangeAmount;
 
-    @Column(name = "월총수입", precision = 18, scale = 2)
+    @Column(name = "monthly_total_income", precision = 18, scale = 2)
     private BigDecimal monthlyTotalIncome;
 
-    @Column(name = "월총지출", precision = 18, scale = 2)
+    @Column(name = "monthly_total_expense", precision = 18, scale = 2)
     private BigDecimal monthlyTotalExpense;
 
-    @Column(name = "생활안정도변동비율", precision = 5, scale = 2)
+    @Column(name = "stability_change_rate", precision = 5, scale = 2)
     private BigDecimal stabilityChangeRate;
 
-    @Column(name = "현재월생활안정도점수", precision = 5, scale = 2)
+    @Column(name = "current_month_stability_score", precision = 5, scale = 2)
     private BigDecimal currentMonthStabilityScore;
 
-    @Column(name = "요약문", columnDefinition = "TEXT")
+    @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;
 
     @Column(name = "created_at")

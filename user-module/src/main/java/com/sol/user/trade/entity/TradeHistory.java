@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "투자거래내역")
+@Table(name = "trade_history")
 @Getter
 @NoArgsConstructor
 public class TradeHistory {
@@ -23,22 +23,22 @@ public class TradeHistory {
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
-    @Column(name = "거래 유형", length = 10)
+    @Column(name = "trade_type", length = 10)
     private String tradeType;
 
-    @Column(name = "거래일시")
+    @Column(name = "traded_at")
     private LocalDateTime tradedAt;
 
-    @Column(name = "거래수량", precision = 18, scale = 4)
+    @Column(name = "quantity", precision = 18, scale = 4)
     private BigDecimal quantity;
 
-    @Column(name = "평균단가", precision = 15, scale = 2)
+    @Column(name = "avg_price", precision = 15, scale = 2)
     private BigDecimal avgPrice;
 
-    @Column(name = "거래 금액", precision = 15, scale = 2)
+    @Column(name = "trade_amount", precision = 15, scale = 2)
     private BigDecimal tradeAmount;
 
-    @Column(name = "수수료", precision = 10, scale = 2)
+    @Column(name = "fee", precision = 10, scale = 2)
     private BigDecimal fee;
 
     @Column(name = "product_id")

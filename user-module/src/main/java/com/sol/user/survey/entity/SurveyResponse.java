@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "성향설문응답")
+@Table(name = "survey_response")
 @Getter
 @NoArgsConstructor
 public class SurveyResponse {
