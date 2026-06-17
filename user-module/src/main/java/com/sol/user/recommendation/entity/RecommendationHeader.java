@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "설계안헤더")
+@Table(name = "recommendation_header")
 @Getter
 @NoArgsConstructor
 public class RecommendationHeader {
@@ -23,15 +23,15 @@ public class RecommendationHeader {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "설계안유형", length = 20)
+    @Column(name = "recommendation_type", length = 20)
     private String recommendationType;
 
-    @Column(name = "예상월급", precision = 15, scale = 0)
+    @Column(name = "expected_monthly_salary", precision = 15, scale = 0)
     private BigDecimal expectedMonthlySalary;
 
-    @Column(name = "생활비충당률", precision = 5, scale = 2)
+    @Column(name = "living_cost_coverage_rate", precision = 5, scale = 2)
     private BigDecimal livingCostCoverageRate;
 
-    @Column(name = "생성시각")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

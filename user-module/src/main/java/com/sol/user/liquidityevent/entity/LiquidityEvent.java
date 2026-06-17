@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "목돈계획")
+@Table(name = "liquidity_event")
 @Getter
 @NoArgsConstructor
 public class LiquidityEvent {
@@ -22,12 +22,12 @@ public class LiquidityEvent {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "시점", length = 20)
+    @Column(name = "timing", length = 20)
     private String timing;
 
-    @Column(name = "필요금액", precision = 15, scale = 0)
+    @Column(name = "required_amount", precision = 15, scale = 0)
     private BigDecimal requiredAmount;
 
-    @Column(name = "사유", length = 100)
+    @Column(name = "reason", length = 100)
     private String reason;
 }

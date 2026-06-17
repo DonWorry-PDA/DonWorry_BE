@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "배당이력")
+@Table(name = "dividend_history")
 @Getter
 @NoArgsConstructor
 public class DividendHistory {
@@ -23,15 +23,15 @@ public class DividendHistory {
     @JoinColumn(name = "product_id", nullable = false)
     private FinancialProduct product;
 
-    @Column(name = "배당종류", length = 20)
+    @Column(name = "dividend_type", length = 20)
     private String dividendType;
 
-    @Column(name = "배당락일")
+    @Column(name = "ex_dividend_date")
     private LocalDate exDividendDate;
 
-    @Column(name = "지급일")
+    @Column(name = "payment_date")
     private LocalDate paymentDate;
 
-    @Column(name = "주당좌당금액", precision = 15, scale = 2)
+    @Column(name = "amount_per_unit", precision = 15, scale = 2)
     private BigDecimal amountPerUnit;
 }

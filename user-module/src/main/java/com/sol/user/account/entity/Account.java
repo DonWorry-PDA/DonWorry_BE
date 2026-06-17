@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "계좌")
+@Table(name = "account")
 @Getter
 @NoArgsConstructor
 public class Account {
@@ -22,18 +22,18 @@ public class Account {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "계좌유형", length = 20)
+    @Column(name = "account_type", length = 20)
     private String accountType;
 
-    @Column(name = "기관명", length = 50)
+    @Column(name = "institution_name", length = 50)
     private String institutionName;
 
-    @Column(name = "계좌번호", length = 30)
+    @Column(name = "account_number", length = 30)
     private String accountNumber;
 
-    @Column(name = "예수금", precision = 15, scale = 0)
+    @Column(name = "deposit_balance", precision = 15, scale = 0)
     private BigDecimal depositBalance;
 
-    @Column(name = "기존계좌여부")
+    @Column(name = "existing_account")
     private Boolean existingAccount;
 }

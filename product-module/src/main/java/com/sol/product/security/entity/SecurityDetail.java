@@ -13,7 +13,7 @@ import java.time.LocalDate;
  * ETF는 EtfDetail, 펀드는 FundDetail로 분리되어 관리됩니다.
  */
 @Entity
-@Table(name = "증권상품정보")
+@Table(name = "security_detail")
 @Getter
 @NoArgsConstructor
 public class SecurityDetail {
@@ -27,33 +27,33 @@ public class SecurityDetail {
     @JoinColumn(name = "product_id", nullable = false)
     private FinancialProduct product;
 
-    @Column(name = "종목코드", length = 20)
+    @Column(name = "ticker_code", length = 20)
     private String tickerCode;
 
-    @Column(name = "상장시장", length = 20)
+    @Column(name = "listed_market", length = 20)
     private String listedMarket;
 
     // STOCK(주식) / BOND(채권)
-    @Column(name = "세부유형", length = 20, nullable = false)
+    @Column(name = "detail_type", length = 20, nullable = false)
     private String detailType;
 
     // 채권 전용
-    @Column(name = "신용등급", length = 10)
+    @Column(name = "credit_rating", length = 10)
     private String creditRating;
 
-    @Column(name = "만기일")
+    @Column(name = "maturity_date")
     private LocalDate maturityDate;
 
-    @Column(name = "표면금리", precision = 5, scale = 2)
+    @Column(name = "coupon_rate", precision = 5, scale = 2)
     private BigDecimal couponRate;
 
     // 주식 전용
-    @Column(name = "배당수익률", precision = 5, scale = 2)
+    @Column(name = "dividend_yield", precision = 5, scale = 2)
     private BigDecimal dividendYield;
 
-    @Column(name = "섹터", length = 50)
+    @Column(name = "sector", length = 50)
     private String sector;
 
-    @Column(name = "담을수있는계좌", length = 100)
+    @Column(name = "available_account_types", length = 100)
     private String availableAccountTypes;
 }

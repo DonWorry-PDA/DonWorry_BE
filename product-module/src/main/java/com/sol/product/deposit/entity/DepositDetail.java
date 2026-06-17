@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "예적금상품정보")
+@Table(name = "deposit_detail")
 @Getter
 @NoArgsConstructor
 public class DepositDetail {
@@ -22,15 +22,15 @@ public class DepositDetail {
     @JoinColumn(name = "product_id", nullable = false)
     private FinancialProduct product;
 
-    @Column(name = "금리", precision = 5, scale = 2)
+    @Column(name = "interest_rate", precision = 5, scale = 2)
     private BigDecimal interestRate;
 
-    @Column(name = "만기개월")
+    @Column(name = "maturity_months")
     private Integer maturityMonths;
 
-    @Column(name = "가입한도", precision = 15, scale = 0)
+    @Column(name = "subscription_limit", precision = 15, scale = 0)
     private BigDecimal subscriptionLimit;
 
-    @Column(name = "예금자보호제도")
+    @Column(name = "deposit_insurance")
     private Boolean depositInsurance;
 }

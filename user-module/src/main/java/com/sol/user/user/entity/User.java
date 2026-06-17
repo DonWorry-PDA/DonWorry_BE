@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "사용자")
+@Table(name = "users")
 @Getter
 @NoArgsConstructor
 public class User {
@@ -17,19 +17,19 @@ public class User {
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "이름", length = 50)
+    @Column(name = "name", length = 50)
     private String name;
 
-    @Column(name = "나이")
+    @Column(name = "age")
     private Integer age;
 
-    @Column(name = "비밀번호", length = 255)
+    @Column(name = "password", length = 255)
     private String password;
 
-    @Column(name = "은퇴여부")
+    @Column(name = "retired")
     private Boolean retired;
 
-    @Column(name = "국민연금수령여부")
+    @Column(name = "national_pension_receiving")
     private Boolean nationalPensionReceiving;
 
     @Column(name = "created_at")

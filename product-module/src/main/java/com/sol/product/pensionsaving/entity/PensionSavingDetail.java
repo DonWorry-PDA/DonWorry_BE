@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "연금저축상세")
+@Table(name = "pension_saving_detail")
 @Getter
 @NoArgsConstructor
 public class PensionSavingDetail {
@@ -20,27 +20,27 @@ public class PensionSavingDetail {
     @Column(name = "product_id")
     private Long productId;
 
-    @Column(name = "연금저축종류", length = 20)
+    @Column(name = "pension_saving_type", length = 20)
     private String pensionSavingType;
 
-    @Column(name = "세부유형", length = 30)
+    @Column(name = "detail_type", length = 30)
     private String detailType;
 
-    @Column(name = "평균수익률", precision = 5, scale = 2)
+    @Column(name = "avg_return_rate", precision = 5, scale = 2)
     private BigDecimal avgReturnRate;
 
-    @Column(name = "수익률1년", precision = 5, scale = 2)
+    @Column(name = "return_rate_1y", precision = 5, scale = 2)
     private BigDecimal returnRate1Year;
 
-    @Column(name = "수익률2년", precision = 5, scale = 2)
+    @Column(name = "return_rate_2y", precision = 5, scale = 2)
     private BigDecimal returnRate2Year;
 
-    @Column(name = "수익률3년", precision = 5, scale = 2)
+    @Column(name = "return_rate_3y", precision = 5, scale = 2)
     private BigDecimal returnRate3Year;
 
-    @Column(name = "가입방법", length = 50)
+    @Column(name = "subscription_method", length = 50)
     private String subscriptionMethod;
 
-    @Column(name = "제공기관명", length = 100)
+    @Column(name = "provider_name", length = 100)
     private String providerName;
 }
