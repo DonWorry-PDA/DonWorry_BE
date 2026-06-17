@@ -1,6 +1,7 @@
 package com.sol.product.assetclass.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +9,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "자산군")
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
 public class AssetClass {
 
     @Id
