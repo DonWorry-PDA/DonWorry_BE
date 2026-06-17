@@ -55,7 +55,7 @@ reviews:
         - MSA 경계를 고려해 서비스 간 물리 FK가 과도하지 않은지 확인해주세요.
 
   auto_review:
-    enabled: false
+    enabled: true
     auto_incremental_review: false
 
 chat:

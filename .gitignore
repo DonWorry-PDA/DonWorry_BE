@@ -24,3 +24,6 @@ out/
 
 # local-only seed test (contains AUTH_KEY, do not commit)
 product-module/src/test/java/com/sol/product/EtfDataSeedTest.java
+
+#claude
+.claude
