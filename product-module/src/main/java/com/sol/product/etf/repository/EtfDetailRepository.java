@@ -1,0 +1,16 @@
+package com.sol.product.etf.repository;
+
+import com.sol.product.etf.entity.EtfDetail;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface EtfDetailRepository extends JpaRepository<EtfDetail, Long> {
+
+    List<EtfDetail> findAllByAssetManager(String assetManager);
+
+    Optional<EtfDetail> findByTickerCode(String tickerCode);
+
+    Optional<EtfDetail> findByProductProductId(Long productId);
+}
