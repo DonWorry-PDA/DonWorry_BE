@@ -25,7 +25,7 @@ public class BondDetail {
     private Long bondDetailId;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
+    @JoinColumn(name = "product_id", nullable = false, unique = true)
     private FinancialProduct product;
 
     @Column(name = "ticker_code", length = 20)
