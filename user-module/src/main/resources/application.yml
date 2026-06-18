@@ -21,4 +21,4 @@ server:
   port: 8082
 
 jwt:
-  secret: ${JWT_SECRET:local-dev-secret-key-must-be-32-chars!!}
+  secret: ${JWT_SECRET}

@@ -20,6 +20,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
 
+    @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new BaseException(ErrorCode.AUTH_001));
