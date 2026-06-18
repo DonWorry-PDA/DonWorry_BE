@@ -50,4 +50,33 @@ public class EtfDetail {
 
     @Column(name = "available_account_types", length = 100)
     private String availableAccountTypes;
+
+    // 과세유형명 (예: 배당소득세(보유기간과세))
+    @Column(name = "tax_type", length = 100)
+    private String taxType;
+
+    // 과세유형 코드
+    @Column(name = "tax_type_code", length = 20)
+    private String taxTypeCode;
+
+    // 변동성 등급 (예: 매우높음, 높음, 보통, 낮음, 매우낮음)
+    @Column(name = "volatility_grade", length = 20)
+    private String volatilityGrade;
+
+    // 변동성 수준 (숫자 단계)
+    @Column(name = "volatility_level")
+    private Integer volatilityLevel;
+
+    // SOL ETF 내부 펀드코드 (분배금 API 연동용, 예: "210930")
+    @Column(name = "sol_fund_code", length = 20, unique = true)
+    private String solFundCode;
+
+    // 분배 주기 코드 (M1=월, Y4=분기, Y1=연1회, NN=무분배)
+    @Column(name = "distribution_cycle", length = 5)
+    private String distributionCycle;
+
+    public void updateSolMetadata(String solFundCode, String distributionCycle) {
+        this.solFundCode = solFundCode;
+        this.distributionCycle = distributionCycle;
+    }
 }
