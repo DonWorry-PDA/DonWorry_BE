@@ -37,4 +37,11 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "onboarding_completed", nullable = false)
+    private Boolean onboardingCompleted = false;
+
+    public void completeOnboarding() {
+        this.onboardingCompleted = true;
+    }
 }
