@@ -1,5 +1,7 @@
 package com.sol.user.stability.calculator;
 
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.stability.dto.LifeStabilityCalculatedResult;
 import com.sol.user.stability.dto.LifeStabilityCalculationInput;
 import com.sol.user.stability.type.LifeStabilityGrade;
@@ -17,9 +19,11 @@ public class LifeStabilityCalculator {
     private static final int SCALE = 2;
 
     public LifeStabilityCalculatedResult calculate(LifeStabilityCalculationInput input) {
-        BigDecimal securedCashflow = valueOf(input.monthlyIncome())
-                .add(valueOf(input.monthlyFinancialIncome()))
-                .subtract(valueOf(input.monthlyFixedExpense()));
+        validate(input);
+
+        BigDecimal securedCashflow = input.monthlyIncome()
+                .add(input.monthlyFinancialIncome())
+                .subtract(input.monthlyFixedExpense());
 
         BigDecimal cashflowCoverageRate = percentage(
                 securedCashflow,
@@ -31,7 +35,7 @@ public class LifeStabilityCalculator {
                 input.monthlyIncome()
         );
 
-        BigDecimal monthlyMedicalExpense = valueOf(input.expectedAnnualMedicalExpense())
+        BigDecimal monthlyMedicalExpense = input.expectedAnnualMedicalExpense()
                 .divide(TWELVE, SCALE, RoundingMode.HALF_UP);
         BigDecimal medicalPreparednessMonths = months(
                 input.medicalPreparedAsset(),
@@ -48,7 +52,7 @@ public class LifeStabilityCalculator {
                 input.monthlyIncome()
         );
 
-        BigDecimal monthlyShortage = valueOf(input.targetMonthlyLivingExpense()).subtract(securedCashflow);
+        BigDecimal monthlyShortage = input.targetMonthlyLivingExpense().subtract(securedCashflow);
         if (monthlyShortage.compareTo(BigDecimal.ZERO) < 0) {
             monthlyShortage = BigDecimal.ZERO;
         }
@@ -105,27 +109,49 @@ public class LifeStabilityCalculator {
     }
 
     private BigDecimal percentage(BigDecimal numerator, BigDecimal denominator) {
-        BigDecimal denominatorValue = valueOf(denominator);
-        if (denominatorValue.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
+        if (numerator == null || denominator == null || denominator.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
-        return valueOf(numerator)
+        return numerator
                 .multiply(HUNDRED)
-                .divide(denominatorValue, SCALE, RoundingMode.HALF_UP);
+                .divide(denominator, SCALE, RoundingMode.HALF_UP);
     }
 
     private BigDecimal months(BigDecimal asset, BigDecimal monthlyExpense) {
-        BigDecimal monthlyExpenseValue = valueOf(monthlyExpense);
-        if (monthlyExpenseValue.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
+        if (asset == null || monthlyExpense == null || monthlyExpense.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
-        return valueOf(asset).divide(monthlyExpenseValue, SCALE, RoundingMode.HALF_UP);
+        return asset.divide(monthlyExpense, SCALE, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal valueOf(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+    private void validate(LifeStabilityCalculationInput input) {
+        if (input == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+
+        requirePositive(input.targetMonthlyLivingExpense());
+        requirePositive(input.monthlyIncome());
+        requirePositive(input.monthlyEssentialExpense());
+        requirePositive(input.expectedAnnualMedicalExpense());
+        requireNonNegative(input.monthlyFixedExpense());
+        requireNonNegative(input.monthlyLoanRepayment());
+        requireNonNegative(input.monthlyFinancialIncome());
+        requireNonNegative(input.liquidAsset());
+        requireNonNegative(input.medicalPreparedAsset());
+    }
+
+    private void requirePositive(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+    }
+
+    private void requireNonNegative(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private int scoreCashflowCoverage(BigDecimal rate) {

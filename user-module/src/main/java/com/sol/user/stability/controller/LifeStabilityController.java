@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,15 +22,13 @@ public class LifeStabilityController {
 
     @Operation(summary = "Get latest life stability result")
     @GetMapping
-    public ApiResponse<LifeStabilityResponse> getMyLifeStability() {
-        Long userId = 1L;
+    public ApiResponse<LifeStabilityResponse> getMyLifeStability(@RequestHeader("X-USER-ID") Long userId) {
         return ApiResponse.ok(lifeStabilityService.getLatest(userId));
     }
 
     @Operation(summary = "Recalculate life stability result")
     @PostMapping("/recalculate")
-    public ApiResponse<LifeStabilityResponse> recalculateMyLifeStability() {
-        Long userId = 1L;
+    public ApiResponse<LifeStabilityResponse> recalculateMyLifeStability(@RequestHeader("X-USER-ID") Long userId) {
         return ApiResponse.ok(lifeStabilityService.recalculate(userId));
     }
 }
