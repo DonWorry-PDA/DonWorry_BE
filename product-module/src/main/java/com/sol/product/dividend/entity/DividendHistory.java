@@ -2,6 +2,8 @@ package com.sol.product.dividend.entity;
 
 import com.sol.product.product.entity.FinancialProduct;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -11,7 +13,9 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "dividend_history")
 @Getter
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class DividendHistory {
 
     @Id

@@ -1,6 +1,7 @@
 package com.sol.product.etf.repository;
 
 import com.sol.product.etf.entity.EtfDetail;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,4 +14,7 @@ public interface EtfDetailRepository extends JpaRepository<EtfDetail, Long> {
     Optional<EtfDetail> findByTickerCode(String tickerCode);
 
     Optional<EtfDetail> findByProductProductId(Long productId);
+
+    @EntityGraph(attributePaths = {"product"})
+    Optional<EtfDetail> findWithProductByTickerCode(String tickerCode);
 }
