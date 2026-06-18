@@ -1,5 +1,7 @@
 package com.sol.user.stability.service;
 
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.stability.calculator.LifeStabilityCalculator;
 import com.sol.user.stability.dto.LifeStabilityCalculatedResult;
 import com.sol.user.stability.dto.LifeStabilityCalculationInput;
@@ -28,7 +30,6 @@ public class LifeStabilityService {
     private final LifeStabilityMessageGenerator messageGenerator;
     private final StabilityScoreRepository stabilityScoreRepository;
 
-    @Transactional
     public LifeStabilityResponse recalculate(Long userId) {
         LifeStabilityCalculationInput input = createMockInput();
         LifeStabilityCalculatedResult calculated = calculator.calculate(input);
@@ -49,16 +50,14 @@ public class LifeStabilityService {
                 .summaryMessage(summaryMessage)
                 .build();
 
-        stabilityScoreRepository.save(result);
-
         return toResponse(result, messageGenerator.generateImprovementMessages(calculated));
     }
 
-    @Transactional
     public LifeStabilityResponse getLatest(Long userId) {
-        return stabilityScoreRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
-                .map(result -> toResponse(result, messageGenerator.generateImprovementMessages(toCalculatedResult(result))))
-                .orElseGet(() -> recalculate(userId));
+        StabilityScore result = stabilityScoreRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        return toResponse(result, messageGenerator.generateImprovementMessages(toCalculatedResult(result)));
     }
 
     private LifeStabilityCalculationInput createMockInput() {
