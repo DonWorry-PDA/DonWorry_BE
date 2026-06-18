@@ -1,5 +1,6 @@
 package com.sol.user.stability.calculator;
 
+import com.sol.common.exception.BaseException;
 import com.sol.user.stability.dto.LifeStabilityCalculatedResult;
 import com.sol.user.stability.dto.LifeStabilityCalculationInput;
 import com.sol.user.stability.type.LifeStabilityGrade;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LifeStabilityCalculatorTest {
 
@@ -82,5 +84,23 @@ class LifeStabilityCalculatorTest {
         assertThat(result.getGrade()).isEqualTo(LifeStabilityGrade.STABLE);
         assertThat(result.isGrowthPlanAllowed()).isTrue();
         assertThat(result.getRecommendedPlanType()).isEqualTo(RecommendedPlanType.GROWTH_EXTRA_ASSET);
+    }
+
+    @Test
+    void calculateThrowsExceptionWhenRequiredDenominatorIsZero() {
+        LifeStabilityCalculationInput input = LifeStabilityCalculationInput.builder()
+                .targetMonthlyLivingExpense(BigDecimal.ZERO)
+                .monthlyIncome(BigDecimal.valueOf(1_800_000))
+                .monthlyFixedExpense(BigDecimal.valueOf(700_000))
+                .monthlyEssentialExpense(BigDecimal.valueOf(1_200_000))
+                .monthlyLoanRepayment(BigDecimal.valueOf(200_000))
+                .monthlyFinancialIncome(BigDecimal.valueOf(300_000))
+                .liquidAsset(BigDecimal.valueOf(7_000_000))
+                .medicalPreparedAsset(BigDecimal.valueOf(5_000_000))
+                .expectedAnnualMedicalExpense(BigDecimal.valueOf(6_000_000))
+                .build();
+
+        assertThatThrownBy(() -> calculator.calculate(input))
+                .isInstanceOf(BaseException.class);
     }
 }
