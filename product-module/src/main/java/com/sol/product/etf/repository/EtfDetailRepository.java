@@ -9,6 +9,10 @@ import java.util.Optional;
 
 public interface EtfDetailRepository extends JpaRepository<EtfDetail, Long> {
 
+    @EntityGraph(attributePaths = {"product"})
+    List<EtfDetail> findAll();
+
+    @EntityGraph(attributePaths = {"product"})
     List<EtfDetail> findAllByAssetManager(String assetManager);
 
     Optional<EtfDetail> findByTickerCode(String tickerCode);

@@ -2,6 +2,7 @@ package com.sol.product.etf.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.product.dividend.entity.DividendHistory;
 import com.sol.product.dividend.repository.DividendHistoryRepository;
 import com.sol.product.etf.dto.EtfResponse;
 import com.sol.product.etf.entity.EtfDetail;
@@ -11,6 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,15 +25,11 @@ public class EtfService {
     private final DividendHistoryRepository dividendHistoryRepository;
 
     public List<EtfResponse> getAllEtfs() {
-        return etfDetailRepository.findAll().stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(etfDetailRepository.findAll());
     }
 
     public List<EtfResponse> getEtfsByAssetManager(String assetManager) {
-        return etfDetailRepository.findAllByAssetManager(assetManager).stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(etfDetailRepository.findAllByAssetManager(assetManager));
     }
 
     public EtfResponse getEtfByTickerCode(String tickerCode) {
@@ -42,6 +42,32 @@ public class EtfService {
         return etfDetailRepository.findByProductProductId(productId)
                 .map(this::toResponse)
                 .orElseThrow(() -> new BaseException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    private List<EtfResponse> toResponses(List<EtfDetail> etfDetails) {
+        if (etfDetails.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> productIds = etfDetails.stream()
+                .map(etfDetail -> etfDetail.getProduct().getProductId())
+                .toList();
+
+        Map<Long, DividendHistory> latestDividendByProductId = dividendHistoryRepository
+                .findLatestByProductIds(productIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        dividendHistory -> dividendHistory.getProduct().getProductId(),
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
+
+        return etfDetails.stream()
+                .map(etfDetail -> EtfResponse.from(
+                        etfDetail,
+                        latestDividendByProductId.get(etfDetail.getProduct().getProductId())
+                ))
+                .toList();
     }
 
     private EtfResponse toResponse(EtfDetail etfDetail) {
