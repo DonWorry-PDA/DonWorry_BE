@@ -8,7 +8,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 @Entity
 @Table(name = "etf_detail")
@@ -30,53 +29,34 @@ public class EtfDetail {
     @Column(name = "ticker_code", length = 20, nullable = false)
     private String tickerCode;
 
-    @Builder.Default
-    @Column(name = "krx_category", nullable = false, length = 50)
-    private String krxCategory = "";
-
-    // IDX_IND_NM — 기초지수명 (예: 코스피200, S&P500 등)
-    @Column(name = "benchmark_index", length = 100)
-    private String benchmarkIndex;
-
     @Column(name = "asset_manager", length = 50)
     private String assetManager;
 
-    // 총보수율 (TER, %) — 이 API에서 제공되지 않아 별도 입력 필요
-    @Column(name = "total_expense_ratio", precision = 5, scale = 4)
-    private BigDecimal totalExpenseRatio;
+    @Column(name = "brand_name", length = 20)
+    private String brandName;
 
-    @Column(name = "listing_date")
-    private LocalDate listingDate;
+    @Column(name = "retirement_pension_limit", length = 20)
+    private String retirementPensionLimit;
 
-    @Column(name = "available_account_types", length = 100)
-    private String availableAccountTypes;
+    @Column(name = "personal_pension_available")
+    private Boolean personalPensionAvailable;
 
-    // 과세유형명 (예: 배당소득세(보유기간과세))
-    @Column(name = "tax_type", length = 100)
-    private String taxType;
+    @Column(name = "latest_dividend_rate", precision = 7, scale = 2)
+    private BigDecimal latestDividendRate;
 
-    // 과세유형 코드
-    @Column(name = "tax_type_code", length = 20)
-    private String taxTypeCode;
+    @Column(name = "annual_dividend_rate", precision = 7, scale = 2)
+    private BigDecimal annualDividendRate;
 
-    // 변동성 등급 (예: 매우높음, 높음, 보통, 낮음, 매우낮음)
-    @Column(name = "volatility_grade", length = 20)
-    private String volatilityGrade;
+    @Column(name = "high_52w", precision = 15, scale = 2)
+    private BigDecimal high52w;
 
-    // 변동성 수준 (숫자 단계)
-    @Column(name = "volatility_level")
-    private Integer volatilityLevel;
+    @Column(name = "low_52w", precision = 15, scale = 2)
+    private BigDecimal low52w;
 
-    // SOL ETF 내부 펀드코드 (분배금 API 연동용, 예: "210930")
-    @Column(name = "sol_fund_code", length = 20, unique = true)
-    private String solFundCode;
-
-    // 분배 주기 코드 (M1=월, Y4=분기, Y1=연1회, NN=무분배)
-    @Column(name = "distribution_cycle", length = 5)
+    @Column(name = "distribution_cycle", length = 20)
     private String distributionCycle;
 
-    public void updateSolMetadata(String solFundCode, String distributionCycle) {
-        this.solFundCode = solFundCode;
-        this.distributionCycle = distributionCycle;
-    }
+    @Column(name = "distribution_interval_months")
+    private Integer distributionIntervalMonths;
+
 }

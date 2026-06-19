@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface DividendHistoryRepository extends JpaRepository<DividendHistory, Long> {
 
     Optional<DividendHistory> findByProductProductIdAndExDividendDate(Long productId, LocalDate exDividendDate);
+
+    Optional<DividendHistory> findTopByProductProductIdOrderByPaymentDateDesc(Long productId);
 }
