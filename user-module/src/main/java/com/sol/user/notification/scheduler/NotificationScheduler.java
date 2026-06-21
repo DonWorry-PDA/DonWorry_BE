@@ -1,0 +1,71 @@
+package com.sol.user.notification.scheduler;
+
+import com.sol.user.notification.dto.NotificationTarget;
+import com.sol.user.notification.entity.NotificationType;
+import com.sol.user.notification.provider.NotificationProvider;
+import com.sol.user.notification.repository.NotificationRepository;
+import com.sol.user.notification.service.NotificationService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class NotificationScheduler {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    private final List<NotificationProvider> providers;
+    private final NotificationService notificationService;
+    private final NotificationRepository notificationRepository;
+
+    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
+    public void run() {
+        Set<String> sentToday = loadSentToday();
+
+        for (NotificationProvider provider : providers) {
+            NotificationType type = provider.getType();
+            try {
+                List<NotificationTarget> targets = provider.findTargets();
+
+                for (NotificationTarget target : targets) {
+                    String key = target.userId() + ":" + type.name();
+                    if (sentToday.contains(key)) {
+                        log.debug("중복 알림 스킵 userId={} type={}", target.userId(), type);
+                        continue;
+                    }
+                    try {
+                        notificationService.notify(target.userId(), type, target.title(), target.content(), target.linkTarget());
+                        sentToday.add(key);
+                    } catch (Exception e) {
+                        log.error("알림 발송 실패 userId={} type={}: {}", target.userId(), type, e.getMessage(), e);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("알림 Provider 처리 실패 type={}: {}", type, e.getMessage(), e);
+            }
+        }
+    }
+
+    private Set<String> loadSentToday() {
+        LocalDateTime startOfDay = LocalDate.now(KST).atStartOfDay();
+        List<Object[]> rows = notificationRepository.findSentPairsToday(startOfDay);
+
+        Set<String> keys = new HashSet<>();
+        for (Object[] row : rows) {
+            Long userId = (Long) row[0];
+            NotificationType type = (NotificationType) row[1];
+            keys.add(userId + ":" + type.name());
+        }
+        return keys;
+    }
+}

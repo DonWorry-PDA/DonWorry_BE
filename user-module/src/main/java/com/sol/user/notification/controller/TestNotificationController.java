@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,13 +25,14 @@ public class TestNotificationController {
 
     @Operation(summary = "알림 수동 발송 (개발용)", description = "targetUserId에게 알림 DB 저장 + SSE 전송")
     @PostMapping("/notify")
-    public ApiResponse<Void> sendTestNotification(@Valid @RequestBody TestNotifyRequest request) {
+    public ResponseEntity<ApiResponse<Void>> sendTestNotification(@Valid @RequestBody TestNotifyRequest request) {
         notificationService.notify(
                 request.targetUserId(),
                 request.type(),
                 request.title(),
-                request.content()
+                request.content(),
+                request.linkTarget()
         );
-        return ApiResponse.ok(null);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }
