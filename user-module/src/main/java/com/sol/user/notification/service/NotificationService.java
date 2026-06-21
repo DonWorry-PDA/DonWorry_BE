@@ -31,7 +31,10 @@ public class NotificationService {
 
         emitter.onCompletion(() -> sseEmitterRepository.delete(userId, emitter));
         emitter.onTimeout(() -> sseEmitterRepository.delete(userId, emitter));
-        emitter.onError(e -> sseEmitterRepository.delete(userId, emitter));
+        emitter.onError(e -> {
+            log.warn("SSE 연결 오류 userId={}: {}", userId, e.getMessage());
+            sseEmitterRepository.delete(userId, emitter);
+        });
 
         try {
             emitter.send(SseEmitter.event().name("connect").data("connected"));
