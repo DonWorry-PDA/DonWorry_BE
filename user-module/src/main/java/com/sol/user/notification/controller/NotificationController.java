@@ -38,6 +38,13 @@ public class NotificationController {
         return ApiResponse.ok(notificationService.getNotifications(userId));
     }
 
+    @Operation(summary = "전체 알림 읽음 처리")
+    @PatchMapping("/read")
+    public ApiResponse<Void> markAllAsRead(@RequestAttribute("userId") Long userId) {
+        notificationService.markAllAsRead(userId);
+        return ApiResponse.ok(null);
+    }
+
     @Operation(summary = "알림 읽음 처리")
     @PatchMapping("/{notificationId}/read")
     public ApiResponse<Void> markAsRead(
