@@ -2,7 +2,7 @@ name: Deploy product-module
 
 on:
   push:
-    branches: [ main ]
+    branches: [ develop ]
     paths:
       - 'product-module/**'
       - 'common-module/**'
@@ -23,10 +23,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -36,26 +38,26 @@ jobs:
         run: ./gradlew :product-module:bootJar --no-daemon
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
 
       - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
             -f product-module/Dockerfile product-module/
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
       - name: Create deploy.env
         env:
@@ -75,17 +77,21 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd product-module
-          zip -r ../deploy-product-$IMAGE_TAG.zip appspec.yml scripts/
+          zip -r "../deploy-product-$IMAGE_TAG.zip" appspec.yml scripts/
           cd ..
-          aws s3 cp deploy-product-$IMAGE_TAG.zip \
-            s3://$S3_BUCKET/product-module/deploy-$IMAGE_TAG.zip
+          aws s3 cp "deploy-product-$IMAGE_TAG.zip" \
+            "s3://$S3_BUCKET/product-module/deploy-$IMAGE_TAG.zip"
 
       - name: Create CodeDeploy deployment
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          aws deploy create-deployment \
-            --application-name $APP_NAME \
-            --deployment-group-name $DEPLOY_GROUP \
-            --s3-location bucket=$S3_BUCKET,key=product-module/deploy-$IMAGE_TAG.zip,bundleType=zip \
-            --description "Deploy $IMAGE_TAG"
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name "$APP_NAME" \
+            --deployment-group-name "$DEPLOY_GROUP" \
+            --s3-location "bucket=$S3_BUCKET,key=product-module/deploy-$IMAGE_TAG.zip,bundleType=zip" \
+            --description "Deploy $IMAGE_TAG" \
+            --query 'deploymentId' \
+            --output text)
+          echo "Deployment ID: $DEPLOYMENT_ID"
+          aws deploy wait deployment-successful --deployment-id "$DEPLOYMENT_ID"
