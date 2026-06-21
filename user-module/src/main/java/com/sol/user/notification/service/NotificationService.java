@@ -39,6 +39,7 @@ public class NotificationService {
         try {
             emitter.send(SseEmitter.event().name("connect").data("connected"));
         } catch (IOException e) {
+            log.error("SSE 초기 이벤트 전송 실패 userId={}: {}", userId, e.getMessage(), e);
             sseEmitterRepository.delete(userId, emitter);
         }
 
