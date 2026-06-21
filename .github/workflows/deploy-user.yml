@@ -7,7 +7,9 @@ on:
       - 'user-module/**'
       - 'common-module/**'
       - 'gradle/**'
+      - 'build.gradle'
       - '.github/workflows/deploy-user.yml'
+  workflow_dispatch:
 
 env:
   AWS_REGION: ap-northeast-2
