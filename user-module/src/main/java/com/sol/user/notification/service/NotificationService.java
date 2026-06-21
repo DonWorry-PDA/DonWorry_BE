@@ -4,16 +4,22 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.notification.dto.NotificationResponse;
 import com.sol.user.notification.entity.Notification;
+import com.sol.user.notification.entity.NotificationType;
 import com.sol.user.notification.repository.NotificationRepository;
 import com.sol.user.notification.repository.SseEmitterRepository;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -24,6 +30,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final SseEmitterRepository sseEmitterRepository;
+    private final UserRepository userRepository;
 
     public SseEmitter subscribe(Long userId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
@@ -52,6 +59,41 @@ public class NotificationService {
                 .stream()
                 .map(NotificationResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public void notify(Long userId, NotificationType type, String title, String content) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+
+        Notification notification = Notification.builder()
+                .user(user)
+                .notificationType(type)
+                .title(title)
+                .content(content)
+                .build();
+
+        notificationRepository.save(notification);
+
+        NotificationResponse response = NotificationResponse.from(notification);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sendToEmitter(userId, response);
+            }
+        });
+    }
+
+    private void sendToEmitter(Long userId, NotificationResponse data) {
+        Set<SseEmitter> userEmitters = Set.copyOf(sseEmitterRepository.findByUserId(userId));
+        for (SseEmitter emitter : userEmitters) {
+            try {
+                emitter.send(SseEmitter.event().name("notification").data(data));
+            } catch (IOException e) {
+                log.warn("SSE 전송 실패 userId={}: {}", userId, e.getMessage());
+                sseEmitterRepository.delete(userId, emitter);
+            }
+        }
     }
 
     @Transactional
