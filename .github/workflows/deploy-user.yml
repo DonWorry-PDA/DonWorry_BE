@@ -1,0 +1,91 @@
+name: Deploy user-module
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'user-module/**'
+      - 'common-module/**'
+      - '.github/workflows/deploy-user.yml'
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: donworry/user-module
+  APP_NAME: donworry-user-module
+  DEPLOY_GROUP: dg-user-module
+  S3_BUCKET: donworry-codedeploy-artifacts
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build JAR
+        run: ./gradlew :user-module:bootJar
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -f user-module/Dockerfile user-module/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Create deploy.env
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cat > user-module/scripts/deploy.env << EOF
+          ECR_URI=$ECR_REGISTRY
+          IMAGE_TAG=$IMAGE_TAG
+          DB_URL=${{ secrets.DB_URL }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          EOF
+
+      - name: Upload deployment bundle to S3
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd user-module
+          zip -r ../deploy-user-$IMAGE_TAG.zip appspec.yml scripts/
+          cd ..
+          aws s3 cp deploy-user-$IMAGE_TAG.zip \
+            s3://$S3_BUCKET/user-module/deploy-$IMAGE_TAG.zip
+
+      - name: Create CodeDeploy deployment
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws deploy create-deployment \
+            --application-name $APP_NAME \
+            --deployment-group-name $DEPLOY_GROUP \
+            --s3-location bucket=$S3_BUCKET,key=user-module/deploy-$IMAGE_TAG.zip,bundleType=zip \
+            --description "Deploy $IMAGE_TAG"
