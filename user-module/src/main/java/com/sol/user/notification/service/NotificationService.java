@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -72,7 +74,14 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
-        sendToEmitter(userId, NotificationResponse.from(notification));
+
+        NotificationResponse response = NotificationResponse.from(notification);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sendToEmitter(userId, response);
+            }
+        });
     }
 
     private void sendToEmitter(Long userId, NotificationResponse data) {
