@@ -5,18 +5,43 @@ import com.sol.common.exception.ErrorCode;
 import com.sol.user.notification.dto.NotificationResponse;
 import com.sol.user.notification.entity.Notification;
 import com.sol.user.notification.repository.NotificationRepository;
+import com.sol.user.notification.repository.SseEmitterRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class NotificationService {
 
+    private static final long SSE_TIMEOUT = 60 * 60 * 1000L;
+
     private final NotificationRepository notificationRepository;
+    private final SseEmitterRepository sseEmitterRepository;
+
+    public SseEmitter subscribe(Long userId) {
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        sseEmitterRepository.save(userId, emitter);
+
+        emitter.onCompletion(() -> sseEmitterRepository.delete(userId));
+        emitter.onTimeout(() -> sseEmitterRepository.delete(userId));
+        emitter.onError(e -> sseEmitterRepository.delete(userId));
+
+        try {
+            emitter.send(SseEmitter.event().name("connect").data("connected"));
+        } catch (IOException e) {
+            sseEmitterRepository.delete(userId);
+        }
+
+        return emitter;
+    }
 
     public List<NotificationResponse> getNotifications(Long userId) {
         return notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(userId)
