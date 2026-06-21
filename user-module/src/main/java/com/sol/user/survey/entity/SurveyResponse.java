@@ -2,6 +2,8 @@ package com.sol.user.survey.entity;
 
 import com.sol.user.user.entity.User;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -10,7 +12,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "survey_response")
 @Getter
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class SurveyResponse {
 
     @Id
