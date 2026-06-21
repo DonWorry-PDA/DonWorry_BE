@@ -63,7 +63,7 @@ class NotificationSchedulerTest {
     @DisplayName("오늘 이미 발송된 (userId, type) 쌍은 스킵된다")
     void skipsDuplicateSentToday() {
         Object[] sentRow = new Object[]{1L, NotificationType.DIVIDEND};
-        given(notificationRepository.findSentPairsToday(any())).willReturn(List.of(sentRow));
+        given(notificationRepository.findSentPairsToday(any())).willReturn(List.<Object[]>of(sentRow));
 
         scheduler.run();
 
