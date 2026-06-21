@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,11 +22,13 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class NotificationScheduler {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final List<NotificationProvider> providers;
     private final NotificationService notificationService;
     private final NotificationRepository notificationRepository;
 
-    @Scheduled(cron = "0 0 9 * * *")
+    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     public void run() {
         Set<String> sentToday = loadSentToday();
 
@@ -46,7 +49,7 @@ public class NotificationScheduler {
     }
 
     private Set<String> loadSentToday() {
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime startOfDay = LocalDate.now(KST).atStartOfDay();
         List<Object[]> rows = notificationRepository.findSentPairsToday(startOfDay);
 
         Set<String> keys = new HashSet<>();
