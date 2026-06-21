@@ -12,11 +12,10 @@ docker run -d \
   --name product-module \
   --restart unless-stopped \
   -p 8080:8080 \
-  -e SERVER_PORT=8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
   -e SPRING_DATASOURCE_URL=$DB_URL \
   -e SPRING_DATASOURCE_USERNAME=$DB_USER \
   -e SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD \
-  -e JWT_SECRET=$JWT_SECRET \
   $ECR_URI/donworry/product-module:$IMAGE_TAG
 
 echo "product-module started: $IMAGE_TAG"
