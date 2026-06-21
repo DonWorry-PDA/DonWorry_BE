@@ -30,7 +30,8 @@ public class TestNotificationController {
                 request.targetUserId(),
                 request.type(),
                 request.title(),
-                request.content()
+                request.content(),
+                request.linkTarget()
         );
         return ResponseEntity.ok(ApiResponse.ok(null));
     }

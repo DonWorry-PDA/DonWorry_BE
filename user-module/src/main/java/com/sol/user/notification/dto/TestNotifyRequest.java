@@ -8,5 +8,6 @@ public record TestNotifyRequest(
         @NotNull Long targetUserId,
         @NotNull NotificationType type,
         @NotBlank String title,
-        @NotBlank String content
+        @NotBlank String content,
+        String linkTarget
 ) {}

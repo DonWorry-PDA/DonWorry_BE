@@ -62,7 +62,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public void notify(Long userId, NotificationType type, String title, String content) {
+    public void notify(Long userId, NotificationType type, String title, String content, String linkTarget) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
@@ -71,6 +71,7 @@ public class NotificationService {
                 .notificationType(type)
                 .title(title)
                 .content(content)
+                .linkTarget(linkTarget)
                 .build();
 
         notificationRepository.save(notification);

@@ -40,7 +40,7 @@ public class NotificationController {
     }
 
     @Operation(summary = "전체 알림 읽음 처리")
-    @PatchMapping("/read")
+    @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") Long userId) {
         notificationService.markAllAsRead(userId);
         return ResponseEntity.ok(ApiResponse.ok(null));
