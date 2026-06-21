@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,24 +34,24 @@ public class NotificationController {
 
     @Operation(summary = "내 알림 목록 조회", description = "최신순으로 반환")
     @GetMapping
-    public ApiResponse<List<NotificationResponse>> getNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @RequestAttribute("userId") Long userId) {
-        return ApiResponse.ok(notificationService.getNotifications(userId));
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.getNotifications(userId)));
     }
 
     @Operation(summary = "전체 알림 읽음 처리")
     @PatchMapping("/read")
-    public ApiResponse<Void> markAllAsRead(@RequestAttribute("userId") Long userId) {
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestAttribute("userId") Long userId) {
         notificationService.markAllAsRead(userId);
-        return ApiResponse.ok(null);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     @Operation(summary = "알림 읽음 처리")
     @PatchMapping("/{notificationId}/read")
-    public ApiResponse<Void> markAsRead(
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable Long notificationId,
             @RequestAttribute("userId") Long userId) {
         notificationService.markAsRead(notificationId, userId);
-        return ApiResponse.ok(null);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }
