@@ -34,16 +34,24 @@ public class NotificationScheduler {
 
         for (NotificationProvider provider : providers) {
             NotificationType type = provider.getType();
-            List<NotificationTarget> targets = provider.findTargets();
+            try {
+                List<NotificationTarget> targets = provider.findTargets();
 
-            for (NotificationTarget target : targets) {
-                String key = target.userId() + ":" + type.name();
-                if (sentToday.contains(key)) {
-                    log.debug("중복 알림 스킵 userId={} type={}", target.userId(), type);
-                    continue;
+                for (NotificationTarget target : targets) {
+                    String key = target.userId() + ":" + type.name();
+                    if (sentToday.contains(key)) {
+                        log.debug("중복 알림 스킵 userId={} type={}", target.userId(), type);
+                        continue;
+                    }
+                    try {
+                        notificationService.notify(target.userId(), type, target.title(), target.content(), target.linkTarget());
+                        sentToday.add(key);
+                    } catch (Exception e) {
+                        log.error("알림 발송 실패 userId={} type={}: {}", target.userId(), type, e.getMessage(), e);
+                    }
                 }
-                notificationService.notify(target.userId(), type, target.title(), target.content(), target.linkTarget());
-                sentToday.add(key);
+            } catch (Exception e) {
+                log.error("알림 Provider 처리 실패 type={}: {}", type, e.getMessage(), e);
             }
         }
     }
