@@ -1,5 +1,7 @@
 package com.sol.user.survey.mapper;
 
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.dto.SurveySaveRequest;
 import com.sol.user.survey.entity.SurveyResponse;
@@ -31,8 +33,13 @@ public class SurveyMapper {
         Map<String, Integer> answerMap = responses.stream()
                 .collect(Collectors.toMap(
                         SurveyResponse::getQuestionCode,
-                        r -> Integer.parseInt(r.getAnswerValue())
+                        r -> Integer.parseInt(r.getAnswerValue()),
+                        (existing, duplicate) -> existing
                 ));
+
+        if (!answerMap.containsKey(Q1_CODE) || !answerMap.containsKey(Q2_CODE) || !answerMap.containsKey(Q3_CODE)) {
+            throw new BaseException(ErrorCode.SURVEY_NOT_FOUND);
+        }
 
         return SurveyAnswerResponse.builder()
                 .q1(answerMap.get(Q1_CODE))
