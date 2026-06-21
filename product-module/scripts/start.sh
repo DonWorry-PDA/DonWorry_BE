@@ -9,7 +9,7 @@ aws ecr get-login-password --region ap-northeast-2 | \
 docker pull $ECR_URI/donworry/product-module:$IMAGE_TAG
 
 docker run -d \
-  --name user-module \
+  --name product-module \
   --restart unless-stopped \
   -p 8080:8080 \
   -e SERVER_PORT=8080 \
@@ -17,6 +17,6 @@ docker run -d \
   -e SPRING_DATASOURCE_USERNAME=$DB_USER \
   -e SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD \
   -e JWT_SECRET=$JWT_SECRET \
-  $ECR_URI/donworry/user-module:$IMAGE_TAG
+  $ECR_URI/donworry/product-module:$IMAGE_TAG
 
 echo "product-module started: $IMAGE_TAG"
