@@ -67,15 +67,19 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
-          cat > user-module/scripts/deploy.env << EOF
-          ECR_URI="$ECR_REGISTRY"
-          IMAGE_TAG="$IMAGE_TAG"
-          DB_URL="${{ secrets.DB_URL }}"
-          DB_USER="${{ secrets.DB_USER }}"
-          DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-          JWT_SECRET="${{ secrets.JWT_SECRET }}"
-          EOF
+          {
+            printf "ECR_URI='%s'\n" "$ECR_REGISTRY"
+            printf "IMAGE_TAG='%s'\n" "$IMAGE_TAG"
+            printf "DB_URL='%s'\n" "$DB_URL"
+            printf "DB_USER='%s'\n" "$DB_USER"
+            printf "DB_PASSWORD='%s'\n" "$DB_PASSWORD"
+            printf "JWT_SECRET='%s'\n" "$JWT_SECRET"
+          } > user-module/scripts/deploy.env
 
       - name: Upload deployment bundle to S3
         env:
