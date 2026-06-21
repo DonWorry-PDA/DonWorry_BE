@@ -91,5 +91,7 @@ project(':user-module') {
 
         // BCrypt (Spring Security 없이 사용)
         implementation 'org.springframework.security:spring-security-crypto'
+
+        testRuntimeOnly 'com.h2database:h2'
     }
 }
