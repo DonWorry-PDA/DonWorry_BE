@@ -30,27 +30,16 @@ public class LifeStabilityService {
     private final LifeStabilityMessageGenerator messageGenerator;
     private final StabilityScoreRepository stabilityScoreRepository;
 
-    public LifeStabilityResponse recalculate(Long userId) {
+    public LifeStabilityResponse preview() {
         LifeStabilityCalculationInput input = createMockInput();
         LifeStabilityCalculatedResult calculated = calculator.calculate(input);
         String summaryMessage = messageGenerator.generateSummary(calculated);
 
-        StabilityScore result = StabilityScore.builder()
-                .userId(userId)
-                .totalScore(calculated.getTotalScore())
-                .grade(calculated.getGrade())
-                .cashflowCoverageRate(calculated.getCashflowCoverageRate())
-                .essentialExpenseRate(calculated.getEssentialExpenseRate())
-                .medicalPreparednessMonths(calculated.getMedicalPreparednessMonths())
-                .liquidityMonths(calculated.getLiquidityMonths())
-                .debtBurdenRate(calculated.getDebtBurdenRate())
-                .riskAssetDependencyRate(calculated.getRiskAssetDependencyRate())
-                .growthPlanAllowed(calculated.isGrowthPlanAllowed())
-                .recommendedPlanType(calculated.getRecommendedPlanType())
-                .summaryMessage(summaryMessage)
-                .build();
-
-        return toResponse(result, messageGenerator.generateImprovementMessages(calculated));
+        return toResponse(
+                calculated,
+                summaryMessage,
+                messageGenerator.generateImprovementMessages(calculated)
+        );
     }
 
     public LifeStabilityResponse getLatest(Long userId) {
@@ -75,10 +64,18 @@ public class LifeStabilityService {
     }
 
     private LifeStabilityResponse toResponse(StabilityScore result, List<String> improvementMessages) {
+        return toResponse(toCalculatedResult(result), result.getSummaryMessage(), improvementMessages);
+    }
+
+    private LifeStabilityResponse toResponse(
+            LifeStabilityCalculatedResult result,
+            String summaryMessage,
+            List<String> improvementMessages
+    ) {
         return LifeStabilityResponse.builder()
                 .grade(result.getGrade().name())
                 .gradeLabel(result.getGrade().getLabel())
-                .summaryMessage(result.getSummaryMessage())
+                .summaryMessage(summaryMessage)
                 .metrics(LifeStabilityMetrics.builder()
                         .cashflowCoverageRate(result.getCashflowCoverageRate())
                         .essentialExpenseRate(result.getEssentialExpenseRate())
@@ -99,7 +96,7 @@ public class LifeStabilityService {
                         .growthPlanAllowed(result.isGrowthPlanAllowed())
                         .recommendedPlanType(result.getRecommendedPlanType().name())
                         .recommendedPlanLabel(result.getRecommendedPlanType().getLabel())
-                        .reason(messageGenerator.generateGuardrailReason(toCalculatedResult(result)))
+                        .reason(messageGenerator.generateGuardrailReason(result))
                         .build())
                 .improvementMessages(improvementMessages)
                 .build();
@@ -107,7 +104,10 @@ public class LifeStabilityService {
 
     private LifeStabilityCalculatedResult toCalculatedResult(StabilityScore result) {
         return LifeStabilityCalculatedResult.builder()
+                .totalScore(result.getTotalScore())
                 .grade(result.getGrade())
+                .cashflowCoverageRate(result.getCashflowCoverageRate())
+                .essentialExpenseRate(result.getEssentialExpenseRate())
                 .liquidityMonths(result.getLiquidityMonths())
                 .medicalPreparednessMonths(result.getMedicalPreparednessMonths())
                 .debtBurdenRate(result.getDebtBurdenRate())

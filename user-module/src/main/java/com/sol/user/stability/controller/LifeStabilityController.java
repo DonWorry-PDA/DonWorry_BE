@@ -15,23 +15,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Life Stability", description = "Life stability API")
 @RestController
-@RequestMapping("/api/user/life-stability/me")
+@RequestMapping("/api/user/life-stability")
 @RequiredArgsConstructor
 public class LifeStabilityController {
 
     private final LifeStabilityService lifeStabilityService;
 
     @Operation(summary = "Get latest life stability result")
-    @GetMapping
+    @GetMapping("/me")
     public ResponseEntity<ApiResponse<LifeStabilityResponse>> getMyLifeStability(
             @RequestAttribute("userId") Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.getLatest(userId)));
     }
 
-    @Operation(summary = "Recalculate life stability result")
-    @PostMapping("/recalculate")
-    public ResponseEntity<ApiResponse<LifeStabilityResponse>> recalculateMyLifeStability(
-            @RequestAttribute("userId") Long userId) {
-        return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.recalculate(userId)));
+    @Operation(summary = "Preview life stability result with sample data")
+    @PostMapping("/preview")
+    public ResponseEntity<ApiResponse<LifeStabilityResponse>> previewLifeStability() {
+        return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.preview()));
     }
 }
