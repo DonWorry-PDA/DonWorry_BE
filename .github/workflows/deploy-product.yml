@@ -69,11 +69,11 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cat > product-module/scripts/deploy.env << EOF
-          ECR_URI=$ECR_REGISTRY
-          IMAGE_TAG=$IMAGE_TAG
-          DB_URL=${{ secrets.DB_URL }}
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          ECR_URI="$ECR_REGISTRY"
+          IMAGE_TAG="$IMAGE_TAG"
+          DB_URL="${{ secrets.DB_URL }}"
+          DB_USER="${{ secrets.DB_USER }}"
+          DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
           EOF
 
       - name: Upload deployment bundle to S3

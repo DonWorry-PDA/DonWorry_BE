@@ -16,10 +16,10 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e SPRING_DATASOURCE_URL=$DB_URL \
-  -e SPRING_DATASOURCE_USERNAME=$DB_USER \
-  -e SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD \
-  -e JWT_SECRET=$JWT_SECRET \
-  $ECR_URI/donworry/user-module:$IMAGE_TAG
+  -e "SPRING_DATASOURCE_URL=$DB_URL" \
+  -e "SPRING_DATASOURCE_USERNAME=$DB_USER" \
+  -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
+  -e "JWT_SECRET=$JWT_SECRET" \
+  "$ECR_URI/donworry/user-module:$IMAGE_TAG"
 
 echo "user-module started: $IMAGE_TAG"
