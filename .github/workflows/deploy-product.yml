@@ -1,18 +1,18 @@
-name: Deploy user-module
+name: Deploy product-module
 
 on:
   push:
     branches: [ main ]
     paths:
-      - 'user-module/**'
+      - 'product-module/**'
       - 'common-module/**'
-      - '.github/workflows/deploy-user.yml'
+      - '.github/workflows/deploy-product.yml'
 
 env:
   AWS_REGION: ap-northeast-2
-  ECR_REPOSITORY: donworry/user-module
-  APP_NAME: donworry-user-module
-  DEPLOY_GROUP: dg-user-module
+  ECR_REPOSITORY: donworry/product-module
+  APP_NAME: donworry-product-module
+  DEPLOY_GROUP: dg-product-module
   S3_BUCKET: donworry-codedeploy-artifacts
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
           cache: gradle
 
       - name: Build JAR
-        run: ./gradlew :user-module:bootJar --no-daemon
+        run: ./gradlew :product-module:bootJar --no-daemon
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -51,7 +51,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -f user-module/Dockerfile user-module/
+            -f product-module/Dockerfile product-module/
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -62,24 +62,23 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cat > user-module/scripts/deploy.env << EOF
+          cat > product-module/scripts/deploy.env << EOF
           ECR_URI=$ECR_REGISTRY
           IMAGE_TAG=$IMAGE_TAG
           DB_URL=${{ secrets.DB_URL }}
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
           EOF
 
       - name: Upload deployment bundle to S3
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cd user-module
-          zip -r ../deploy-user-$IMAGE_TAG.zip appspec.yml scripts/
+          cd product-module
+          zip -r ../deploy-product-$IMAGE_TAG.zip appspec.yml scripts/
           cd ..
-          aws s3 cp deploy-user-$IMAGE_TAG.zip \
-            s3://$S3_BUCKET/user-module/deploy-$IMAGE_TAG.zip
+          aws s3 cp deploy-product-$IMAGE_TAG.zip \
+            s3://$S3_BUCKET/product-module/deploy-$IMAGE_TAG.zip
 
       - name: Create CodeDeploy deployment
         env:
@@ -88,5 +87,5 @@ jobs:
           aws deploy create-deployment \
             --application-name $APP_NAME \
             --deployment-group-name $DEPLOY_GROUP \
-            --s3-location bucket=$S3_BUCKET,key=user-module/deploy-$IMAGE_TAG.zip,bundleType=zip \
+            --s3-location bucket=$S3_BUCKET,key=product-module/deploy-$IMAGE_TAG.zip,bundleType=zip \
             --description "Deploy $IMAGE_TAG"
