@@ -18,7 +18,6 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class NotificationService {
 
     private static final long SSE_TIMEOUT = 60 * 60 * 1000L;
@@ -43,6 +42,7 @@ public class NotificationService {
         return emitter;
     }
 
+    @Transactional(readOnly = true)
     public List<NotificationResponse> getNotifications(Long userId) {
         return notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(userId)
                 .stream()
