@@ -30,14 +30,14 @@ public class NotificationService {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         sseEmitterRepository.save(userId, emitter);
 
-        emitter.onCompletion(() -> sseEmitterRepository.delete(userId));
-        emitter.onTimeout(() -> sseEmitterRepository.delete(userId));
-        emitter.onError(e -> sseEmitterRepository.delete(userId));
+        emitter.onCompletion(() -> sseEmitterRepository.delete(userId, emitter));
+        emitter.onTimeout(() -> sseEmitterRepository.delete(userId, emitter));
+        emitter.onError(e -> sseEmitterRepository.delete(userId, emitter));
 
         try {
             emitter.send(SseEmitter.event().name("connect").data("connected"));
         } catch (IOException e) {
-            sseEmitterRepository.delete(userId);
+            sseEmitterRepository.delete(userId, emitter);
         }
 
         return emitter;
