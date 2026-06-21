@@ -6,6 +6,7 @@ on:
     paths:
       - 'product-module/**'
       - 'common-module/**'
+      - 'gradle/**'
       - '.github/workflows/deploy-product.yml'
 
 env:

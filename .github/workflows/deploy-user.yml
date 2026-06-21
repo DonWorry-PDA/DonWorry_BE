@@ -6,6 +6,7 @@ on:
     paths:
       - 'user-module/**'
       - 'common-module/**'
+      - 'gradle/**'
       - '.github/workflows/deploy-user.yml'
 
 env:
