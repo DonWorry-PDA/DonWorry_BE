@@ -185,6 +185,7 @@ public class OperationGradeCalculator {
                 || input.investmentPropensity() == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
+        if (input.age() < 0 || input.age() > 120) throw new BaseException(ErrorCode.INVALID_INPUT);
         requirePositive(input.targetMonthlyLivingCost());
         requireInRange(input.essentialRatio(), new BigDecimal("0.60"), new BigDecimal("0.85"));
         requireNonNegative(input.monthlyNationalPension());
@@ -194,6 +195,8 @@ public class OperationGradeCalculator {
         requireNonNegative(input.monthlyLoanRepayment());
         if (input.q1() < 0 || input.q1() > 3) throw new BaseException(ErrorCode.INVALID_INPUT);
         if (input.q2() < 0 || input.q2() > 2) throw new BaseException(ErrorCode.INVALID_INPUT);
+        if (input.pensionSaving().compareTo(input.totalAsset()) > 0) throw new BaseException(ErrorCode.INVALID_INPUT);
+        if (input.availableFinancialAsset().compareTo(input.totalAsset()) > 0) throw new BaseException(ErrorCode.INVALID_INPUT);
     }
 
     private void requirePositive(BigDecimal value) {

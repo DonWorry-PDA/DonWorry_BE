@@ -152,7 +152,7 @@ class OperationGradeCalculatorTest {
 
         OperationGradeResult result = calculator.calculate(input);
 
-        assertThat(result.getOperationGrade()).isBetween(1, 5);
+        assertThat(result.getOperationGrade()).isEqualTo(2);
         assertThat(result.getFinalGrade()).isBetween(1, result.getOperationGrade());
     }
 
