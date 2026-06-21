@@ -59,4 +59,7 @@ public class EtfDetail {
     @Column(name = "distribution_interval_months")
     private Integer distributionIntervalMonths;
 
+    @Column(name = "risk_grade")
+    private Integer riskGrade;
+
 }
