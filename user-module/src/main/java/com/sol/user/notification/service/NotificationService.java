@@ -19,7 +19,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
 
     public List<NotificationResponse> getNotifications(Long userId) {
-        return notificationRepository.findByUserUserIdOrderByCreatedAtDesc(userId)
+        return notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(NotificationResponse::from)
                 .toList();
