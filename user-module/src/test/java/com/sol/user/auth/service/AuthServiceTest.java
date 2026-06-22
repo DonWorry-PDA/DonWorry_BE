@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.util.Date;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +28,7 @@ class AuthServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private JwtUtil jwtUtil;
     @Mock private User mockUser;
+    @Mock private TokenBlacklistService tokenBlacklistService;
 
     private AuthService authService;
     private BCryptPasswordEncoder encoder;
@@ -34,7 +36,7 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         encoder = new BCryptPasswordEncoder();
-        authService = new AuthService(userRepository, jwtUtil, encoder);
+        authService = new AuthService(userRepository, jwtUtil, encoder, tokenBlacklistService);
     }
 
     @Test
@@ -111,5 +113,16 @@ class AuthServiceTest {
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("logout 호출 시 토큰이 블랙리스트에 추가됨")
+    void logout_addsTokenToBlacklist() {
+        Date expiry = new Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000);
+        when(jwtUtil.extractExpiration("token123")).thenReturn(expiry);
+
+        authService.logout("token123");
+
+        verify(tokenBlacklistService).add("token123", expiry);
     }
 }
