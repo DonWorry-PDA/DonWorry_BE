@@ -12,6 +12,7 @@ public record LifeStabilityCalculationInput(
         BigDecimal monthlyEssentialExpense,
         BigDecimal monthlyLoanRepayment,
         BigDecimal monthlyFinancialIncome,
+        BigDecimal monthlyRiskAssetWithdrawal,
         BigDecimal liquidAsset,
         BigDecimal medicalPreparedAsset,
         BigDecimal expectedAnnualMedicalExpense

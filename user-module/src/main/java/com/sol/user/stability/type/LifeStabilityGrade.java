@@ -2,9 +2,8 @@ package com.sol.user.stability.type;
 
 public enum LifeStabilityGrade {
     STABLE("\uC548\uC815"),
-    NEED_IMPROVEMENT("\uBCF4\uC644 \uD544\uC694"),
-    CAUTION("\uC8FC\uC758"),
-    RISK("\uC704\uD5D8");
+    NEED_COMPLEMENT("\uBCF4\uC644 \uD544\uC694"),
+    NEED_IMPROVEMENT("\uAC1C\uC120 \uD544\uC694");
 
     private final String label;
 
@@ -20,12 +19,9 @@ public enum LifeStabilityGrade {
         if (score >= 80) {
             return STABLE;
         }
-        if (score >= 60) {
-            return NEED_IMPROVEMENT;
+        if (score >= 50) {
+            return NEED_COMPLEMENT;
         }
-        if (score >= 40) {
-            return CAUTION;
-        }
-        return RISK;
+        return NEED_IMPROVEMENT;
     }
 }

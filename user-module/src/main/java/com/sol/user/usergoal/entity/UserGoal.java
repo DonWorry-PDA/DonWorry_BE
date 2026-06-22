@@ -34,4 +34,20 @@ public class UserGoal {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    public UserGoal(User user, BigDecimal monthlyTargetLivingCost,
+                    BigDecimal monthlyExpectedMedicalCost, LocalDateTime now) {
+        this.user = user;
+        this.monthlyTargetLivingCost = monthlyTargetLivingCost;
+        this.monthlyExpectedMedicalCost = monthlyExpectedMedicalCost;
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    public void updateMock(BigDecimal monthlyTargetLivingCost,
+                           BigDecimal monthlyExpectedMedicalCost, LocalDateTime now) {
+        this.monthlyTargetLivingCost = monthlyTargetLivingCost;
+        this.monthlyExpectedMedicalCost = monthlyExpectedMedicalCost;
+        this.updatedAt = now;
+    }
 }

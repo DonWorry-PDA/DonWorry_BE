@@ -49,16 +49,16 @@ public class LifeStabilityCalculator {
 
         BigDecimal debtBurdenRate = percentage(
                 input.monthlyLoanRepayment(),
-                input.monthlyIncome()
+                input.targetMonthlyLivingExpense()
         );
 
-        BigDecimal monthlyShortage = input.targetMonthlyLivingExpense().subtract(securedCashflow);
-        if (monthlyShortage.compareTo(BigDecimal.ZERO) < 0) {
-            monthlyShortage = BigDecimal.ZERO;
-        }
+        BigDecimal monthlyShortage = input.targetMonthlyLivingExpense().subtract(securedCashflow).max(BigDecimal.ZERO);
+        BigDecimal monthlyRiskAssetWithdrawal = input.monthlyRiskAssetWithdrawal() == null
+                ? monthlyShortage
+                : input.monthlyRiskAssetWithdrawal();
 
         BigDecimal riskAssetDependencyRate = percentage(
-                monthlyShortage,
+                monthlyRiskAssetWithdrawal,
                 input.targetMonthlyLivingExpense()
         );
 
@@ -85,7 +85,7 @@ public class LifeStabilityCalculator {
         boolean balancedPlanAllowed = grade == LifeStabilityGrade.STABLE
                 && liquidityMonths.compareTo(BigDecimal.valueOf(6)) >= 0
                 && medicalPreparednessMonths.compareTo(BigDecimal.valueOf(12)) >= 0
-                && debtBurdenRate.compareTo(BigDecimal.valueOf(20)) <= 0;
+                && debtBurdenRate.compareTo(BigDecimal.valueOf(30)) <= 0;
 
         RecommendedPlanType recommendedPlanType = RecommendedPlanType.STABLE_INCOME;
         if (growthPlanAllowed) {
@@ -138,6 +138,9 @@ public class LifeStabilityCalculator {
         requireNonNegative(input.monthlyFixedExpense());
         requireNonNegative(input.monthlyLoanRepayment());
         requireNonNegative(input.monthlyFinancialIncome());
+        if (input.monthlyRiskAssetWithdrawal() != null) {
+            requireNonNegative(input.monthlyRiskAssetWithdrawal());
+        }
         requireNonNegative(input.liquidAsset());
         requireNonNegative(input.medicalPreparedAsset());
     }

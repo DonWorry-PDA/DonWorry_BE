@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface AccountRepository extends JpaRepository<Account, Long> {
+    void deleteByUserUserId(Long userId);
+
     List<Account> findByUserUserId(Long userId);
 
     List<Account> findByUserUserIdAndAccountTypeIn(Long userId, List<String> accountTypes);

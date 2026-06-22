@@ -45,5 +45,4 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
               AND e.distribution_interval_months > 0
             """, nativeQuery = true)
     BigDecimal sumMonthlyDividendByUserId(@Param("userId") Long userId);
-
 }

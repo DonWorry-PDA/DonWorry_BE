@@ -7,8 +7,13 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.List;
+
 
 public interface PensionRepository extends JpaRepository<Pension, Long> {
+    void deleteByUserUserId(Long userId);
+
+    List<Pension> findByUserUserId(Long userId);
 
     @Query("""
         SELECT p.expectedMonthlyAmount
