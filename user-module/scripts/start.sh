@@ -20,6 +20,7 @@ docker run -d \
   -e "SPRING_DATASOURCE_USERNAME=$DB_USER" \
   -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
   -e "JWT_SECRET=$JWT_SECRET" \
+  -e "PRODUCT_BASE_URL=$PRODUCT_BASE_URL" \
   "$ECR_URI/donworry/user-module:$IMAGE_TAG"
 
 echo "user-module started: $IMAGE_TAG"
