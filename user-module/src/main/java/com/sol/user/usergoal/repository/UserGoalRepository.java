@@ -9,4 +9,6 @@ public interface UserGoalRepository extends JpaRepository<UserGoal, Long> {
     void deleteByUserUserId(Long userId);
 
     Optional<UserGoal> findTopByUserUserIdOrderByUpdatedAtDesc(Long userId);
+
+    Optional<UserGoal> findByUserUserId(Long userId);
 }
