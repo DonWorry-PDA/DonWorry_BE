@@ -46,6 +46,9 @@ public class SalaryAssetMapper {
     }
 
     private String resolveAccountName(String accountType) {
+        if (accountType == null) {
+            return null;
+        }
         return switch (accountType) {
             case "IRP" -> "IRP";
             case "PENSION_SAVING" -> "연금저축";
@@ -55,6 +58,9 @@ public class SalaryAssetMapper {
     }
 
     private String resolveAccountDescription(String accountType) {
+        if (accountType == null) {
+            return null;
+        }
         return switch (accountType) {
             case "IRP" -> "연금 계좌";
             case "PENSION_SAVING" -> "세액공제 계좌";
@@ -64,6 +70,9 @@ public class SalaryAssetMapper {
     }
 
     private String resolveHoldingDescription(String productType) {
+        if (productType == null) {
+            return null;
+        }
         return switch (productType) {
             case "ETF" -> "분배금 수령 가능 상품";
             case "FUND" -> "펀드 분배금 가능 상품";
