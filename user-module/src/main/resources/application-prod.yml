@@ -7,3 +7,6 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
+
+swagger:
+  server-url: https://api.yeongumsol.com
