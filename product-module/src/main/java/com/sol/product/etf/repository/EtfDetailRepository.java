@@ -15,6 +15,9 @@ public interface EtfDetailRepository extends JpaRepository<EtfDetail, Long> {
     @EntityGraph(attributePaths = {"product"})
     List<EtfDetail> findAllByAssetManager(String assetManager);
 
+    @EntityGraph(attributePaths = {"product"})
+    List<EtfDetail> findAllByTickerCodeIn(List<String> tickerCodes);
+
     Optional<EtfDetail> findByTickerCode(String tickerCode);
 
     Optional<EtfDetail> findByProductProductId(Long productId);
