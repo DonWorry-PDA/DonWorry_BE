@@ -10,12 +10,14 @@ import com.sol.user.portfolio.type.CurrencyExposure;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.RecommendationTrack;
+import com.sol.common.exception.BaseException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PortfolioAllocationCalculatorTest {
 
@@ -99,6 +101,30 @@ class PortfolioAllocationCalculatorTest {
 
         assertThat(result.getPlans()).allSatisfy(p ->
                 assertThat(p.getSafeTarget()).isGreaterThanOrEqualTo(new BigDecimal("50000000")));
+    }
+
+    // ── 입력 검증: 여유분>0인데 바닥자산>가용자산이면 일관성 위반 ──────────────────
+
+    @Test
+    void 여유분이_양수인데_바닥자산이_가용자산을_초과하면_INVALID_INPUT_예외() {
+        // 가용자산 = 총자산1억 − 연금저축6천 = 4천 < 바닥자산5천, 그러나 여유분은 양수로 전달(불일치)
+        AllocationInput input = activeBuilder(4)
+                .surplus(BigDecimal.valueOf(100_000_000))
+                .totalAsset(BigDecimal.valueOf(100_000_000))
+                .pensionSaving(BigDecimal.valueOf(60_000_000))
+                .floorAsset(BigDecimal.valueOf(50_000_000))
+                .build();
+
+        assertThatThrownBy(() -> calculator.calculate(input))
+                .isInstanceOf(BaseException.class);
+    }
+
+    @Test
+    void 등급_범위를_벗어나면_INVALID_INPUT_예외() {
+        AllocationInput input = activeBuilder(6).build(); // 유효 등급 1~5
+
+        assertThatThrownBy(() -> calculator.calculate(input))
+                .isInstanceOf(BaseException.class);
     }
 
     // ── helper ────────────────────────────────────────────────────────────────
