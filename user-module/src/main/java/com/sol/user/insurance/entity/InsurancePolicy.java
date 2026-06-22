@@ -54,4 +54,12 @@ public class InsurancePolicy {
         this.active = active;
         this.medicalReserve = medicalReserve;
     }
+
+    public void updateMock(String institutionName, BigDecimal monthlyPremium,
+                           Boolean active, BigDecimal medicalReserve) {
+        this.institutionName = institutionName;
+        this.monthlyPremium = monthlyPremium;
+        this.active = active;
+        this.medicalReserve = medicalReserve;
+    }
 }

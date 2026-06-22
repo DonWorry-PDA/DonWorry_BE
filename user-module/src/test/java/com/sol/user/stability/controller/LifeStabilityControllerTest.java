@@ -70,7 +70,7 @@ class LifeStabilityControllerTest {
         LifeStabilityResponse response = createResponse();
         when(lifeStabilityService.recalculateFromUserData(1L)).thenReturn(response);
 
-        mockMvc.perform(post("/api/life-stability/me/recalculate")
+        mockMvc.perform(post("/api/user/life-stability/me/recalculate")
                         .requestAttr("userId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.grade").value("NEED_IMPROVEMENT"));

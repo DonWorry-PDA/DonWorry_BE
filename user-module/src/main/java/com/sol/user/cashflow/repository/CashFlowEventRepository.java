@@ -9,4 +9,5 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
     void deleteByUserUserId(Long userId);
 
     List<CashFlowEvent> findByUserUserId(Long userId);
+
 }

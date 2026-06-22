@@ -42,4 +42,10 @@ public class Pension {
         this.variable = variable;
         this.startAge = startAge;
     }
+
+    public void updateMock(BigDecimal expectedMonthlyAmount, Boolean variable, Integer startAge) {
+        this.expectedMonthlyAmount = expectedMonthlyAmount;
+        this.variable = variable;
+        this.startAge = startAge;
+    }
 }

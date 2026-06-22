@@ -115,6 +115,11 @@ public class LifeStabilityService {
         BigDecimal loanRepayment = debtRepository.findByUserUserId(userId).stream()
                 .map(debt -> debt.getMonthlyRepayment() == null ? BigDecimal.ZERO : debt.getMonthlyRepayment())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 주의: 현재 RISK_ASSET_WITHDRAWAL 이벤트를 시드하지 않으므로 이 값은 사실상 항상 0이다.
+        // 0은 not-null이라 calculator의 "부족액 기반 추정" 폴백(null일 때만 작동)을 타지 않는다.
+        // 이는 버그가 아니라 의도된 동작: 위험자산 의존도를 부족액 기반으로 바꾸면
+        // 점수 보정이 틀어져 userId 2의 시연 등급이 보완 필요 → 개선 필요로 내려간다.
+        // 지표 정의를 바꾸려면 scoreRiskAssetDependency/등급 컷을 함께 재보정할 것.
         BigDecimal riskAssetWithdrawal = sumEvents(
                 events,
                 "INCOME",

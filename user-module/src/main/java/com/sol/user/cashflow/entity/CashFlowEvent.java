@@ -60,4 +60,14 @@ public class CashFlowEvent {
         this.recurring = recurring;
         this.source = source;
     }
+
+    public void updateMock(LocalDate eventDate, String title, BigDecimal amount, String flowType) {
+        this.eventDate = eventDate;
+        this.title = title;
+        this.amount = amount;
+        this.flowType = flowType;
+        this.status = "SCHEDULED";
+        this.recurring = true;
+        this.source = "MYDATA_MOCK";
+    }
 }

@@ -45,10 +45,19 @@ public class User {
         this.onboardingCompleted = true;
     }
 
-    public void applyMyDataMockProfile(boolean retired, boolean nationalPensionReceiving) {
-        this.retired = retired;
-        this.nationalPensionReceiving = nationalPensionReceiving;
+    public void updateProfile(Integer age, Boolean retired,
+                              Boolean nationalPensionReceiving, LocalDateTime now) {
+        if (age != null) {
+            this.age = age;
+        }
+        if (retired != null) {
+            this.retired = retired;
+        }
+        if (nationalPensionReceiving != null) {
+            this.nationalPensionReceiving = nationalPensionReceiving;
+        }
+        this.updatedAt = now;
         this.onboardingCompleted = true;
-        this.updatedAt = LocalDateTime.now();
     }
+
 }

@@ -50,4 +50,10 @@ public class AssetConnection {
         this.connectionStatus = connectionStatus;
         this.lastSyncedAt = lastSyncedAt;
     }
+
+    public void updateMock(String institutionName, LocalDateTime lastSyncedAt) {
+        this.institutionName = institutionName;
+        this.connectionStatus = "CONNECTED";
+        this.lastSyncedAt = lastSyncedAt;
+    }
 }

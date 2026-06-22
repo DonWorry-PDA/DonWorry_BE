@@ -13,29 +13,29 @@ import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Life Stability", description = "Life stability API")
+@Tag(name = "생활 안정도", description = "생활 안정도 조회 및 재계산 API")
 @RestController
-@RequestMapping({"/api/life-stability", "/api/user/life-stability"})
+@RequestMapping("/api/user/life-stability")
 @RequiredArgsConstructor
 public class LifeStabilityController {
 
     private final LifeStabilityService lifeStabilityService;
 
-    @Operation(summary = "Get latest life stability result")
+    @Operation(summary = "최근 생활 안정도 결과 조회")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<LifeStabilityResponse>> getMyLifeStability(
             @RequestAttribute("userId") Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.getLatest(userId)));
     }
 
-    @Operation(summary = "Recalculate life stability from stored user data")
+    @Operation(summary = "저장된 사용자 데이터로 생활 안정도 재계산")
     @PostMapping("/me/recalculate")
     public ResponseEntity<ApiResponse<LifeStabilityResponse>> recalculateMyLifeStability(
             @RequestAttribute("userId") Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.recalculateFromUserData(userId)));
     }
 
-    @Operation(summary = "Preview life stability result with sample data")
+    @Operation(summary = "샘플 데이터로 생활 안정도 결과 미리보기")
     @PostMapping("/preview")
     public ResponseEntity<ApiResponse<LifeStabilityResponse>> previewLifeStability() {
         return ResponseEntity.ok(ApiResponse.ok(lifeStabilityService.preview()));

@@ -46,4 +46,11 @@ public class Account {
         this.depositBalance = depositBalance;
         this.existingAccount = existingAccount;
     }
+
+    public void updateMock(String institutionName, String accountNumber, BigDecimal depositBalance) {
+        this.institutionName = institutionName;
+        this.accountNumber = accountNumber;
+        this.depositBalance = depositBalance;
+        this.existingAccount = true;
+    }
 }

@@ -26,51 +26,62 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
-class AssetMockControllerTest {
+class MydataMockControllerTest {
 
     @Mock
     private AssetMockService assetMockService;
 
     @InjectMocks
-    private AssetMockController assetMockController;
+    private MydataMockController mydataMockController;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(assetMockController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(mydataMockController).build();
     }
 
     @Test
-    void createMyMockAssetsUsesApiSpecPathAndAuthenticatedUser() throws Exception {
-        MockAssetResponse response = new MockAssetResponse(
+    void connectSyncsAuthenticatedUserWithoutExposingScenario() throws Exception {
+        when(assetMockService.sync(7L)).thenReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/user/mydata/mock/connect")
+                        .requestAttr("userId", 7L)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.connectedInstitutions").value(6))
+                .andExpect(jsonPath("$.data.message").value("마이데이터 정보를 불러왔습니다."))
+                .andExpect(jsonPath("$.data.assetSummary.netAsset").value(178_000_000))
+                .andExpect(jsonPath("$.data.mockType").doesNotExist());
+
+        verify(assetMockService).sync(7L);
+    }
+
+    @Test
+    void syncReSyncsAuthenticatedUser() throws Exception {
+        when(assetMockService.sync(7L)).thenReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/user/mydata/mock/sync")
+                        .requestAttr("userId", 7L)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.message").value("마이데이터 정보를 다시 동기화했습니다."));
+
+        verify(assetMockService).sync(7L);
+    }
+
+    private MockAssetResponse sampleResponse() {
+        return new MockAssetResponse(
                 MockType.NEED_COMPLEMENT,
                 LocalDateTime.of(2026, 6, 22, 9, 41),
                 new AssetSummaryResponse(
                         BigDecimal.valueOf(208_000_000),
                         BigDecimal.valueOf(30_000_000),
                         BigDecimal.valueOf(178_000_000),
-                        BigDecimal.valueOf(2_200_000),
-                        BigDecimal.valueOf(1_298_000),
-                        BigDecimal.valueOf(-902_000),
-                        BigDecimal.valueOf(59),
                         List.of()
                 ),
-                null,
                 new MockGeneratedCounts(6, 5, 3, 1, 3, 7)
         );
-        when(assetMockService.create(7L, MockType.NEED_COMPLEMENT)).thenReturn(response);
-
-        mockMvc.perform(post("/api/assets/mock/me")
-                        .requestAttr("userId", 7L)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mockType\":\"NEED_COMPLEMENT\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.mockType").value("NEED_COMPLEMENT"))
-                .andExpect(jsonPath("$.data.assetSummary.cashflowCoverageRate").value(59))
-                .andExpect(jsonPath("$.data.generatedCounts.cashflowEvents").value(7));
-
-        verify(assetMockService).create(7L, MockType.NEED_COMPLEMENT);
     }
 }

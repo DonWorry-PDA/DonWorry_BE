@@ -59,4 +59,14 @@ public class Debt {
         this.interestRate = interestRate;
         this.maturityDate = maturityDate;
     }
+
+    public void updateMock(String institutionName, String loanType, BigDecimal balance,
+                           BigDecimal monthlyRepayment, BigDecimal interestRate, LocalDate maturityDate) {
+        this.institutionName = institutionName;
+        this.loanType = loanType;
+        this.balance = balance;
+        this.monthlyRepayment = monthlyRepayment;
+        this.interestRate = interestRate;
+        this.maturityDate = maturityDate;
+    }
 }

@@ -15,19 +15,12 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
-import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
-import com.sol.user.stability.dto.LifeStabilityResponse;
-import com.sol.user.stability.repository.StabilityScoreRepository;
-import com.sol.user.stability.service.LifeStabilityService;
-import com.sol.user.trade.repository.TradeHistoryRepository;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
-import com.sol.user.usergoal.entity.UserGoal;
-import com.sol.user.usergoal.repository.UserGoalRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,25 +33,71 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 @Service
 @RequiredArgsConstructor
 public class AssetMockService {
 
-    private static final BigDecimal TARGET_LIVING_EXPENSE = money(2_200_000);
-
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
-    private final HoldingRepository holdingRepository;
-    private final TradeHistoryRepository tradeHistoryRepository;
     private final PensionRepository pensionRepository;
-    private final UserGoalRepository userGoalRepository;
     private final CashFlowEventRepository cashFlowEventRepository;
     private final AssetConnectionRepository assetConnectionRepository;
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
-    private final StabilityScoreRepository stabilityScoreRepository;
-    private final LifeStabilityService lifeStabilityService;
+
+    /**
+     * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
+     * 로그인한 userId에 미리 배정된 생활 안정도 구간 시나리오를 사용한다.
+     * (시연용 고정 매핑 — 런타임 재배정이 필요하면 개발용 seed API로 강제 전환한다.)
+     */
+    private static final Map<Long, MockType> SCENARIO_BY_USER = Map.of(
+            1L, MockType.NEED_IMPROVEMENT,
+            2L, MockType.NEED_COMPLEMENT,
+            3L, MockType.STABLE
+    );
+    private static final MockType DEFAULT_SCENARIO = MockType.NEED_COMPLEMENT;
+
+    /**
+     * 사용자용 마이데이터 연결/재동기화. userId에 배정된 시나리오를 업서트한다.
+     * 시나리오가 userId마다 고정이므로 재호출해도 같은 상태로 수렴하며 이전 데이터가 남지 않는다.
+     */
+    @Transactional
+    public MockAssetResponse sync(Long userId) {
+        return create(userId, SCENARIO_BY_USER.getOrDefault(userId, DEFAULT_SCENARIO));
+    }
+
+    /**
+     * 개발/시연용 시드. 기존 목업 원천 데이터를 모두 지우고 지정한 시나리오로 새로 생성한다.
+     * (StabilityScore 이력은 건드리지 않는다.)
+     */
+    @Transactional
+    public MockAssetResponse seed(Long userId, MockType mockType) {
+        if (mockType == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+        deleteAllMockData(userId);
+        return create(userId, mockType);
+    }
+
+    private void deleteAllMockData(Long userId) {
+        accountRepository.deleteAll(accountRepository.findByUserUserId(userId).stream()
+                .filter(account -> account.getAccountNumber() != null
+                        && account.getAccountNumber().startsWith("MOCK-"))
+                .toList());
+        pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
+        debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
+        insurancePolicyRepository.deleteAll(insurancePolicyRepository.findByUserUserId(userId));
+        assetConnectionRepository.deleteAll(assetConnectionRepository.findByUserUserId(userId));
+        cashFlowEventRepository.deleteAll(cashFlowEventRepository.findByUserUserId(userId).stream()
+                .filter(event -> "MYDATA_MOCK".equals(event.getSource()))
+                .toList());
+    }
 
     @Transactional
     public MockAssetResponse create(Long userId, MockType mockType) {
@@ -71,15 +110,6 @@ public class AssetMockService {
         Scenario scenario = scenarioOf(mockType);
         LocalDateTime generatedAt = LocalDateTime.now();
 
-        replaceExistingData(userId);
-        user.applyMyDataMockProfile(true, true);
-        userGoalRepository.save(new UserGoal(
-                user,
-                TARGET_LIVING_EXPENSE,
-                scenario.monthlyMedicalExpense(),
-                generatedAt
-        ));
-
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
@@ -87,13 +117,10 @@ public class AssetMockService {
         List<AssetConnection> connections = saveConnections(user, generatedAt);
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario);
 
-        LifeStabilityResponse stability = lifeStabilityService.recalculateFromUserData(userId);
-
         return new MockAssetResponse(
                 mockType,
                 generatedAt,
                 createAssetSummary(scenario),
-                stability,
                 new MockGeneratedCounts(
                         connections.size(),
                         accounts.size(),
@@ -105,56 +132,57 @@ public class AssetMockService {
         );
     }
 
-    private void replaceExistingData(Long userId) {
-        tradeHistoryRepository.deleteByAccountUserUserId(userId);
-        holdingRepository.deleteByAccountUserUserId(userId);
-        accountRepository.deleteByUserUserId(userId);
-        pensionRepository.deleteByUserUserId(userId);
-        cashFlowEventRepository.deleteByUserUserId(userId);
-        userGoalRepository.deleteByUserUserId(userId);
-        assetConnectionRepository.deleteByUserUserId(userId);
-        debtRepository.deleteByUserUserId(userId);
-        insurancePolicyRepository.deleteByUserUserId(userId);
-        stabilityScoreRepository.deleteByUserId(userId);
-    }
-
     private List<Account> saveAssets(User user, Long userId, List<AssetSeed> seeds) {
-        List<Account> accounts = new ArrayList<>();
+        List<Account> existing = accountRepository.findByUserUserId(userId).stream()
+                .filter(account -> account.getAccountNumber() != null
+                        && account.getAccountNumber().startsWith("MOCK-"))
+                .toList();
+        List<Account> desired = new ArrayList<>();
         for (int i = 0; i < seeds.size(); i++) {
             AssetSeed seed = seeds.get(i);
-            accounts.add(new Account(
-                    user,
-                    seed.category(),
-                    seed.institutionName(),
-                    "MOCK-" + userId + "-" + (i + 1),
-                    seed.amount(),
-                    true
-            ));
+            desired.add(new Account(user, seed.category(), seed.institutionName(),
+                    "MOCK-" + userId + "-" + (i + 1), seed.amount(), true));
         }
-        return accountRepository.saveAll(accounts);
+        return upsertByKey(existing, desired, Account::getAccountType,
+                (target, seed) -> target.updateMock(seed.getInstitutionName(),
+                        seed.getAccountNumber(), seed.getDepositBalance()),
+                accountRepository::deleteAll, accountRepository::saveAll);
     }
 
     private List<Pension> savePensions(User user, Scenario scenario) {
-        return pensionRepository.saveAll(List.of(
+        List<Pension> desired = List.of(
                 new Pension(user, "NATIONAL", scenario.monthlyPensionIncome(), false, 65),
                 new Pension(user, "RETIREMENT", BigDecimal.ZERO, false, 65),
                 new Pension(user, "PERSONAL", BigDecimal.ZERO, true, 65)
-        ));
+        );
+        return upsertByKey(pensionRepository.findByUserUserId(user.getUserId()), desired,
+                Pension::getPensionType,
+                (target, seed) -> target.updateMock(seed.getExpectedMonthlyAmount(),
+                        seed.getVariable(), seed.getStartAge()),
+                pensionRepository::deleteAll, pensionRepository::saveAll);
     }
 
     private List<Debt> saveDebts(User user, Scenario scenario) {
+        List<Debt> existing = debtRepository.findByUserUserId(user.getUserId());
         if (scenario.debtBalance().signum() == 0) {
+            if (!existing.isEmpty()) {
+                debtRepository.deleteAll(existing);
+            }
             return List.of();
         }
-        return debtRepository.saveAll(List.of(new Debt(
-                user,
-                "신한은행",
-                "CREDIT_LOAN",
-                scenario.debtBalance(),
-                scenario.monthlyLoanRepayment(),
-                scenario.loanInterestRate(),
-                LocalDate.now().plusYears(10)
-        )));
+        Debt debt;
+        if (existing.isEmpty()) {
+            debt = new Debt(user, "신한은행", "CREDIT_LOAN", scenario.debtBalance(),
+                    scenario.monthlyLoanRepayment(), scenario.loanInterestRate(), LocalDate.now().plusYears(10));
+        } else {
+            debt = existing.get(0);
+            debt.updateMock("신한은행", "CREDIT_LOAN", scenario.debtBalance(),
+                    scenario.monthlyLoanRepayment(), scenario.loanInterestRate(), LocalDate.now().plusYears(10));
+            if (existing.size() > 1) {
+                debtRepository.deleteAll(existing.subList(1, existing.size()));
+            }
+        }
+        return debtRepository.saveAll(List.of(debt));
     }
 
     private List<InsurancePolicy> saveInsurancePolicies(User user, Scenario scenario) {
@@ -162,22 +190,31 @@ public class AssetMockService {
         BigDecimal lastPremium = scenario.monthlyInsurancePremium().subtract(firstPremium.multiply(BigDecimal.valueOf(2)));
         BigDecimal firstReserve = scenario.medicalReserve().divide(BigDecimal.valueOf(3), 0, RoundingMode.DOWN);
         BigDecimal lastReserve = scenario.medicalReserve().subtract(firstReserve.multiply(BigDecimal.valueOf(2)));
-        return insurancePolicyRepository.saveAll(List.of(
+        List<InsurancePolicy> desired = List.of(
                 new InsurancePolicy(user, "신한라이프", "INDEMNITY", firstPremium, true, firstReserve),
                 new InsurancePolicy(user, "신한라이프", "CANCER", firstPremium, true, firstReserve),
                 new InsurancePolicy(user, "신한라이프", "NURSING", lastPremium, true, lastReserve)
-        ));
+        );
+        return upsertByKey(insurancePolicyRepository.findByUserUserId(user.getUserId()), desired,
+                InsurancePolicy::getInsuranceType,
+                (target, seed) -> target.updateMock(seed.getInstitutionName(), seed.getMonthlyPremium(),
+                        seed.getActive(), seed.getMedicalReserve()),
+                insurancePolicyRepository::deleteAll, insurancePolicyRepository::saveAll);
     }
 
     private List<AssetConnection> saveConnections(User user, LocalDateTime syncedAt) {
-        return assetConnectionRepository.saveAll(List.of(
+        List<AssetConnection> desired = List.of(
                 new AssetConnection(user, "신한은행", "BANK", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한투자증권", "SECURITIES", "CONNECTED", syncedAt),
                 new AssetConnection(user, "국민연금공단", "PENSION", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한라이프", "INSURANCE", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한카드", "CARD", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한은행", "LOAN", "CONNECTED", syncedAt)
-        ));
+        );
+        return upsertByKey(assetConnectionRepository.findByUserUserId(user.getUserId()), desired,
+                AssetConnection::getCategory,
+                (target, seed) -> target.updateMock(seed.getInstitutionName(), seed.getLastSyncedAt()),
+                assetConnectionRepository::deleteAll, assetConnectionRepository::saveAll);
     }
 
     private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
@@ -187,7 +224,7 @@ public class AssetMockService {
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
         BigDecimal dividendIncome = scenario.monthlyFinancialIncome().subtract(interestIncome);
 
-        return cashFlowEventRepository.saveAll(List.of(
+        List<CashFlowEvent> desired = List.of(
                 event(user, month.withDayOfMonth(5), "PENSION", "국민연금 입금", scenario.monthlyPensionIncome(), "INCOME"),
                 event(user, month.withDayOfMonth(10), "MAINTENANCE", "관리비", scenario.monthlyMaintenanceExpense(), "EXPENSE"),
                 event(user, month.withDayOfMonth(15), "INSURANCE", "보험료", scenario.monthlyInsurancePremium(), "EXPENSE"),
@@ -195,7 +232,48 @@ public class AssetMockService {
                 event(user, month.withDayOfMonth(25), "CARD", "카드대금", scenario.monthlyCardExpense(), "EXPENSE"),
                 event(user, month.withDayOfMonth(27), "LOAN", "대출 상환", scenario.monthlyLoanRepayment(), "EXPENSE"),
                 event(user, month.withDayOfMonth(28), "DIVIDEND", "ETF 배당금", dividendIncome, "INCOME")
-        ));
+        );
+        List<CashFlowEvent> existing = cashFlowEventRepository.findByUserUserId(user.getUserId()).stream()
+                .filter(cashFlowEvent -> "MYDATA_MOCK".equals(cashFlowEvent.getSource()))
+                .toList();
+        return upsertByKey(existing, desired, CashFlowEvent::getEventType,
+                (target, seed) -> target.updateMock(seed.getEventDate(), seed.getTitle(),
+                        seed.getAmount(), seed.getFlowType()),
+                cashFlowEventRepository::deleteAll, cashFlowEventRepository::saveAll);
+    }
+
+    /**
+     * 유형 키 기준 업서트. 같은 키의 기존 행은 updateFn으로 수정해 재사용하고,
+     * desired에 없는 기존 행은 삭제, desired에만 있는 키는 새로 추가한다.
+     */
+    private <E> List<E> upsertByKey(
+            List<E> existing,
+            List<E> desired,
+            Function<E, String> keyFn,
+            BiConsumer<E, E> updateFn,
+            Consumer<List<E>> deleteAll,
+            Function<List<E>, List<E>> saveAll) {
+        Map<String, E> existingByKey = new LinkedHashMap<>();
+        List<E> obsolete = new ArrayList<>();
+        for (E entity : existing) {
+            E duplicate = existingByKey.putIfAbsent(keyFn.apply(entity), entity);
+            if (duplicate != null) {
+                obsolete.add(entity);
+            }
+        }
+        List<E> result = new ArrayList<>();
+        for (E seed : desired) {
+            E found = existingByKey.remove(keyFn.apply(seed));
+            if (found == null) {
+                result.add(seed);
+            } else {
+                updateFn.accept(found, seed);
+                result.add(found);
+            }
+        }
+        obsolete.addAll(existingByKey.values());
+        deleteAll.accept(obsolete);
+        return saveAll.apply(result);
     }
 
     private CashFlowEvent event(User user, LocalDate date, String type, String title,
@@ -223,20 +301,10 @@ public class AssetMockService {
         BigDecimal totalAsset = scenario.assets().stream()
                 .map(AssetSeed::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal securedCashflow = scenario.monthlyPensionIncome().add(scenario.monthlyFinancialIncome());
-        BigDecimal monthlyGap = securedCashflow.subtract(TARGET_LIVING_EXPENSE);
-        BigDecimal coverageRate = securedCashflow
-                .multiply(BigDecimal.valueOf(100))
-                .divide(TARGET_LIVING_EXPENSE, 0, RoundingMode.HALF_UP);
-
         return new AssetSummaryResponse(
                 totalAsset,
                 scenario.debtBalance(),
                 totalAsset.subtract(scenario.debtBalance()),
-                TARGET_LIVING_EXPENSE,
-                securedCashflow,
-                monthlyGap,
-                coverageRate,
                 groups
         );
     }
@@ -251,7 +319,7 @@ public class AssetMockService {
                             asset("RETIREMENT_PENSION", "신한투자증권", 25_000_000)
                     ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
-                    money(450_000), money(5_400_000), money(600_000), money(104_000),
+                    money(5_400_000), money(600_000), money(104_000),
                     money(250_000), money(180_000), money(1_250_000)
             );
             case NEED_COMPLEMENT -> new Scenario(
@@ -263,7 +331,7 @@ public class AssetMockService {
                             asset("PERSONAL_PENSION", "신한투자증권", 25_000_000)
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
-                    money(350_000), money(4_200_000), money(1_150_000), money(148_000),
+                    money(4_200_000), money(1_150_000), money(148_000),
                     money(200_000), money(180_000), money(1_400_000)
             );
             case STABLE -> new Scenario(
@@ -277,7 +345,7 @@ public class AssetMockService {
                             asset("PERSONAL_PENSION", "신한투자증권", 60_000_000)
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                    money(250_000), money(6_000_000), money(2_000_000), money(464_000),
+                    money(6_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), money(1_750_000)
             );
         };
@@ -299,7 +367,6 @@ public class AssetMockService {
             BigDecimal debtBalance,
             BigDecimal monthlyLoanRepayment,
             BigDecimal loanInterestRate,
-            BigDecimal monthlyMedicalExpense,
             BigDecimal medicalReserve,
             BigDecimal monthlyPensionIncome,
             BigDecimal monthlyFinancialIncome,

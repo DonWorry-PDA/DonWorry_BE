@@ -43,4 +43,11 @@ public class UserGoal {
         this.createdAt = now;
         this.updatedAt = now;
     }
+
+    public void updateMock(BigDecimal monthlyTargetLivingCost,
+                           BigDecimal monthlyExpectedMedicalCost, LocalDateTime now) {
+        this.monthlyTargetLivingCost = monthlyTargetLivingCost;
+        this.monthlyExpectedMedicalCost = monthlyExpectedMedicalCost;
+        this.updatedAt = now;
+    }
 }
