@@ -6,7 +6,6 @@ import com.sol.user.auth.dto.LoginResponse;
 import com.sol.user.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,9 +27,9 @@ public class AuthController {
 
     @Operation(summary = "로그아웃")
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest request) {
-        String token = request.getHeader("Authorization").substring(7);
-        authService.logout(token);
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @RequestHeader("Authorization") String authorization) {
+        authService.logout(authorization.substring(7));
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
