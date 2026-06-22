@@ -32,13 +32,13 @@ class LifeStabilityCalculatorTest {
 
         LifeStabilityCalculatedResult result = calculator.calculate(input);
 
-        assertThat(result.getTotalScore()).isEqualTo(49);
-        assertThat(result.getGrade()).isEqualTo(LifeStabilityGrade.CAUTION);
+        assertThat(result.getTotalScore()).isEqualTo(52);
+        assertThat(result.getGrade()).isEqualTo(LifeStabilityGrade.NEED_COMPLEMENT);
         assertThat(result.getCashflowCoverageRate()).isEqualByComparingTo("56.00");
         assertThat(result.getEssentialExpenseRate()).isEqualByComparingTo("66.67");
         assertThat(result.getMedicalPreparednessMonths()).isEqualByComparingTo("10.00");
         assertThat(result.getLiquidityMonths()).isEqualByComparingTo("5.83");
-        assertThat(result.getDebtBurdenRate()).isEqualByComparingTo("11.11");
+        assertThat(result.getDebtBurdenRate()).isEqualByComparingTo("8.00");
         assertThat(result.getRiskAssetDependencyRate()).isEqualByComparingTo("44.00");
         assertThat(result.isGrowthPlanAllowed()).isFalse();
         assertThat(result.getRecommendedPlanType()).isEqualTo(RecommendedPlanType.STABLE_INCOME);
@@ -72,7 +72,7 @@ class LifeStabilityCalculatorTest {
                 .monthlyIncome(BigDecimal.valueOf(3_000_000))
                 .monthlyFixedExpense(BigDecimal.valueOf(500_000))
                 .monthlyEssentialExpense(BigDecimal.valueOf(1_000_000))
-                .monthlyLoanRepayment(BigDecimal.valueOf(300_000))
+                .monthlyLoanRepayment(BigDecimal.valueOf(200_000))
                 .monthlyFinancialIncome(BigDecimal.ZERO)
                 .liquidAsset(BigDecimal.valueOf(12_000_000))
                 .medicalPreparedAsset(BigDecimal.valueOf(24_000_000))

@@ -1,10 +1,9 @@
 package com.sol.user.stability.type;
 
 public enum LifeStabilityIndicatorStatus {
-    GOOD("\uC88B\uC74C"),
-    NORMAL("\uBCF4\uD1B5"),
-    NEED_CHECK("\uD655\uC778 \uD544\uC694"),
-    WEAK("\uBD80\uC871");
+    STABLE("\uC548\uC815"),
+    NEED_COMPLEMENT("\uBCF4\uC644 \uD544\uC694"),
+    NEED_IMPROVEMENT("\uAC1C\uC120 \uD544\uC694");
 
     private final String label;
 

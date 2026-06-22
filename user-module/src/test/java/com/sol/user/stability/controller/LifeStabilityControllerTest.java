@@ -46,7 +46,7 @@ class LifeStabilityControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.message").value("성공"))
-                .andExpect(jsonPath("$.data.grade").value("CAUTION"));
+                .andExpect(jsonPath("$.data.grade").value("NEED_IMPROVEMENT"));
 
         verify(lifeStabilityService).getLatest(1L);
     }
@@ -60,14 +60,27 @@ class LifeStabilityControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.message").value("성공"))
-                .andExpect(jsonPath("$.data.grade").value("CAUTION"));
+                .andExpect(jsonPath("$.data.grade").value("NEED_IMPROVEMENT"));
 
         verify(lifeStabilityService).preview();
     }
 
+    @Test
+    void recalculateLifeStabilityUsesStoredUserData() throws Exception {
+        LifeStabilityResponse response = createResponse();
+        when(lifeStabilityService.recalculateFromUserData(1L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/life-stability/me/recalculate")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grade").value("NEED_IMPROVEMENT"));
+
+        verify(lifeStabilityService).recalculateFromUserData(1L);
+    }
+
     private LifeStabilityResponse createResponse() {
         return LifeStabilityResponse.builder()
-                .grade("CAUTION")
+                .grade("NEED_IMPROVEMENT")
                 .gradeLabel("주의")
                 .summaryMessage("생활 안정도 점검이 필요해요.")
                 .improvementMessages(List.of())

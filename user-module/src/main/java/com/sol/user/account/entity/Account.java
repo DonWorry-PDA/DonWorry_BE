@@ -36,4 +36,14 @@ public class Account {
 
     @Column(name = "existing_account")
     private Boolean existingAccount;
+
+    public Account(User user, String accountType, String institutionName,
+                   String accountNumber, BigDecimal depositBalance, Boolean existingAccount) {
+        this.user = user;
+        this.accountType = accountType;
+        this.institutionName = institutionName;
+        this.accountNumber = accountNumber;
+        this.depositBalance = depositBalance;
+        this.existingAccount = existingAccount;
+    }
 }

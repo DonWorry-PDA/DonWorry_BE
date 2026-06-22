@@ -6,6 +6,7 @@ import java.util.List;
 
 @Builder
 public record LifeStabilityResponse(
+        int totalScore,
         String grade,
         String gradeLabel,
         String summaryMessage,

@@ -44,4 +44,11 @@ public class User {
     public void completeOnboarding() {
         this.onboardingCompleted = true;
     }
+
+    public void applyMyDataMockProfile(boolean retired, boolean nationalPensionReceiving) {
+        this.retired = retired;
+        this.nationalPensionReceiving = nationalPensionReceiving;
+        this.onboardingCompleted = true;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

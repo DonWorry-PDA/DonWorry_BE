@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface StabilityScoreRepository extends JpaRepository<StabilityScore, Long> {
 
     Optional<StabilityScore> findTopByUserIdOrderByCreatedAtDesc(Long userId);
+
+    void deleteByUserId(Long userId);
 }

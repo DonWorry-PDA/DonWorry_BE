@@ -33,4 +33,13 @@ public class Pension {
 
     @Column(name = "start_age")
     private Integer startAge;
+
+    public Pension(User user, String pensionType, BigDecimal expectedMonthlyAmount,
+                   Boolean variable, Integer startAge) {
+        this.user = user;
+        this.pensionType = pensionType;
+        this.expectedMonthlyAmount = expectedMonthlyAmount;
+        this.variable = variable;
+        this.startAge = startAge;
+    }
 }

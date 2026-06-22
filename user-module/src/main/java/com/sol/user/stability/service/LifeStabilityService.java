@@ -2,6 +2,14 @@ package com.sol.user.stability.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.account.entity.Account;
+import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.cashflow.entity.CashFlowEvent;
+import com.sol.user.cashflow.repository.CashFlowEventRepository;
+import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.insurance.entity.InsurancePolicy;
+import com.sol.user.insurance.repository.InsurancePolicyRepository;
+import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.stability.calculator.LifeStabilityCalculator;
 import com.sol.user.stability.dto.LifeStabilityCalculatedResult;
 import com.sol.user.stability.dto.LifeStabilityCalculationInput;
@@ -13,6 +21,8 @@ import com.sol.user.stability.entity.StabilityScore;
 import com.sol.user.stability.message.LifeStabilityMessageGenerator;
 import com.sol.user.stability.repository.StabilityScoreRepository;
 import com.sol.user.stability.type.LifeStabilityIndicatorStatus;
+import com.sol.user.usergoal.entity.UserGoal;
+import com.sol.user.usergoal.repository.UserGoalRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +39,12 @@ public class LifeStabilityService {
     private final LifeStabilityCalculator calculator;
     private final LifeStabilityMessageGenerator messageGenerator;
     private final StabilityScoreRepository stabilityScoreRepository;
+    private final UserGoalRepository userGoalRepository;
+    private final AccountRepository accountRepository;
+    private final PensionRepository pensionRepository;
+    private final DebtRepository debtRepository;
+    private final InsurancePolicyRepository insurancePolicyRepository;
+    private final CashFlowEventRepository cashFlowEventRepository;
 
     public LifeStabilityResponse preview() {
         LifeStabilityCalculationInput input = createMockInput();
@@ -47,6 +63,84 @@ public class LifeStabilityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
 
         return toResponse(result, messageGenerator.generateImprovementMessages(toCalculatedResult(result)));
+    }
+
+    @Transactional
+    public LifeStabilityResponse recalculateAndSave(Long userId, LifeStabilityCalculationInput input) {
+        LifeStabilityCalculatedResult calculated = calculator.calculate(input);
+        String summaryMessage = messageGenerator.generateSummary(calculated);
+        StabilityScore saved = stabilityScoreRepository.save(StabilityScore.builder()
+                .userId(userId)
+                .totalScore(calculated.getTotalScore())
+                .grade(calculated.getGrade())
+                .cashflowCoverageRate(calculated.getCashflowCoverageRate())
+                .essentialExpenseRate(calculated.getEssentialExpenseRate())
+                .medicalPreparednessMonths(calculated.getMedicalPreparednessMonths())
+                .liquidityMonths(calculated.getLiquidityMonths())
+                .debtBurdenRate(calculated.getDebtBurdenRate())
+                .riskAssetDependencyRate(calculated.getRiskAssetDependencyRate())
+                .growthPlanAllowed(calculated.isGrowthPlanAllowed())
+                .recommendedPlanType(calculated.getRecommendedPlanType())
+                .summaryMessage(summaryMessage)
+                .build());
+
+        return toResponse(saved, messageGenerator.generateImprovementMessages(calculated));
+    }
+
+    @Transactional
+    public LifeStabilityResponse recalculateFromUserData(Long userId) {
+        UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        List<Account> accounts = accountRepository.findByUserUserId(userId);
+        List<InsurancePolicy> policies = insurancePolicyRepository.findByUserUserId(userId);
+        List<CashFlowEvent> events = cashFlowEventRepository.findByUserUserId(userId);
+
+        BigDecimal pensionIncome = pensionRepository.findByUserUserId(userId).stream()
+                .map(pension -> pension.getExpectedMonthlyAmount() == null
+                        ? BigDecimal.ZERO : pension.getExpectedMonthlyAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal financialIncome = sumEvents(events, "INCOME", List.of("INTEREST", "DIVIDEND"));
+        BigDecimal essentialExpense = sumEvents(events, "EXPENSE", List.of("MAINTENANCE", "INSURANCE", "CARD"));
+        if (essentialExpense.signum() == 0) {
+            essentialExpense = goal.getMonthlyTargetLivingCost();
+        }
+        BigDecimal liquidAsset = accounts.stream()
+                .filter(account -> "CHECKING_CMA".equals(account.getAccountType()))
+                .map(account -> account.getDepositBalance() == null ? BigDecimal.ZERO : account.getDepositBalance())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal medicalReserve = policies.stream()
+                .filter(policy -> Boolean.TRUE.equals(policy.getActive()))
+                .map(InsurancePolicy::getMedicalReserve)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal loanRepayment = debtRepository.findByUserUserId(userId).stream()
+                .map(debt -> debt.getMonthlyRepayment() == null ? BigDecimal.ZERO : debt.getMonthlyRepayment())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal riskAssetWithdrawal = sumEvents(
+                events,
+                "INCOME",
+                List.of("RISK_ASSET_WITHDRAWAL")
+        );
+
+        return recalculateAndSave(userId, LifeStabilityCalculationInput.builder()
+                .targetMonthlyLivingExpense(goal.getMonthlyTargetLivingCost())
+                .monthlyIncome(pensionIncome)
+                .monthlyFixedExpense(BigDecimal.ZERO)
+                .monthlyEssentialExpense(essentialExpense)
+                .monthlyLoanRepayment(loanRepayment)
+                .monthlyFinancialIncome(financialIncome)
+                .monthlyRiskAssetWithdrawal(riskAssetWithdrawal)
+                .liquidAsset(liquidAsset)
+                .medicalPreparedAsset(medicalReserve)
+                .expectedAnnualMedicalExpense(goal.getMonthlyExpectedMedicalCost().multiply(BigDecimal.valueOf(12)))
+                .build());
+    }
+
+    private BigDecimal sumEvents(List<CashFlowEvent> events, String flowType, List<String> eventTypes) {
+        return events.stream()
+                .filter(event -> flowType.equals(event.getFlowType()))
+                .filter(event -> eventTypes.contains(event.getEventType()))
+                .map(event -> event.getAmount() == null ? BigDecimal.ZERO : event.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private LifeStabilityCalculationInput createMockInput() {
@@ -73,6 +167,7 @@ public class LifeStabilityService {
             List<String> improvementMessages
     ) {
         return LifeStabilityResponse.builder()
+                .totalScore(result.getTotalScore())
                 .grade(result.getGrade().name())
                 .gradeLabel(result.getGrade().getLabel())
                 .summaryMessage(summaryMessage)
@@ -87,7 +182,7 @@ public class LifeStabilityService {
                 .indicators(LifeStabilityIndicators.builder()
                         .cashflowStatus(toCashflowStatus(result.getCashflowCoverageRate()).getLabel())
                         .essentialExpenseStatus(toExpenseStatus(result.getEssentialExpenseRate()).getLabel())
-                        .medicalPreparednessStatus(toMonthStatus(result.getMedicalPreparednessMonths(), BigDecimal.valueOf(12)).getLabel())
+                        .medicalPreparednessStatus(toMonthStatus(result.getMedicalPreparednessMonths(), BigDecimal.valueOf(24)).getLabel())
                         .liquidityStatus(toMonthStatus(result.getLiquidityMonths(), BigDecimal.valueOf(6)).getLabel())
                         .debtBurdenStatus(toDebtStatus(result.getDebtBurdenRate()).getLabel())
                         .riskAssetDependencyStatus(toRiskDependencyStatus(result.getRiskAssetDependencyRate()).getLabel())
@@ -118,59 +213,53 @@ public class LifeStabilityService {
     }
 
     private LifeStabilityIndicatorStatus toCashflowStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.valueOf(90)) >= 0) {
-            return LifeStabilityIndicatorStatus.GOOD;
-        }
-        if (rate.compareTo(BigDecimal.valueOf(70)) >= 0) {
-            return LifeStabilityIndicatorStatus.NORMAL;
+        if (rate.compareTo(BigDecimal.valueOf(100)) >= 0) {
+            return LifeStabilityIndicatorStatus.STABLE;
         }
         if (rate.compareTo(BigDecimal.valueOf(50)) >= 0) {
-            return LifeStabilityIndicatorStatus.NEED_CHECK;
+            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
         }
-        return LifeStabilityIndicatorStatus.WEAK;
+        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
     }
 
     private LifeStabilityIndicatorStatus toExpenseStatus(BigDecimal rate) {
         if (rate.compareTo(BigDecimal.valueOf(50)) <= 0) {
-            return LifeStabilityIndicatorStatus.GOOD;
+            return LifeStabilityIndicatorStatus.STABLE;
         }
         if (rate.compareTo(BigDecimal.valueOf(70)) <= 0) {
-            return LifeStabilityIndicatorStatus.NORMAL;
+            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
         }
-        if (rate.compareTo(BigDecimal.valueOf(90)) <= 0) {
-            return LifeStabilityIndicatorStatus.NEED_CHECK;
-        }
-        return LifeStabilityIndicatorStatus.WEAK;
+        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
     }
 
     private LifeStabilityIndicatorStatus toMonthStatus(BigDecimal months, BigDecimal goodThreshold) {
         if (months.compareTo(goodThreshold) >= 0) {
-            return LifeStabilityIndicatorStatus.GOOD;
+            return LifeStabilityIndicatorStatus.STABLE;
         }
         BigDecimal normalThreshold = goodThreshold.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
         if (months.compareTo(normalThreshold) >= 0) {
-            return LifeStabilityIndicatorStatus.NORMAL;
+            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
         }
-        return LifeStabilityIndicatorStatus.WEAK;
+        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
     }
 
     private LifeStabilityIndicatorStatus toDebtStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.valueOf(10)) <= 0) {
-            return LifeStabilityIndicatorStatus.GOOD;
+        if (rate.compareTo(BigDecimal.valueOf(30)) <= 0) {
+            return LifeStabilityIndicatorStatus.STABLE;
         }
-        if (rate.compareTo(BigDecimal.valueOf(20)) <= 0) {
-            return LifeStabilityIndicatorStatus.NORMAL;
+        if (rate.compareTo(BigDecimal.valueOf(40)) <= 0) {
+            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
         }
-        return LifeStabilityIndicatorStatus.WEAK;
+        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
     }
 
     private LifeStabilityIndicatorStatus toRiskDependencyStatus(BigDecimal rate) {
         if (rate.compareTo(BigDecimal.ZERO) <= 0) {
-            return LifeStabilityIndicatorStatus.GOOD;
+            return LifeStabilityIndicatorStatus.STABLE;
         }
         if (rate.compareTo(BigDecimal.valueOf(20)) <= 0) {
-            return LifeStabilityIndicatorStatus.NORMAL;
+            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
         }
-        return LifeStabilityIndicatorStatus.WEAK;
+        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
     }
 }

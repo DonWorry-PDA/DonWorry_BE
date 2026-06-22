@@ -29,6 +29,9 @@ public class CashFlowEvent {
     @Column(name = "event_type", length = 20)
     private String eventType;
 
+    @Column(name = "title", length = 100)
+    private String title;
+
     @Column(name = "amount", precision = 15, scale = 0)
     private BigDecimal amount;
 
@@ -37,4 +40,24 @@ public class CashFlowEvent {
 
     @Column(name = "status", length = 10)
     private String status;
+
+    @Column(name = "recurring", nullable = false)
+    private Boolean recurring = false;
+
+    @Column(name = "source", length = 30)
+    private String source;
+
+    public CashFlowEvent(User user, LocalDate eventDate, String eventType, String title,
+                         BigDecimal amount, String flowType, String status,
+                         Boolean recurring, String source) {
+        this.user = user;
+        this.eventDate = eventDate;
+        this.eventType = eventType;
+        this.title = title;
+        this.amount = amount;
+        this.flowType = flowType;
+        this.status = status;
+        this.recurring = recurring;
+        this.source = source;
+    }
 }
