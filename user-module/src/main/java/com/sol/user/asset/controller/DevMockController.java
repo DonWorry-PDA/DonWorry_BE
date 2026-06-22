@@ -9,12 +9,15 @@ import com.sol.user.asset.service.AssetMockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 무인증 시드 API라 운영(prod)에서는 빈 자체를 등록하지 않는다. (JWT 인터셉터도 /api/dev/** 제외 상태)
+@Profile({"local", "dev"})
 @Tag(name = "개발용 목업", description = "시연/테스트 데이터 시드 API (프론트 비노출)")
 @RestController
 @RequestMapping("/api/dev/mydata")

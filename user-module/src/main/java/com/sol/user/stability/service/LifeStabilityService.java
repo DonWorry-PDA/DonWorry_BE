@@ -91,6 +91,10 @@ public class LifeStabilityService {
     public LifeStabilityResponse recalculateFromUserData(Long userId) {
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        // 목표 생활비/예상 의료비는 계산 필수값. 누락 시 NPE가 아니라 명확한 도메인 예외로 차단한다.
+        if (goal.getMonthlyTargetLivingCost() == null || goal.getMonthlyExpectedMedicalCost() == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
         List<Account> accounts = accountRepository.findByUserUserId(userId);
         List<InsurancePolicy> policies = insurancePolicyRepository.findByUserUserId(userId);
         List<CashFlowEvent> events = cashFlowEventRepository.findByUserUserId(userId);
@@ -110,7 +114,7 @@ public class LifeStabilityService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal medicalReserve = policies.stream()
                 .filter(policy -> Boolean.TRUE.equals(policy.getActive()))
-                .map(InsurancePolicy::getMedicalReserve)
+                .map(policy -> policy.getMedicalReserve() == null ? BigDecimal.ZERO : policy.getMedicalReserve())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal loanRepayment = debtRepository.findByUserUserId(userId).stream()
                 .map(debt -> debt.getMonthlyRepayment() == null ? BigDecimal.ZERO : debt.getMonthlyRepayment())

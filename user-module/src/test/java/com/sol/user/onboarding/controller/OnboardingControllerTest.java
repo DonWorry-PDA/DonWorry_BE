@@ -1,10 +1,12 @@
 package com.sol.user.onboarding.controller;
 
+import com.sol.user.onboarding.dto.OnboardingRequest;
 import com.sol.user.onboarding.dto.OnboardingResponse;
 import com.sol.user.onboarding.service.OnboardingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -14,6 +16,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -54,6 +57,12 @@ class OnboardingControllerTest {
                 .andExpect(jsonPath("$.data.monthlyExpectedMedicalCost").value(350_000))
                 .andExpect(jsonPath("$.data.onboardingCompleted").value(true));
 
-        verify(onboardingService).complete(eq(7L), any());
+        // 요청 본문이 DTO로 실제 바인딩됐는지 직접 검증 (필드 누락/오타 시 잡아내기 위함)
+        ArgumentCaptor<OnboardingRequest> captor = ArgumentCaptor.forClass(OnboardingRequest.class);
+        verify(onboardingService).complete(eq(7L), captor.capture());
+        OnboardingRequest bound = captor.getValue();
+        assertThat(bound.age()).isEqualTo(60);
+        assertThat(bound.monthlyTargetLivingCost()).isEqualByComparingTo("2200000");
+        assertThat(bound.monthlyExpectedMedicalCost()).isEqualByComparingTo("350000");
     }
 }
