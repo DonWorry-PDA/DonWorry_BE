@@ -15,6 +15,6 @@ server:
 
 springdoc:
   swagger-ui:
-    path: /api/product/swagger-ui.html
+    path: /api/product/swagger-ui/index.html
   api-docs:
     path: /api/product/v3/api-docs

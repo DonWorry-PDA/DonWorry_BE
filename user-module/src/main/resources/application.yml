@@ -15,3 +15,9 @@ server:
 
 product:
   base-url: ${PRODUCT_BASE_URL:http://localhost:8081}
+
+springdoc:
+  swagger-ui:
+    path: /api/user/swagger-ui/index.html
+  api-docs:
+    path: /api/user/v3/api-docs

@@ -10,3 +10,6 @@ jwt:
 
 swagger:
   server-url: https://api.yeongumsol.com
+
+product:
+  base-url: ${PRODUCT_BASE_URL}
