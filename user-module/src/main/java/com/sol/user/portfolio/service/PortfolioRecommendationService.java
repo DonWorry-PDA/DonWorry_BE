@@ -10,21 +10,16 @@ import com.sol.user.portfolio.dto.CoverageResult;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.OperationGradeResult;
-import com.sol.user.portfolio.dto.PlanCoverage;
-import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
+import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
-import com.sol.user.portfolio.type.PlanType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * 은퇴 포트폴리오 추천 오케스트레이터 — STEP1~4(운용등급) 재사용 → 풀조회 → STEP5(배분) → STEP6(충족률) → 응답 조립.
@@ -33,12 +28,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PortfolioRecommendationService {
 
-    private static final String Q3_REFERENCE_LABEL = "안정안 기준 예시";
-
     private final OperationGradeCalculator operationGradeCalculator;
     private final PortfolioAllocationCalculator allocationCalculator;
     private final AlphaCoverageCalculator coverageCalculator;
     private final EtfPoolProvider etfPoolProvider;
+    private final PortfolioRecommendationMapper recommendationMapper;
 
     public RecommendationResponse recommend(Long userId) {
         OperationGradeInput input = createMockInput();
@@ -53,7 +47,7 @@ public class PortfolioRecommendationService {
         // STEP6 — α충족률·소진모델
         CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input));
 
-        return toResponse(allocation, coverage);
+        return recommendationMapper.toResponse(allocation, coverage);
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {
@@ -80,33 +74,6 @@ public class PortfolioRecommendationService {
                 .otherRegularIncome(MOCK_OTHER_REGULAR_INCOME)
                 .floorAsset(grade.getFloorAsset())
                 .pensionSaving(input.pensionSaving())
-                .build();
-    }
-
-    private RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage) {
-        Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
-                .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
-
-        List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> {
-                    PlanCoverage planCoverage = coverageByType.get(plan.getType());
-                    if (planCoverage == null) {
-                        // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
-                        throw new IllegalStateException("안별 커버리지 누락: " + plan.getType());
-                    }
-                    return PlanResponse.of(plan, planCoverage);
-                })
-                .toList();
-
-        String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
-
-        return RecommendationResponse.builder()
-                .track(coverage.getTrack())   // STEP6가 확정한 최종 트랙
-                .alpha(coverage.getAlpha())
-                .band(coverage.getBand())
-                .plans(plans)
-                .q3ReferenceLabel(q3Label)
-                .q3Scenarios(coverage.getQ3Scenarios())
                 .build();
     }
 
