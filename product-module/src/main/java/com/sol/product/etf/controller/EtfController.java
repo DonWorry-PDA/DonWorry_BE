@@ -1,6 +1,7 @@
 package com.sol.product.etf.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
 import com.sol.product.etf.service.EtfService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +30,12 @@ public class EtfController {
     @GetMapping("/asset-manager/{assetManager}")
     public ResponseEntity<ApiResponse<List<EtfResponse>>> getEtfsByAssetManager(@PathVariable String assetManager) {
         return ResponseEntity.ok(ApiResponse.ok(etfService.getEtfsByAssetManager(assetManager)));
+    }
+
+    @Operation(summary = "포트폴리오 추천용 ETF 풀 조회 (ticker 벌크)")
+    @GetMapping("/pool")
+    public ResponseEntity<ApiResponse<List<EtfPoolItem>>> getPool(@RequestParam List<String> tickers) {
+        return ResponseEntity.ok(ApiResponse.ok(etfService.getPoolByTickers(tickers)));
     }
 
     @Operation(summary = "종목코드로 ETF 단건 조회")
