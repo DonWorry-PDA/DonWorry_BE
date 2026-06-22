@@ -42,24 +42,26 @@ public class RestEtfPoolProvider implements EtfPoolProvider {
     }
 
     private List<EtfInfo> load() {
-        EtfPoolApiResponse response;
         try {
-            response = productRestClient.get()
+            EtfPoolApiResponse response = productRestClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/product/etfs/pool")
                             .queryParam("tickers", PortfolioConstants.WHITELIST)
                             .build())
                     .retrieve()
                     .body(EtfPoolApiResponse.class);
+            if (response == null || response.data() == null || response.data().isEmpty()) {
+                throw new BaseException(ErrorCode.PRODUCT_POOL_UNAVAILABLE);
+            }
+            return response.data().stream()
+                    .map(this::toEtfInfo)
+                    .toList();
+        } catch (BaseException e) {
+            throw e; // 이미 변환된 도메인 예외는 그대로 전파
         } catch (Exception e) {
+            // REST 호출·역직렬화·매핑 어디서 터지든 일관되게 503으로 변환
             throw new BaseException(ErrorCode.PRODUCT_POOL_UNAVAILABLE);
         }
-        if (response == null || response.data() == null || response.data().isEmpty()) {
-            throw new BaseException(ErrorCode.PRODUCT_POOL_UNAVAILABLE);
-        }
-        return response.data().stream()
-                .map(this::toEtfInfo)
-                .toList();
     }
 
     /** product 응답(상품 사실)에 PortfolioConstants 매핑(role·currency)을 합성. */

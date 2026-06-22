@@ -44,6 +44,12 @@ public class PortfolioAllocationCalculator {
                     .build();
         }
 
+        // 일관성 불변식(여유분>0 확정 후) — 바닥자산은 가용자산(총자산−연금저축)을 넘을 수 없음.
+        // 위반 시 오케스트레이터가 여유분을 일관되지 않게 넘긴 것 → 안전목표<바닥자산 방지.
+        if (input.floorAsset().compareTo(input.totalAsset().subtract(input.pensionSaving())) > 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+
         PropensityTier tier = PropensityTier.from(input.propensity());
         Map<String, EtfInfo> byTicker = input.pool().stream()
                 .collect(Collectors.toMap(EtfInfo::ticker, Function.identity(), (a, b) -> a));

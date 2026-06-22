@@ -118,6 +118,29 @@ public final class PortfolioConstants {
             PropensityTier.NEUTRAL, List.of(PlanType.STABLE, PlanType.LIQUIDITY)
     );
 
+    // ── 정적 일관성 검증 (B안 슬롯 구조 desync를 클래스 로딩 시 fail-fast) ──────────
+    static {
+        // 1) 각 안의 슬롯 비중 합은 1.0
+        PLAN_COMPOSITION.forEach((plan, slots) -> {
+            BigDecimal sum = slots.stream().map(SlotWeight::weight).reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (sum.compareTo(BigDecimal.ONE) != 0) {
+                throw new IllegalStateException("PLAN_COMPOSITION 비중 합이 1.0이 아님: " + plan + " = " + sum);
+            }
+        });
+        // 2) tier별 제공 안의 모든 슬롯은 SLOT_TICKER로 해소 가능해야 함
+        PLANS_BY_TIER.forEach((tier, plans) -> {
+            Map<CoreSlot, String> slotMap = SLOT_TICKER.get(tier);
+            for (PlanType plan : plans) {
+                for (SlotWeight sw : PLAN_COMPOSITION.get(plan)) {
+                    if (slotMap == null || !slotMap.containsKey(sw.slot())) {
+                        throw new IllegalStateException(
+                                "SLOT_TICKER 매핑 누락: tier=" + tier + ", plan=" + plan + ", slot=" + sw.slot());
+                    }
+                }
+            }
+        });
+    }
+
     // ── 접근 헬퍼 ─────────────────────────────────────────────────────────────────
 
     public static BucketRole roleOf(String ticker) {
