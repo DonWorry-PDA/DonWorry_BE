@@ -11,6 +11,7 @@ import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.type.AllocationRole;
 import com.sol.user.portfolio.type.PlanStatus;
 import com.sol.user.portfolio.type.PlanType;
+import com.sol.user.portfolio.type.RecommendationTrack;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -38,8 +39,8 @@ public class PortfolioRecommendationMapper {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
-        // 추천 안: NORMAL에서 최고 α충족률 1개(동점 시 STABLE 우선). 충족률 null(연금초과)이면 추천 없음.
-        PlanType recommendedType = resolveRecommendedType(allocation.getPlans(), coverageByType);
+        // 추천 안: NORMAL에서 최고 α충족률 1개(동점 시 STABLE 우선). 연금초과 트랙은 추천 없음.
+        PlanType recommendedType = resolveRecommendedType(coverage.getTrack(), allocation.getPlans(), coverageByType);
 
         List<PlanResponse> plans = allocation.getPlans().stream()
                 .map(plan -> toPlanResponse(plan, coverageByType, recommendedType))
@@ -57,8 +58,14 @@ public class PortfolioRecommendationMapper {
                 .build();
     }
 
-    private PlanType resolveRecommendedType(List<PlanAllocation> plans,
+    private PlanType resolveRecommendedType(RecommendationTrack track,
+                                            List<PlanAllocation> plans,
                                             Map<PlanType, PlanCoverage> coverageByType) {
+        // 연금초과(PENSION_SUFFICIENT)는 추천 없이 전부 AVAILABLE.
+        // 충족률 null 의존 대신 트랙으로 명시 가드 — 향후 충족률이 채워져도 RECOMMENDED로 오인하지 않도록.
+        if (track == RecommendationTrack.PENSION_SUFFICIENT) {
+            return null;
+        }
         PlanType best = null;
         BigDecimal bestRate = null;
         for (PlanAllocation plan : plans) {

@@ -8,6 +8,7 @@ import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.portfolio.type.AllocationRole;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
 import com.sol.user.portfolio.type.PlanStatus;
@@ -56,7 +57,7 @@ class PortfolioRecommendationServiceTest {
             assertThat(plan.getAllocations()).isNotEmpty();
             // 안전버킷(바닥 포함)이 위험버킷만의 holdings 외에 별도 항목으로 포함됨
             assertThat(plan.getAllocations()).anySatisfy(
-                    view -> assertThat(view.role().name()).isEqualTo("SAFE"));
+                    view -> assertThat(view.role()).isEqualTo(AllocationRole.SAFE));
         });
 
         // 추천은 정확히 1개 (NORMAL, 동점 시 STABLE 우선)
