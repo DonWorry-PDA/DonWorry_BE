@@ -36,6 +36,10 @@ public class SwaggerConfig {
                                 .bearerFormat("JWT")));
 
         if (!serverUrl.isBlank()) {
+            if (!serverUrl.startsWith("https://")) {
+                throw new IllegalArgumentException(
+                        "Swagger server URL must use HTTPS: " + serverUrl);
+            }
             openAPI.addServersItem(new Server().url(serverUrl));
         }
 
