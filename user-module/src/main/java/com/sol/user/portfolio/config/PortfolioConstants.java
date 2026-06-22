@@ -87,6 +87,18 @@ public final class PortfolioConstants {
             5, planWeights("0.58", "0.72", "0.50")
     );
 
+    // ── STEP6 소진모델 가정치 (★캘리브레이션 대상). 배당률은 상수 아님 — plan별 가중평균(DB) ──
+    public static final BigDecimal SAFE_RATE = new BigDecimal("0.035");            // 안전금리(연, 분수)
+    public static final BigDecimal PENSION_SAVING_RATE = new BigDecimal("0.05");   // 연금저축수익률(연, 분수)
+    public static final int PENSION_WITHDRAWAL_MIN_AGE = 55;                       // 연금저축 인출 가능 연령
+
+    /** Q3(상속 vs 소비) → 여유분 소진비율. 0=상속우선 / 1=반반 / 2=소비우선. */
+    public static final Map<Integer, BigDecimal> DEPLETION_RATIO = Map.of(
+            0, new BigDecimal("0.3"),
+            1, new BigDecimal("0.65"),
+            2, new BigDecimal("1.0")
+    );
+
     // ── 안 구성 (B안: 의미 슬롯 + tier별 해소) ─────────────────────────────────────
 
     /** 안별 위험버킷 코어 구성(슬롯 단위, tier 무관). 비중 합 = 1.0. */
@@ -157,6 +169,10 @@ public final class PortfolioConstants {
 
     public static BigDecimal riskWeight(int grade, PlanType plan) {
         return RISK_WEIGHT.get(grade).get(plan);
+    }
+
+    public static BigDecimal depletionRatio(int q3) {
+        return DEPLETION_RATIO.get(q3);
     }
 
     public static String resolveTicker(PropensityTier tier, CoreSlot slot) {
