@@ -34,11 +34,12 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             FROM holding h
             JOIN account a       ON h.account_id = a.account_id
             JOIN etf_detail e    ON e.product_id = h.product_id
-            JOIN dividend_history d ON d.product_id = h.product_id
-                 AND d.payment_date = (
-                     SELECT MAX(d2.payment_date)
+            JOIN dividend_history d ON d.dist_id = (
+                     SELECT d2.dist_id
                      FROM dividend_history d2
                      WHERE d2.product_id = h.product_id
+                     ORDER BY d2.payment_date DESC, d2.dist_id DESC
+                     LIMIT 1
                  )
             WHERE a.user_id = :userId
               AND e.distribution_interval_months > 0

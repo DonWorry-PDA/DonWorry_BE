@@ -36,8 +36,7 @@ public class CashFlowDiagnosisService {
                 .findMonthlyAmount(userId, NATIONAL_PENSION_TYPE)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal dividendIncome = nullToZero(holdingRepository.sumMonthlyDividendByUserId(userId))
-                .setScale(0, RoundingMode.HALF_UP);
+        BigDecimal dividendIncome = nullToZero(holdingRepository.sumMonthlyDividendByUserId(userId));
 
         BigDecimal targetMonthlyLivingCost = userGoalRepository.findByUserUserId(userId)
                 .map(UserGoal::getMonthlyTargetLivingCost)
@@ -46,17 +45,22 @@ public class CashFlowDiagnosisService {
         BigDecimal monthlyCashFlow = nationalPension.add(dividendIncome);
         BigDecimal monthlyShortfall = targetMonthlyLivingCost.subtract(monthlyCashFlow).max(BigDecimal.ZERO);
 
+        // 반올림은 응답 단계에서만 (원 단위). 중간 계산은 전체 정밀도 유지.
         return CashFlowDiagnosisResponse.builder()
-                .monthlyCashFlow(monthlyCashFlow)
-                .nationalPension(nationalPension)
-                .dividendIncome(dividendIncome)
-                .targetMonthlyLivingCost(targetMonthlyLivingCost)
-                .monthlyShortfall(monthlyShortfall)
+                .monthlyCashFlow(toWon(monthlyCashFlow))
+                .nationalPension(toWon(nationalPension))
+                .dividendIncome(toWon(dividendIncome))
+                .targetMonthlyLivingCost(toWon(targetMonthlyLivingCost))
+                .monthlyShortfall(toWon(monthlyShortfall))
                 .shortfallExists(monthlyShortfall.compareTo(BigDecimal.ZERO) > 0)
                 .build();
     }
 
     private BigDecimal nullToZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal toWon(BigDecimal value) {
+        return value.setScale(0, RoundingMode.HALF_UP);
     }
 }
