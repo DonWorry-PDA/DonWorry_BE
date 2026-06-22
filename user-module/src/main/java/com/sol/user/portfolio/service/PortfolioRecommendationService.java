@@ -88,7 +88,14 @@ public class PortfolioRecommendationService {
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
         List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> PlanResponse.of(plan, coverageByType.get(plan.getType())))
+                .map(plan -> {
+                    PlanCoverage planCoverage = coverageByType.get(plan.getType());
+                    if (planCoverage == null) {
+                        // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
+                        throw new IllegalStateException("안별 커버리지 누락: " + plan.getType());
+                    }
+                    return PlanResponse.of(plan, planCoverage);
+                })
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;

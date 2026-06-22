@@ -172,7 +172,11 @@ public final class PortfolioConstants {
     }
 
     public static BigDecimal depletionRatio(int q3) {
-        return DEPLETION_RATIO.get(q3);
+        BigDecimal ratio = DEPLETION_RATIO.get(q3);
+        if (ratio == null) {
+            throw new IllegalArgumentException("유효하지 않은 q3 값: " + q3 + " (0,1,2 만 허용)");
+        }
+        return ratio;
     }
 
     public static String resolveTicker(PropensityTier tier, CoreSlot slot) {

@@ -99,10 +99,12 @@ public class AlphaCoverageCalculator {
         if (plans.isEmpty()) {
             return List.of();
         }
+        // Q3 표는 "안정안 기준" 계약 — STABLE이 없으면 임의 안으로 대체하지 않고 계약 위반으로 처리.
+        // (두 tier 모두 PLANS_BY_TIER에 STABLE 포함이라 정상 경로에선 항상 존재)
         PlanAllocation reference = plans.stream()
                 .filter(p -> p.getType() == PlanType.STABLE)
                 .findFirst()
-                .orElse(plans.get(0));
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT));
         return List.of(0, 1, 2).stream()
                 .map(q3 -> {
                     Computed c = compute(reference, q3, input);
@@ -164,10 +166,11 @@ public class AlphaCoverageCalculator {
     /** 배당률(plan 가중평균, %단위 예: 2.7750)을 분수로 변환. */
     private BigDecimal dividendFraction(BigDecimal dividendRatePercent) {
         if (dividendRatePercent == null) {
-            return BigDecimal.ZERO;
+            // 상위(STEP5) 데이터 누락을 0으로 삼키면 월수령이 과소계산됨 → fail-fast
+            throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         BigDecimal fraction = dividendRatePercent.divide(HUNDRED, CALC_SCALE, RoundingMode.HALF_UP);
-        // 단위 불일치(%↔분수) 조용한 오류 방지 — 배당률 분수는 [0, 0.2) 범위여야 함
+        // 단위 불일치(%↔분수)·범위 이탈 조용한 오류 방지 — 배당률 분수는 [0, 0.2) 범위여야 함
         if (fraction.signum() < 0 || fraction.compareTo(DIVIDEND_FRACTION_CEIL) >= 0) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
@@ -188,6 +191,17 @@ public class AlphaCoverageCalculator {
     private void validate(CoverageInput input) {
         if (input == null || input.allocation() == null || input.allocation().getTrack() == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        // plans는 null 불가(구조적부족이면 빈 리스트 — 허용). 비어있지 않으면 각 안 필드 검증.
+        if (input.allocation().getPlans() == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        for (PlanAllocation plan : input.allocation().getPlans()) {
+            if (plan == null || plan.getType() == null || plan.getPlanDividendRate() == null) {
+                throw new BaseException(ErrorCode.INVALID_INPUT);
+            }
+            requireNonNegative(plan.getSurplusRiskAmount());
+            requireNonNegative(plan.getSurplusSafeAmount());
         }
         if (input.q3() < 0 || input.q3() > 2) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
