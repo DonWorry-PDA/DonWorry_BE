@@ -4,6 +4,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.product.dividend.entity.DividendHistory;
 import com.sol.product.dividend.repository.DividendHistoryRepository;
+import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
 import com.sol.product.etf.entity.EtfDetail;
 import com.sol.product.etf.repository.EtfDetailRepository;
@@ -42,6 +43,19 @@ public class EtfService {
         return etfDetailRepository.findByProductProductId(productId)
                 .map(this::toResponse)
                 .orElseThrow(() -> new BaseException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /**
+     * 넘겨받은 ticker들의 ETF 상세를 벌크 조회한다.
+     * 미존재 ticker는 결과에서 빠질 뿐 예외를 던지지 않는다(부분 반환).
+     */
+    public List<EtfPoolItem> getPoolByTickers(List<String> tickerCodes) {
+        if (tickerCodes == null || tickerCodes.isEmpty()) {
+            return List.of();
+        }
+        return etfDetailRepository.findAllByTickerCodeIn(tickerCodes).stream()
+                .map(EtfPoolItem::from)
+                .toList();
     }
 
     private List<EtfResponse> toResponses(List<EtfDetail> etfDetails) {

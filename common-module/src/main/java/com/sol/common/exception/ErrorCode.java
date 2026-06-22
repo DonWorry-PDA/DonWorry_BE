@@ -18,6 +18,7 @@ public enum ErrorCode {
 
     // Product
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_001", "상품을 찾을 수 없습니다."),
+    PRODUCT_POOL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "PRODUCT_002", "상품 풀을 일시적으로 조회할 수 없습니다."),
 
     // Notification
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_001", "알림을 찾을 수 없습니다."),
