@@ -73,6 +73,7 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          PRODUCT_BASE_URL: ${{ secrets.PRODUCT_BASE_URL }}
         run: |
           {
             printf "ECR_URI='%s'\n" "$ECR_REGISTRY"
@@ -81,6 +82,7 @@ jobs:
             printf "DB_USER='%s'\n" "$DB_USER"
             printf "DB_PASSWORD='%s'\n" "$DB_PASSWORD"
             printf "JWT_SECRET='%s'\n" "$JWT_SECRET"
+            printf "PRODUCT_BASE_URL='%s'\n" "$PRODUCT_BASE_URL"
           } > user-module/scripts/deploy.env
 
       - name: Upload deployment bundle to S3
