@@ -25,6 +25,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.login(request)));
     }
 
+    @Operation(summary = "로그아웃")
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @RequestHeader("Authorization") String authorization) {
+        authService.logout(authorization.substring(7));
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     @Operation(summary = "온보딩 완료 처리")
     @PatchMapping("/onboarding/complete")
     public ResponseEntity<ApiResponse<Void>> completeOnboarding(@RequestAttribute("userId") Long userId) {

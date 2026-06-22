@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sol.common.exception.ErrorCode;
 import com.sol.common.response.ApiResponse;
 import com.sol.user.auth.jwt.JwtUtil;
+import com.sol.user.auth.service.TokenBlacklistService;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +23,7 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -39,6 +41,10 @@ public class JwtInterceptor implements HandlerInterceptor {
         String token = header.substring(7);
         try {
             Long userId = jwtUtil.extractUserId(token);
+            if (tokenBlacklistService.isBlacklisted(token)) {
+                writeErrorResponse(response, ErrorCode.AUTH_002);
+                return false;
+            }
             request.setAttribute("userId", userId);
             return true;
         } catch (ExpiredJwtException e) {

@@ -19,6 +19,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
@@ -38,5 +39,9 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
         user.completeOnboarding();
+    }
+
+    public void logout(String token) {
+        tokenBlacklistService.add(token, jwtUtil.extractExpiration(token));
     }
 }

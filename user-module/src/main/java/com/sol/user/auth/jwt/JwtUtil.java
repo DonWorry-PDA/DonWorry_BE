@@ -37,4 +37,13 @@ public class JwtUtil {
                 .getSubject();
         return Long.parseLong(subject);
     }
+
+    public Date extractExpiration(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getExpiration();
+    }
 }

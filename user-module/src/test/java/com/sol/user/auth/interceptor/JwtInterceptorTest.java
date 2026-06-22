@@ -2,6 +2,7 @@ package com.sol.user.auth.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sol.user.auth.jwt.JwtUtil;
+import com.sol.user.auth.service.TokenBlacklistService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,12 +19,14 @@ class JwtInterceptorTest {
 
     @Mock
     private JwtUtil jwtUtil;
+    @Mock
+    private TokenBlacklistService tokenBlacklistService;
 
     private JwtInterceptor jwtInterceptor;
 
     @BeforeEach
     void setUp() {
-        jwtInterceptor = new JwtInterceptor(jwtUtil, new ObjectMapper());
+        jwtInterceptor = new JwtInterceptor(jwtUtil, new ObjectMapper(), tokenBlacklistService);
     }
 
     @Test
@@ -32,6 +35,7 @@ class JwtInterceptorTest {
         request.addHeader("Authorization", "Bearer valid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         when(jwtUtil.extractUserId("valid-token")).thenReturn(42L);
+        when(tokenBlacklistService.isBlacklisted("valid-token")).thenReturn(false);
 
         boolean allowed = jwtInterceptor.preHandle(request, response, new Object());
 
