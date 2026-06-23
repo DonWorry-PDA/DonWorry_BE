@@ -29,7 +29,13 @@ public enum ErrorCode {
     AUTH_003(HttpStatus.UNAUTHORIZED, "AUTH_003", "토큰이 만료되었습니다"),
 
     // Survey
-    SURVEY_NOT_FOUND(HttpStatus.NOT_FOUND, "SURVEY_001", "설문 답변이 없습니다.");
+    SURVEY_NOT_FOUND(HttpStatus.NOT_FOUND, "SURVEY_001", "설문 답변이 없습니다."),
+
+    // Pension
+    PENSION_NOT_FOUND(HttpStatus.NOT_FOUND, "PENSION_001", "국민연금 정보가 등록되지 않았습니다."),
+
+    // User Goal
+    USER_GOAL_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_GOAL_001", "목표 생활비를 먼저 설정해주세요.");
 
     private final HttpStatus httpStatus;
     private final String code;
