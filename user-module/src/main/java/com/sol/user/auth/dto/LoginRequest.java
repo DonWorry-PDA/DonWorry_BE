@@ -1,10 +1,10 @@
 package com.sol.user.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
 public record LoginRequest(
-        @NotNull Long userId,
-        @NotBlank @Size(min = 4, max = 20) String pin
+        @NotBlank
+        @Pattern(regexp = "\\d{6}", message = "PIN은 6자리 숫자여야 합니다.")
+        String pin
 ) {}
