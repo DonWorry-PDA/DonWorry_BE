@@ -36,7 +36,8 @@ public class OtpService {
             throw new BaseException(ErrorCode.INVALID_PHONE);
         }
 
-        String rateKey = KEY_RATE + phone;
+        String userPhone = userId + ":" + phone;
+        String rateKey = KEY_RATE + userPhone;
         Long count = redisTemplate.opsForValue().increment(rateKey);
         if (count != null && count == 1) {
             redisTemplate.expire(rateKey, RATE_LIMIT_TTL_MINUTES, TimeUnit.MINUTES);
@@ -46,14 +47,15 @@ public class OtpService {
         }
 
         String otp = generateOtp();
-        redisTemplate.opsForValue().set(KEY_CODE + phone, otp, OTP_TTL_MINUTES, TimeUnit.MINUTES);
-        redisTemplate.delete(KEY_ATTEMPTS + phone);
+        redisTemplate.opsForValue().set(KEY_CODE + userPhone, otp, OTP_TTL_MINUTES, TimeUnit.MINUTES);
+        redisTemplate.delete(KEY_ATTEMPTS + userPhone);
 
         smsService.sendOtp(phone, otp);
     }
 
     public void verifyOtp(String phone, String inputOtp, Long userId) {
-        String attemptsKey = KEY_ATTEMPTS + phone;
+        String userPhone = userId + ":" + phone;
+        String attemptsKey = KEY_ATTEMPTS + userPhone;
         Long attempts = redisTemplate.opsForValue().increment(attemptsKey);
         if (attempts != null && attempts == 1) {
             redisTemplate.expire(attemptsKey, OTP_TTL_MINUTES + 2, TimeUnit.MINUTES);
@@ -62,7 +64,7 @@ public class OtpService {
             throw new BaseException(ErrorCode.OTP_MAX_ATTEMPTS);
         }
 
-        String stored = redisTemplate.opsForValue().get(KEY_CODE + phone);
+        String stored = redisTemplate.opsForValue().get(KEY_CODE + userPhone);
         if (stored == null) {
             throw new BaseException(ErrorCode.OTP_EXPIRED);
         }
@@ -70,7 +72,7 @@ public class OtpService {
             throw new BaseException(ErrorCode.OTP_INVALID);
         }
 
-        redisTemplate.delete(KEY_CODE + phone);
+        redisTemplate.delete(KEY_CODE + userPhone);
         redisTemplate.delete(attemptsKey);
         redisTemplate.opsForValue().set(KEY_VERIFIED + userId, "Y", VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
     }
