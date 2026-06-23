@@ -4,6 +4,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.product.dividend.entity.DividendHistory;
 import com.sol.product.dividend.repository.DividendHistoryRepository;
+import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
 import com.sol.product.etf.entity.EtfDetail;
@@ -12,8 +13,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,6 +85,33 @@ public class EtfService {
                         etfDetail,
                         latestDividendByProductId.get(etfDetail.getProduct().getProductId())
                 ))
+                .toList();
+    }
+
+    public List<EtfMonthlyDividendItem> getMonthlyDividends(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> distinctIds = productIds.stream().distinct().toList();
+        Map<Long, DividendHistory> latestDividendMap = dividendHistoryRepository
+                .findLatestByProductIds(distinctIds).stream()
+                .collect(Collectors.toMap(
+                        d -> d.getProduct().getProductId(),
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
+
+        return etfDetailRepository.findAllByProductProductIdIn(distinctIds).stream()
+                .filter(e -> e.getDistributionIntervalMonths() != null && e.getDistributionIntervalMonths() > 0)
+                .map(e -> {
+                    Long productId = e.getProduct().getProductId();
+                    DividendHistory latest = latestDividendMap.get(productId);
+                    if (latest == null || latest.getAmountPerUnit() == null) return null;
+                    BigDecimal monthlyPerUnit = latest.getAmountPerUnit()
+                            .divide(BigDecimal.valueOf(e.getDistributionIntervalMonths()), 10, RoundingMode.HALF_UP);
+                    return new EtfMonthlyDividendItem(productId, monthlyPerUnit);
+                })
+                .filter(Objects::nonNull)
                 .toList();
     }
 

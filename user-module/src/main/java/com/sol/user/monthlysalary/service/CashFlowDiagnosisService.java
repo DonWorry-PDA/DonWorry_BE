@@ -2,9 +2,11 @@ package com.sol.user.monthlysalary.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
 import com.sol.user.usergoal.repository.UserGoalRepository;
@@ -14,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class CashFlowDiagnosisService {
     private final UserGoalRepository userGoalRepository;
     private final HoldingRepository holdingRepository;
     private final UserRepository userRepository;
+    private final ProductBatchClient productBatchClient;
 
     @Transactional(readOnly = true)
     public CashFlowDiagnosisResponse diagnose(Long userId) {
@@ -36,7 +41,7 @@ public class CashFlowDiagnosisService {
                 .findMonthlyAmount(userId, NATIONAL_PENSION_TYPE)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal dividendIncome = nullToZero(holdingRepository.sumMonthlyDividendByUserId(userId));
+        BigDecimal dividendIncome = calcMonthlyDividendIncome(userId);
 
         BigDecimal targetMonthlyLivingCost = userGoalRepository.findByUserUserId(userId)
                 .map(UserGoal::getMonthlyTargetLivingCost)
@@ -56,8 +61,18 @@ public class CashFlowDiagnosisService {
                 .build();
     }
 
-    private BigDecimal nullToZero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+    private BigDecimal calcMonthlyDividendIncome(Long userId) {
+        List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId);
+        if (holdings.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        List<Long> productIds = holdings.stream().map(EtfHolding::getProductId).toList();
+        Map<Long, BigDecimal> monthlyDividendMap = productBatchClient.fetchEtfMonthlyDividends(productIds);
+
+        return holdings.stream()
+                .map(h -> monthlyDividendMap.getOrDefault(h.getProductId(), BigDecimal.ZERO)
+                        .multiply(h.getQuantity()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal toWon(BigDecimal value) {

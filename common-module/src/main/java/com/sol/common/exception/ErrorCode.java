@@ -42,7 +42,13 @@ public enum ErrorCode {
     // Account Open
     ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ACCOUNT_ALREADY_EXISTS", "이미 계좌를 보유하고 있습니다."),
     TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "TERMS_NOT_AGREED", "필수 약관에 동의하지 않았습니다."),
-    OTP_NOT_VERIFIED(HttpStatus.FORBIDDEN, "OTP_NOT_VERIFIED", "본인 인증이 완료되지 않았습니다.");
+    OTP_NOT_VERIFIED(HttpStatus.FORBIDDEN, "OTP_NOT_VERIFIED", "본인 인증이 완료되지 않았습니다."),
+
+    // Pension
+    PENSION_NOT_FOUND(HttpStatus.NOT_FOUND, "PENSION_001", "국민연금 정보가 등록되지 않았습니다."),
+
+    // User Goal
+    USER_GOAL_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_GOAL_001", "목표 생활비를 먼저 설정해주세요.");
 
     private final HttpStatus httpStatus;
     private final String code;
