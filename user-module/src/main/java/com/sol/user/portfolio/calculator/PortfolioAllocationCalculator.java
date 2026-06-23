@@ -100,8 +100,9 @@ public class PortfolioAllocationCalculator {
         BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
 
         // 안전버킷 — 바닥(원금보존)/여유안전(소진) 2층. 합이 정확히 safeTarget이 되도록 여유안전분=safeTarget−바닥자산.
-        // (바닥보호 불변식상 safeTarget >= floorAsset 보장, 음수 방지 위해 clamp)
-        BigDecimal floorAsset = input.floorAsset();
+        // 바닥보호 불변식상 safeTarget >= floorAsset이 보장되나, 입력 불일치 시에도 "안전합=safeTarget" 계약이
+        // 깨지지 않도록 floorAsset을 safeTarget 상한으로 방어적 캡(정상 입력에선 floorAsset 그대로).
+        BigDecimal floorAsset = input.floorAsset().min(safeTarget).max(BigDecimal.ZERO);
         BigDecimal surplusSafePortion = safeTarget.subtract(floorAsset).max(BigDecimal.ZERO);
         List<Holding> safeHoldings = buildSafeHoldings(floorAsset, surplusSafePortion, byTicker);
         List<Holding> shortTermHoldings = buildShortTermHoldings(shortTermBucket, byTicker);
