@@ -12,4 +12,6 @@ public interface DailyPriceRepository extends JpaRepository<DailyPrice, Long> {
     List<DailyPrice> findAllByProductProductId(Long productId);
 
     Optional<DailyPrice> findByProductProductIdAndPriceDate(Long productId, LocalDate priceDate);
+
+    Optional<DailyPrice> findTopByProductProductIdOrderByPriceDateDesc(Long productId);
 }
