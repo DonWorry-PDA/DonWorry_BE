@@ -40,9 +40,10 @@ public class Holding {
     @Column(name = "frozen")
     private Boolean frozen;
 
-    public Holding(Account account, Long productId, BigDecimal evaluationAmount) {
+    public Holding(Account account, Long productId, BigDecimal evaluationAmount, BigDecimal quantity) {
         this.account = account;
         this.productId = productId;
         this.evaluationAmount = evaluationAmount;
+        this.quantity = quantity;
     }
 }

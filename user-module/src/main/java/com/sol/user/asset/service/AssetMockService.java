@@ -183,7 +183,12 @@ public class AssetMockService {
         }
 
         List<Holding> desired = seeds.stream()
-                .map(seed -> new Holding(brokerage, tickerToProductId.get(seed.ticker()), seed.evaluationAmount()))
+                .map(seed -> new Holding(
+                        brokerage,
+                        tickerToProductId.get(seed.ticker()),
+                        seed.evaluationAmount(),
+                        seed.quantity()
+                ))
                 .toList();
         holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
         return holdingRepository.saveAll(desired);
@@ -359,8 +364,8 @@ public class AssetMockService {
                             asset("IRP", "신한투자증권", 25_000_000)
                     ),
                     List.of(
-                            holding("433330", 40_000_000),  // SOL 미국S&P500
-                            holding("476030", 40_000_000)   // SOL 미국나스닥100
+                            holding("433330", 40_000_000, 2_000),  // SOL 미국S&P500
+                            holding("476030", 40_000_000, 2_500)   // SOL 미국나스닥100
                     ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
@@ -375,8 +380,8 @@ public class AssetMockService {
                             asset("PENSION_SAVING", "신한투자증권", 25_000_000)
                     ),
                     List.of(
-                            holding("433330", 30_000_000),  // SOL 미국S&P500
-                            holding("292500", 25_000_000)   // SOL KRX300
+                            holding("433330", 30_000_000, 1_500),  // SOL 미국S&P500
+                            holding("292500", 25_000_000, 2_500)   // SOL KRX300
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
@@ -391,9 +396,9 @@ public class AssetMockService {
                             asset("PENSION_SAVING", "신한투자증권", 60_000_000)
                     ),
                     List.of(
-                            holding("446720", 55_000_000),  // SOL 미국배당다우존스
-                            holding("438560", 45_000_000),  // SOL 국고채3년
-                            holding("433330", 30_000_000)   // SOL 미국S&P500
+                            holding("446720", 55_000_000, 5_000),  // SOL 미국배당다우존스
+                            holding("438560", 45_000_000, 400),    // SOL 국고채3년
+                            holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     money(6_000_000), money(2_000_000), money(464_000),
@@ -406,8 +411,8 @@ public class AssetMockService {
         return new AssetSeed(category, institutionName, money(amount));
     }
 
-    private static HoldingSeed holding(String ticker, long amount) {
-        return new HoldingSeed(ticker, money(amount));
+    private static HoldingSeed holding(String ticker, long amount, long quantity) {
+        return new HoldingSeed(ticker, money(amount), BigDecimal.valueOf(quantity));
     }
 
     private static BigDecimal money(long amount) {
@@ -417,7 +422,7 @@ public class AssetMockService {
     private record AssetSeed(String category, String institutionName, BigDecimal amount) {
     }
 
-    private record HoldingSeed(String ticker, BigDecimal evaluationAmount) {
+    private record HoldingSeed(String ticker, BigDecimal evaluationAmount, BigDecimal quantity) {
     }
 
     private record Scenario(
