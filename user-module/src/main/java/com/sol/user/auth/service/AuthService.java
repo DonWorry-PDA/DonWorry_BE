@@ -12,6 +12,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -23,13 +25,18 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new BaseException(ErrorCode.AUTH_001));
+        // BCrypt hashes are salted, so the raw PIN cannot be used in a direct equality query.
+        // Reject both no-match and duplicate-match cases to avoid authenticating an ambiguous user.
+        List<User> matchedUsers = userRepository.findAllByPasswordIsNotNullOrderByUserIdAsc().stream()
+                .filter(user -> passwordEncoder.matches(request.pin(), user.getPassword()))
+                .limit(2)
+                .toList();
 
-        if (!passwordEncoder.matches(request.pin(), user.getPassword())) {
+        if (matchedUsers.size() != 1) {
             throw new BaseException(ErrorCode.AUTH_001);
         }
 
+        User user = matchedUsers.get(0);
         String token = jwtUtil.generateToken(user.getUserId());
         return new LoginResponse(token, user.getOnboardingCompleted());
     }
