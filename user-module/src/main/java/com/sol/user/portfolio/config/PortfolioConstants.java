@@ -90,6 +90,7 @@ public final class PortfolioConstants {
     // ── STEP6 소진모델 가정치 (★캘리브레이션 대상). 배당률은 상수 아님 — plan별 가중평균(DB) ──
     public static final BigDecimal SAFE_RATE = new BigDecimal("0.035");            // 안전금리(연, 분수)
     public static final BigDecimal PENSION_SAVING_RATE = new BigDecimal("0.05");   // 연금저축수익률(연, 분수)
+    public static final BigDecimal EXPECTED_TOTAL_RETURN = new BigDecimal("0.05"); // 위험버킷 기대총수익률 r(배당+자본차익, 고정 가정 — 캘리 노브 아님)
     public static final int PENSION_WITHDRAWAL_MIN_AGE = 55;                       // 연금저축 인출 가능 연령
 
     /** Q3(상속 vs 소비) → 여유분 소진비율. 0=상속우선 / 1=반반 / 2=소비우선. */

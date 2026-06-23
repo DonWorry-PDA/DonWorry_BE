@@ -79,17 +79,23 @@ public class AlphaCoverageCalculator {
 
     private PlanCoverage toPlanCoverage(PlanAllocation plan, CoverageInput input, BigDecimal alpha) {
         Computed c = compute(plan, input.q3(), input);
-        BigDecimal coverageRate = null;
+        BigDecimal alphaCoverageRate = null;
+        BigDecimal sustainableCoverageRate = null;
         if (alpha.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal ourOperation = c.monthlyIncome().subtract(input.monthlyNationalPension());
-            coverageRate = ourOperation.multiply(HUNDRED)
+            BigDecimal totalOp = c.totalIncome().subtract(input.monthlyNationalPension());
+            BigDecimal sustainableOp = c.sustainableIncome().subtract(input.monthlyNationalPension());
+            alphaCoverageRate = totalOp.multiply(HUNDRED)
                     .divide(alpha, RATE_SCALE, RoundingMode.HALF_UP)
-                    .min(HUNDRED); // 100% 캡
+                    .min(HUNDRED);
+            sustainableCoverageRate = sustainableOp.multiply(HUNDRED)
+                    .divide(alpha, RATE_SCALE, RoundingMode.HALF_UP)
+                    .min(HUNDRED);
         }
         return PlanCoverage.builder()
                 .type(plan.getType())
-                .monthlyIncome(money(c.monthlyIncome()))
-                .alphaCoverageRate(coverageRate)
+                .monthlyIncome(money(c.totalIncome()))
+                .alphaCoverageRate(alphaCoverageRate)
+                .sustainableCoverageRate(sustainableCoverageRate)
                 .inheritanceAmount(money(c.inheritance()))
                 .build();
     }
@@ -108,7 +114,7 @@ public class AlphaCoverageCalculator {
         return List.of(0, 1, 2).stream()
                 .map(q3 -> {
                     Computed c = compute(reference, q3, input);
-                    return new Q3Scenario(q3, money(c.monthlyIncome()), money(c.inheritance()));
+                    return new Q3Scenario(q3, money(c.totalIncome()), money(c.inheritance()));
                 })
                 .toList();
     }
@@ -131,17 +137,26 @@ public class AlphaCoverageCalculator {
         BigDecimal safeDeplete = surplusSafe.multiply(ratio);
         BigDecimal pensionDeplete = canWithdrawPension ? pensionSaving.multiply(ratio) : BigDecimal.ZERO;
 
-        // 월수령 = 국민연금 + 바닥이자 + 여유안전이자 + 여유안전소진 + 여유위험소진 + 여유위험배당 + 연금저축인출
-        BigDecimal monthlyIncome = input.monthlyNationalPension()
+        BigDecimal dividendFrac = dividendFraction(plan.getPlanDividendRate());
+        // 자본차익률 = max(r − 배당률, 0). 파생값(독립 계수 아님), 음수=자본잠식이라 clamp.
+        BigDecimal capitalGainRate = PortfolioConstants.EXPECTED_TOTAL_RETURN.subtract(dividendFrac).max(BigDecimal.ZERO);
+
+        // 지속가능 월수령(원금 보존: 이자·배당만 — 원금소진·자본차익실현 제외)
+        BigDecimal sustainable = input.monthlyNationalPension()
                 .add(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
                 .add(monthlyYield(surplusSafe, PortfolioConstants.SAFE_RATE))
+                .add(monthlyYield(surplusRisk, dividendFrac));
+        if (canWithdrawPension) {
+            sustainable = sustainable.add(monthlyYield(pensionSaving, PortfolioConstants.PENSION_SAVING_RATE));
+        }
+
+        // 총인출 월수령 = 지속가능 + 원금소진(안전·위험) + 위험 자본차익 실현 + 연금소진
+        BigDecimal total = sustainable
                 .add(monthlyDepletion(safeDeplete, years))
                 .add(monthlyDepletion(riskDeplete, years))
-                .add(monthlyYield(surplusRisk, dividendFraction(plan.getPlanDividendRate())));
+                .add(monthlyCapitalGain(surplusRisk, capitalGainRate, years));
         if (canWithdrawPension) {
-            monthlyIncome = monthlyIncome
-                    .add(monthlyDepletion(pensionDeplete, years))
-                    .add(monthlyYield(pensionSaving, PortfolioConstants.PENSION_SAVING_RATE));
+            total = total.add(monthlyDepletion(pensionDeplete, years));
         }
 
         // 상속분 = 미소진 여유위험 + 미소진 여유안전 + 미소진 연금저축 (자산 보존 일관성 위해 연금저축 포함)
@@ -149,7 +164,7 @@ public class AlphaCoverageCalculator {
                 .add(surplusSafe.subtract(safeDeplete))
                 .add(pensionSaving.subtract(pensionDeplete));
 
-        return new Computed(monthlyIncome, inheritance);
+        return new Computed(sustainable, total, inheritance);
     }
 
     /** 연 수익(원금 × 연이율)을 월로. rate는 분수(0.035). */
@@ -160,6 +175,18 @@ public class AlphaCoverageCalculator {
     /** 원금소진액을 남은햇수에 걸쳐 월로 분할. */
     private BigDecimal monthlyDepletion(BigDecimal depleteAmount, BigDecimal years) {
         return depleteAmount.divide(years, CALC_SCALE, RoundingMode.HALF_UP)
+                .divide(TWELVE, CALC_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /** 위험 여유분 자본차익 실현분: 원금×((1+cg)^N − 1)을 N년에 걸쳐 월로. cg=자본차익률(분수, 1차 단순식). */
+    private BigDecimal monthlyCapitalGain(BigDecimal principal, BigDecimal capitalGainRate, BigDecimal years) {
+        if (principal.signum() <= 0 || capitalGainRate.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        int n = years.intValueExact();
+        BigDecimal growth = BigDecimal.ONE.add(capitalGainRate).pow(n).subtract(BigDecimal.ONE);
+        return principal.multiply(growth)
+                .divide(years, CALC_SCALE, RoundingMode.HALF_UP)
                 .divide(TWELVE, CALC_SCALE, RoundingMode.HALF_UP);
     }
 
@@ -222,6 +249,6 @@ public class AlphaCoverageCalculator {
         }
     }
 
-    private record Computed(BigDecimal monthlyIncome, BigDecimal inheritance) {
+    private record Computed(BigDecimal sustainableIncome, BigDecimal totalIncome, BigDecimal inheritance) {
     }
 }

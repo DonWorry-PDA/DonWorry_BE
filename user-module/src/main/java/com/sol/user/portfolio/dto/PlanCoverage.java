@@ -14,7 +14,8 @@ import java.math.BigDecimal;
 public class PlanCoverage {
 
     private PlanType type;
-    private BigDecimal monthlyIncome;       // 월수령액
-    private BigDecimal alphaCoverageRate;   // α충족률 (α≤0이면 null — 미적용)
-    private BigDecimal inheritanceAmount;   // 상속분
+    private BigDecimal monthlyIncome;              // 월수령액 (총인출: 원금소진+자본차익 포함)
+    private BigDecimal alphaCoverageRate;          // α충족률 = 총인출 기준 (α≤0이면 null, 100캡)
+    private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
+    private BigDecimal inheritanceAmount;          // 상속분
 }
