@@ -3,9 +3,10 @@ package com.sol.user.portfolio.calculator;
 import com.sol.common.exception.BaseException;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.OperationGradeResult;
-import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 
@@ -205,7 +206,7 @@ class OperationGradeCalculatorTest {
 
     @Test
     void 남은햇수_상한_40년_초과_불가() {
-        OperationGradeInput input = baseBuilder().age(30).gender(Gender.FEMALE).build();
+        OperationGradeInput input = baseBuilder().age(30).build();
 
         OperationGradeResult result = calculator.calculate(input);
 
@@ -214,11 +215,41 @@ class OperationGradeCalculatorTest {
 
     @Test
     void 남은햇수_하한_3년_미만_불가() {
-        OperationGradeInput input = baseBuilder().age(95).gender(Gender.MALE).build();
+        OperationGradeInput input = baseBuilder().age(95).build();
 
         OperationGradeResult result = calculator.calculate(input);
 
         assertThat(result.getRemainingYears()).isGreaterThanOrEqualTo(3);
+    }
+
+    // 남은햇수 = clamp(lookupExpectancy(age) + 5, 3, 40). 5세 구간 경계 자체를 고정해 테이블 변경을 회귀로 잡는다.
+    @ParameterizedTest
+    @CsvSource({
+            "30, 34",   // ≤55 구간
+            "55, 34",
+            "56, 30",   // 56~60
+            "60, 30",
+            "61, 26",   // 61~65
+            "65, 26",
+            "66, 22",   // 66~70
+            "70, 22",
+            "71, 18",   // 71~75
+            "75, 18",
+            "76, 15",   // 76~80
+            "80, 15",
+            "81, 12",   // 81~85
+            "85, 12",
+            "86, 10",   // 86~90
+            "90, 10",
+            "91, 8",    // 91 이상
+            "95, 8"
+    })
+    void 남은햇수_연령구간_경계_회귀검증(int age, int expectedRemainingYears) {
+        OperationGradeInput input = baseBuilder().age(age).build();
+
+        OperationGradeResult result = calculator.calculate(input);
+
+        assertThat(result.getRemainingYears()).isEqualTo(expectedRemainingYears);
     }
 
     // ── 공통 기본 입력 빌더 ───────────────────────────────────────────────
@@ -226,7 +257,6 @@ class OperationGradeCalculatorTest {
     private OperationGradeInput.OperationGradeInputBuilder baseBuilder() {
         return OperationGradeInput.builder()
                 .age(65)
-                .gender(Gender.MALE)
                 .totalAsset(BigDecimal.valueOf(300_000_000))
                 .pensionSaving(BigDecimal.valueOf(30_000_000))
                 .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))

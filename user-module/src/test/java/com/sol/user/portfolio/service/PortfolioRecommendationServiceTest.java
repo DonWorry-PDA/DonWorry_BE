@@ -4,6 +4,7 @@ import com.sol.user.portfolio.calculator.AlphaCoverageCalculator;
 import com.sol.user.portfolio.calculator.OperationGradeCalculator;
 import com.sol.user.portfolio.calculator.PortfolioAllocationCalculator;
 import com.sol.user.portfolio.dto.EtfInfo;
+import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
@@ -11,33 +12,48 @@ import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.AllocationRole;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.portfolio.type.PlanStatus;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.RecommendationTrack;
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
+import com.sol.user.survey.dto.SurveyAnswerResponse;
+import com.sol.user.survey.service.SurveyService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
 class PortfolioRecommendationServiceTest {
 
     private final EtfPoolProvider etfPoolProvider = mock(EtfPoolProvider.class);
+    private final OperationGradeInputAssembler inputAssembler = mock(OperationGradeInputAssembler.class);
+    private final SurveyService surveyService = mock(SurveyService.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
             new PortfolioAllocationCalculator(),
             new AlphaCoverageCalculator(),
             etfPoolProvider,
-            new PortfolioRecommendationMapper()
+            new PortfolioRecommendationMapper(),
+            inputAssembler,
+            surveyService
     );
 
     @Test
     void STEP1부터6까지_조립되어_위험중립형_2안_추천이_나온다() {
         given(etfPoolProvider.getPool()).willReturn(pool());
+        given(inputAssembler.assemble(eq(1L), any(SurveyAnswerResponse.class))).willReturn(neutralInput());
+        given(surveyService.get(1L)).willReturn(
+                SurveyAnswerResponse.builder().q1(2).q2(1).q3(1).build());
 
         RecommendationResponse response = service.recommend(1L);
 
@@ -69,6 +85,33 @@ class PortfolioRecommendationServiceTest {
         assertThat(response.getQ3Scenarios()).hasSize(3);
         assertThat(response.getQ3ReferenceLabel()).isEqualTo("안정안 기준 예시");
         assertThat(response.getBand()).isNotNull();
+    }
+
+    @Test
+    void 설문_미응답이면_추천이_실패한다() {
+        // 설문 선행 필수 계약 — get()이 SURVEY_NOT_FOUND를 던지면 추천도 실패해야 한다
+        given(surveyService.get(1L)).willThrow(new BaseException(ErrorCode.SURVEY_NOT_FOUND));
+
+        assertThatThrownBy(() -> service.recommend(1L))
+                .isInstanceOf(BaseException.class);
+    }
+
+    private OperationGradeInput neutralInput() {
+        return OperationGradeInput.builder()
+                .age(65)
+                .totalAsset(BigDecimal.valueOf(600_000_000))
+                .pensionSaving(BigDecimal.valueOf(50_000_000))
+                .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
+                .essentialRatio(new BigDecimal("0.72"))
+                .monthlyNationalPension(BigDecimal.valueOf(1_000_000))
+                .availableFinancialAsset(BigDecimal.valueOf(500_000_000))
+                .hasLossInsurance(true)
+                .hasMajorIllnessInsurance(true)
+                .monthlyLoanRepayment(BigDecimal.ZERO)
+                .q1(2)
+                .q2(1)
+                .investmentPropensity(InvestmentPropensity.NEUTRAL)
+                .build();
     }
 
     private List<EtfInfo> pool() {

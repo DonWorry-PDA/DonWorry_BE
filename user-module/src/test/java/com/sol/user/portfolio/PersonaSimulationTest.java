@@ -13,7 +13,6 @@ import com.sol.user.portfolio.dto.OperationGradeResult;
 import com.sol.user.portfolio.dto.PlanCoverage;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
-import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import org.junit.jupiter.api.Test;
 
@@ -147,7 +146,6 @@ class PersonaSimulationTest {
 
     private OperationGradeInput.OperationGradeInputBuilder base() {
         return OperationGradeInput.builder()
-                .gender(Gender.MALE)
                 .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
                 .essentialRatio(new BigDecimal("0.72"))
                 .hasLossInsurance(true)

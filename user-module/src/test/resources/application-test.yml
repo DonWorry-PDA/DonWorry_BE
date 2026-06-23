@@ -14,3 +14,13 @@ spring:
 
 jwt:
   secret: test-secret-key-for-unit-testing-only-not-real
+
+# 테스트 컨텍스트 로딩용 더미값(실제 시크릿 아님). application.yml의 기본값 없는 env 플레이스홀더를 채워 컨텍스트 부팅만 보장.
+solapi:
+  api-key: test-solapi-api-key
+  api-secret: test-solapi-api-secret
+  from-number: "01000000000"
+
+encryption:
+  secret: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+  salt: 0011223344556677

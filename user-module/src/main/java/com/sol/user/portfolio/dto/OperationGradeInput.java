@@ -1,6 +1,5 @@
 package com.sol.user.portfolio.dto;
 
-import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import lombok.Builder;
 
@@ -10,7 +9,6 @@ import java.math.BigDecimal;
 public record OperationGradeInput(
         // STEP1 — 바닥자산·여유분
         int age,
-        Gender gender,
         BigDecimal totalAsset,
         BigDecimal pensionSaving,
         BigDecimal targetMonthlyLivingCost,
