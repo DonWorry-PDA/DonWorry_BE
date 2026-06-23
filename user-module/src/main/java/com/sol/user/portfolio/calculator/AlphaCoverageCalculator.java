@@ -178,7 +178,14 @@ public class AlphaCoverageCalculator {
                 .divide(TWELVE, CALC_SCALE, RoundingMode.HALF_UP);
     }
 
-    /** 위험 여유분 자본차익 실현분: 원금×((1+cg)^N − 1)을 N년에 걸쳐 월로. cg=자본차익률(분수, 1차 단순식). */
+    /**
+     * 위험 여유분 자본차익 실현분: 원금×((1+cg)^N − 1)을 N년에 걸쳐 월로. cg=자본차익률(분수, 1차 단순식).
+     *
+     * <p>의도적 근사: principal은 소진비율 적용 전 surplusRisk 전액 기준.
+     * 엄밀히는 보존분(surplusRisk−riskDeplete)에만 자본차익을 얹어야 하지만,
+     * 소진분은 점진 매도되므로 평균 절반만 N년 보유 → 현재 식은 과대 계상.
+     * mock 연동 후 D2 정교화(별도 이슈)에서 수정 예정.
+     */
     private BigDecimal monthlyCapitalGain(BigDecimal principal, BigDecimal capitalGainRate, BigDecimal years) {
         if (principal.signum() <= 0 || capitalGainRate.signum() <= 0) {
             return BigDecimal.ZERO;

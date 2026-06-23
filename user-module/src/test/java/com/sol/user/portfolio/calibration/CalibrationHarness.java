@@ -111,9 +111,12 @@ class CalibrationHarness {
                                         }
                                     }
                                 } catch (Exception e) {
+                                    e.printStackTrace(); // 스택트레이스는 stderr에 보존, CSV엔 요약만
+                                    String msg = String.valueOf(e.getMessage())
+                                            .replaceAll("[,\n\r\"]", " ");
                                     csv.append(key).append("ERROR,,,,,,,,")
                                        .append(e.getClass().getSimpleName()).append(":")
-                                       .append(String.valueOf(e.getMessage()).replace(',', ';')).append(",\n");
+                                       .append(msg).append(",\n");
                                     errors++;
                                 }
                             }
