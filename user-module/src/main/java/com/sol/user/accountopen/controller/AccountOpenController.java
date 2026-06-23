@@ -23,7 +23,6 @@ public class AccountOpenController {
     @Operation(summary = "약관 동의 제출")
     @PostMapping("/terms")
     public ResponseEntity<ApiResponse<Void>> agreeTerms(
-            @RequestAttribute("userId") Long userId,
             @Valid @RequestBody TermsRequest request) {
         accountOpenService.validateTerms(request.getAgreedTermIds());
         return ResponseEntity.ok(ApiResponse.ok(null, "약관 동의가 완료되었습니다."));
