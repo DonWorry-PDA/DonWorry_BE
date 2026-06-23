@@ -47,4 +47,15 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );
+
+    /** 사용자의 총 월 금융 수입(이자+배당) 합계. 없으면 0. */
+    @Query("""
+            SELECT COALESCE(SUM(e.amount), 0)
+            FROM CashFlowEvent e
+            WHERE e.user.userId = :userId
+              AND e.flowType = 'INCOME'
+              AND e.eventType IN ('INTEREST', 'DIVIDEND')
+            """)
+    BigDecimal sumMonthlyFinancialIncomeByUserId(@Param("userId") Long userId);
+
 }
