@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "account")
@@ -36,6 +37,21 @@ public class Account {
 
     @Column(name = "existing_account")
     private Boolean existingAccount;
+
+    @Column(name = "opened_at")
+    private LocalDate openedAt;
+
+    public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
+        Account account = new Account();
+        account.user = user;
+        account.accountType = "DON_WORRY";
+        account.institutionName = "신한은행";
+        account.accountNumber = accountNumber;
+        account.depositBalance = BigDecimal.ZERO;
+        account.existingAccount = false;
+        account.openedAt = openedAt;
+        return account;
+    }
 
     public Account(User user, String accountType, String institutionName,
                    String accountNumber, BigDecimal depositBalance, Boolean existingAccount) {

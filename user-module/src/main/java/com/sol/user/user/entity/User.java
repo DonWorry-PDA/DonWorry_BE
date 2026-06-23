@@ -38,6 +38,12 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Column(name = "id_number", length = 50)
+    private String idNumber;
+
     @Column(name = "onboarding_completed", nullable = false)
     private Boolean onboardingCompleted = false;
 
