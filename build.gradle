@@ -98,7 +98,7 @@ project(':user-module') {
         implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
         // Solapi (SMS 발송)
-        implementation 'net.nurigo:sdk:4.3.0'
+        implementation 'net.nurigo:sdk:4.3.2'
 
         testRuntimeOnly 'com.h2database:h2'
     }
