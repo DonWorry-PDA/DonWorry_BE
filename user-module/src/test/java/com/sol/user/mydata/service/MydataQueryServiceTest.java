@@ -55,7 +55,7 @@ class MydataQueryServiceTest {
     void getAccountsReturnsOnlyRequestedUsersAccounts() {
         Account account = mock(Account.class);
         when(account.getAccountId()).thenReturn(10L);
-        when(account.getAccountType()).thenReturn("CHECKING_CMA");
+        when(account.getAccountType()).thenReturn("CMA");
         when(account.getInstitutionName()).thenReturn("신한은행");
         when(account.getAccountNumber()).thenReturn("110-123-456789");
         when(account.getDepositBalance()).thenReturn(BigDecimal.valueOf(1_000_000));

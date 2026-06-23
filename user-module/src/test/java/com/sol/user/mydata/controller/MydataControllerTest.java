@@ -48,7 +48,7 @@ class MydataControllerTest {
         when(mydataQueryService.getAccounts(1L)).thenReturn(List.of(
                 new MydataAccountResponse(
                         10L,
-                        "CHECKING_CMA",
+                        "CMA",
                         "신한은행",
                         "110-123-456789",
                         BigDecimal.valueOf(1_000_000),
@@ -61,7 +61,7 @@ class MydataControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data[0].accountId").value(10))
-                .andExpect(jsonPath("$.data[0].accountType").value("CHECKING_CMA"));
+                .andExpect(jsonPath("$.data[0].accountType").value("CMA"));
 
         verify(mydataQueryService).getAccounts(1L);
     }
