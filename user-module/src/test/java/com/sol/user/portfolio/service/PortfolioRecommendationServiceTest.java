@@ -16,6 +16,8 @@ import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.portfolio.type.PlanStatus;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.RecommendationTrack;
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -46,7 +51,7 @@ class PortfolioRecommendationServiceTest {
     @Test
     void STEP1부터6까지_조립되어_위험중립형_2안_추천이_나온다() {
         given(etfPoolProvider.getPool()).willReturn(pool());
-        given(inputAssembler.assemble(1L)).willReturn(neutralInput());
+        given(inputAssembler.assemble(eq(1L), any(SurveyAnswerResponse.class))).willReturn(neutralInput());
         given(surveyService.get(1L)).willReturn(
                 SurveyAnswerResponse.builder().q1(2).q2(1).q3(1).build());
 
@@ -80,6 +85,15 @@ class PortfolioRecommendationServiceTest {
         assertThat(response.getQ3Scenarios()).hasSize(3);
         assertThat(response.getQ3ReferenceLabel()).isEqualTo("안정안 기준 예시");
         assertThat(response.getBand()).isNotNull();
+    }
+
+    @Test
+    void 설문_미응답이면_추천이_실패한다() {
+        // 설문 선행 필수 계약 — get()이 SURVEY_NOT_FOUND를 던지면 추천도 실패해야 한다
+        given(surveyService.get(1L)).willThrow(new BaseException(ErrorCode.SURVEY_NOT_FOUND));
+
+        assertThatThrownBy(() -> service.recommend(1L))
+                .isInstanceOf(BaseException.class);
     }
 
     private OperationGradeInput neutralInput() {

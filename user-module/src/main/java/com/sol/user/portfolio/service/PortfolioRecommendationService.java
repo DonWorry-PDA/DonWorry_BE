@@ -13,6 +13,7 @@ import com.sol.user.portfolio.dto.OperationGradeResult;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,8 +37,10 @@ public class PortfolioRecommendationService {
     private final SurveyService surveyService;
 
     public RecommendationResponse recommend(Long userId) {
-        OperationGradeInput input = inputAssembler.assemble(userId);
-        int q3 = surveyService.get(userId).getQ3();
+        // 설문 1회 조회 — q1/q2(STEP1~4 운용등급)는 assembler가, q3(STEP6 소진모델)는 여기서 재사용
+        SurveyAnswerResponse survey = surveyService.get(userId);
+        OperationGradeInput input = inputAssembler.assemble(userId, survey);
+        int q3 = survey.getQ3();
 
         // STEP1~4 재사용
         OperationGradeResult grade = operationGradeCalculator.calculate(input);

@@ -53,6 +53,13 @@ public class OperationGradeInputAssembler {
 
     @Transactional(readOnly = true)
     public OperationGradeInput assemble(Long userId) {
+        // 투자 스타일 설문(월급만들기) — 미응답이면 SURVEY_NOT_FOUND로 명확히 실패
+        return assemble(userId, surveyService.get(userId));
+    }
+
+    /** 설문을 이미 조회한 추천 파이프라인이 중복 조회 없이 재사용하도록 받는 오버로드. */
+    @Transactional(readOnly = true)
+    public OperationGradeInput assemble(Long userId, SurveyAnswerResponse survey) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
         if (user.getAge() == null) {
@@ -84,9 +91,6 @@ public class OperationGradeInputAssembler {
         BigDecimal monthlyLoanRepayment = debtRepository.findByUserUserId(userId).stream()
                 .map(debt -> nullToZero(debt.getMonthlyRepayment()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 투자 스타일 설문(월급만들기) — 미응답이면 SURVEY_NOT_FOUND로 명확히 실패
-        SurveyAnswerResponse survey = surveyService.get(userId);
 
         return OperationGradeInput.builder()
                 .age(user.getAge())
