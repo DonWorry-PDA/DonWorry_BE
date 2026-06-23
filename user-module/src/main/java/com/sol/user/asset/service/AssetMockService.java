@@ -412,6 +412,9 @@ public class AssetMockService {
     }
 
     private static HoldingSeed holding(String ticker, long amount, long quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Holding 수량은 0보다 커야 합니다.");
+        }
         return new HoldingSeed(ticker, money(amount), BigDecimal.valueOf(quantity));
     }
 
