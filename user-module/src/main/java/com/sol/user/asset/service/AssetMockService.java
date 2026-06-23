@@ -313,10 +313,10 @@ public class AssetMockService {
         return switch (mockType) {
             case NEED_IMPROVEMENT -> new Scenario(
                     List.of(
-                            asset("CHECKING_CMA", "신한은행", 6_000_000),
-                            asset("DEPOSIT_SAVING", "신한은행", 12_000_000),
-                            asset("STOCK_ETF_FUND", "신한투자증권", 80_000_000),
-                            asset("RETIREMENT_PENSION", "신한투자증권", 25_000_000)
+                            asset("CMA", "신한은행", 6_000_000),
+                            asset("DEPOSIT", "신한은행", 12_000_000),
+                            asset("BROKERAGE", "신한투자증권", 80_000_000),
+                            asset("IRP", "신한투자증권", 25_000_000)
                     ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
@@ -324,11 +324,11 @@ public class AssetMockService {
             );
             case NEED_COMPLEMENT -> new Scenario(
                     List.of(
-                            asset("CHECKING_CMA", "신한은행", 18_000_000),
-                            asset("DEPOSIT_SAVING", "신한은행", 45_000_000),
-                            asset("STOCK_ETF_FUND", "신한투자증권", 55_000_000),
-                            asset("RETIREMENT_PENSION", "신한투자증권", 65_000_000),
-                            asset("PERSONAL_PENSION", "신한투자증권", 25_000_000)
+                            asset("CMA", "신한은행", 18_000_000),
+                            asset("DEPOSIT", "신한은행", 45_000_000),
+                            asset("BROKERAGE", "신한투자증권", 55_000_000),
+                            asset("IRP", "신한투자증권", 65_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 25_000_000)
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
@@ -336,13 +336,11 @@ public class AssetMockService {
             );
             case STABLE -> new Scenario(
                     List.of(
-                            asset("CHECKING_CMA", "신한은행", 35_000_000),
-                            asset("DEPOSIT_SAVING", "신한은행", 90_000_000),
-                            asset("BOND", "신한투자증권", 45_000_000),
-                            asset("MONTHLY_DIVIDEND_ETF", "신한투자증권", 55_000_000),
-                            asset("FUND", "신한투자증권", 30_000_000),
-                            asset("RETIREMENT_PENSION", "신한투자증권", 120_000_000),
-                            asset("PERSONAL_PENSION", "신한투자증권", 60_000_000)
+                            asset("CMA", "신한은행", 35_000_000),
+                            asset("DEPOSIT", "신한은행", 90_000_000),
+                            asset("BROKERAGE", "신한투자증권", 130_000_000),
+                            asset("IRP", "신한투자증권", 120_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 60_000_000)
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     money(6_000_000), money(2_000_000), money(464_000),

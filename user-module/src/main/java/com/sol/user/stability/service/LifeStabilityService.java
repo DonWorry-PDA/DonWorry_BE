@@ -105,7 +105,7 @@ public class LifeStabilityService {
             essentialExpense = goal.getMonthlyTargetLivingCost();
         }
         BigDecimal liquidAsset = accounts.stream()
-                .filter(account -> "CHECKING_CMA".equals(account.getAccountType()))
+                .filter(account -> "CMA".equals(account.getAccountType()))
                 .map(account -> account.getDepositBalance() == null ? BigDecimal.ZERO : account.getDepositBalance())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal medicalReserve = policies.stream()
