@@ -30,7 +30,8 @@ public class PlanResponse {
     private List<AllocationView> allocations;   // 화면 배분 항목 (안전·위험·단기 병합, 비중 %)
 
     // 수령 (STEP6)
-    private BigDecimal monthlyIncome;
-    private BigDecimal alphaCoverageRate;   // α≤0이면 null
+    private BigDecimal monthlyIncome;              // 총인출 기준 (원금소진+자본차익 포함)
+    private BigDecimal alphaCoverageRate;          // α충족률 = 총인출 기준 (α≤0이면 null, 100캡)
+    private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
     private BigDecimal inheritanceAmount;
 }

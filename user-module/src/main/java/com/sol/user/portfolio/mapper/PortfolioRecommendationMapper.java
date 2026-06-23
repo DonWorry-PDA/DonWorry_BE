@@ -112,6 +112,7 @@ public class PortfolioRecommendationMapper {
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(coverage.getMonthlyIncome())
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
+                .sustainableCoverageRate(coverage.getSustainableCoverageRate())
                 .inheritanceAmount(coverage.getInheritanceAmount())
                 .build();
     }
