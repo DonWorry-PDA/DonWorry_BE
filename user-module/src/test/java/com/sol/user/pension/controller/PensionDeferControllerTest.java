@@ -69,7 +69,8 @@ class PensionDeferControllerTest {
                 .requestAttr("userId", 1L)
                 .param("deferRate", "30")
                 .param("deferYears", "5"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("COMMON_001"));
     }
 
     @Test
@@ -82,6 +83,21 @@ class PensionDeferControllerTest {
                 .requestAttr("userId", 1L)
                 .param("deferRate", "70")
                 .param("deferYears", "5"))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("PENSION_001"));
+    }
+
+    @Test
+    @DisplayName("목표 생활비 미설정 → USER_GOAL_NOT_FOUND → 404")
+    void compare_noUserGoal_returns404() throws Exception {
+        when(pensionDeferService.compare(1L, 70, 5))
+            .thenThrow(new BaseException(ErrorCode.USER_GOAL_NOT_FOUND));
+
+        mockMvc.perform(get("/api/user/asset/pension-defer")
+                .requestAttr("userId", 1L)
+                .param("deferRate", "70")
+                .param("deferYears", "5"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("USER_GOAL_001"));
     }
 }
