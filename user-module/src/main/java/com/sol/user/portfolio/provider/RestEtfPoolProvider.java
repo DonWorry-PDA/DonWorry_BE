@@ -70,6 +70,7 @@ public class RestEtfPoolProvider implements EtfPoolProvider {
                 ? item.riskGrade()
                 : PortfolioConstants.RISK_GRADE.getOrDefault(item.ticker(), 0);
         return new EtfInfo(
+                item.productId(),
                 item.ticker(),
                 item.productName(),
                 riskGrade,

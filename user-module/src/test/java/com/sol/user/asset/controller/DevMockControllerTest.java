@@ -52,7 +52,7 @@ class DevMockControllerTest {
                         BigDecimal.valueOf(178_000_000),
                         List.of()
                 ),
-                new MockGeneratedCounts(6, 5, 3, 1, 3, 7)
+                new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7)
         );
         when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT)).thenReturn(response);
 

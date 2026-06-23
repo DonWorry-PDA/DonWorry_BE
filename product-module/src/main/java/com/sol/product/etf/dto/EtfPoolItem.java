@@ -9,6 +9,7 @@ import java.math.BigDecimal;
  * 계산에 필요한 최소 필드만 노출 — 배당이력(DividendHistory) 조인 없이 etf_detail 단독 매핑.
  */
 public record EtfPoolItem(
+        Long productId,
         String ticker,
         String productName,
         Integer riskGrade,
@@ -18,6 +19,7 @@ public record EtfPoolItem(
 
     public static EtfPoolItem from(EtfDetail etfDetail) {
         return new EtfPoolItem(
+                etfDetail.getProduct().getProductId(),
                 etfDetail.getTickerCode(),
                 etfDetail.getProduct().getProductName(),
                 etfDetail.getRiskGrade(),

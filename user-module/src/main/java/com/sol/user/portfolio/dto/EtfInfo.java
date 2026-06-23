@@ -11,6 +11,7 @@ import java.math.BigDecimal;
  * role·currency는 provider가 PortfolioConstants 매핑으로 합성해 채운다.
  */
 public record EtfInfo(
+        Long productId,
         String ticker,
         String productName,
         int riskGrade,

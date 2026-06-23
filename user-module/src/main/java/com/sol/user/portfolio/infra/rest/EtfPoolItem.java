@@ -7,6 +7,7 @@ import java.math.BigDecimal;
  * (product 측 DTO를 공유하지 않고 동일 필드를 복제 — 모듈 간 결합 회피)
  */
 public record EtfPoolItem(
+        Long productId,
         String ticker,
         String productName,
         Integer riskGrade,

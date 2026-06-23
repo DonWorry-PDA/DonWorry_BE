@@ -15,10 +15,14 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.entity.Holding;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.portfolio.dto.EtfInfo;
+import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,9 +37,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,11 +49,13 @@ public class AssetMockService {
 
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final HoldingRepository holdingRepository;
     private final PensionRepository pensionRepository;
     private final CashFlowEventRepository cashFlowEventRepository;
     private final AssetConnectionRepository assetConnectionRepository;
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
+    private final EtfPoolProvider etfPoolProvider;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -86,10 +94,12 @@ public class AssetMockService {
     }
 
     private void deleteAllMockData(Long userId) {
-        accountRepository.deleteAll(accountRepository.findByUserUserId(userId).stream()
+        List<Account> mockAccounts = accountRepository.findByUserUserId(userId).stream()
                 .filter(account -> account.getAccountNumber() != null
                         && account.getAccountNumber().startsWith("MOCK-"))
-                .toList());
+                .toList();
+        holdingRepository.deleteAll(holdingRepository.findByAccountIn(mockAccounts));
+        accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
         insurancePolicyRepository.deleteAll(insurancePolicyRepository.findByUserUserId(userId));
@@ -111,6 +121,7 @@ public class AssetMockService {
         LocalDateTime generatedAt = LocalDateTime.now();
 
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
+        List<Holding> holdings = saveHoldings(accounts, scenario.holdings());
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
@@ -124,6 +135,7 @@ public class AssetMockService {
                 new MockGeneratedCounts(
                         connections.size(),
                         accounts.size(),
+                        holdings.size(),
                         pensions.size(),
                         debts.size(),
                         policies.size(),
@@ -147,6 +159,34 @@ public class AssetMockService {
                 (target, seed) -> target.updateMock(seed.getInstitutionName(),
                         seed.getAccountNumber(), seed.getDepositBalance()),
                 accountRepository::deleteAll, accountRepository::saveAll);
+    }
+
+    private List<Holding> saveHoldings(List<Account> accounts, List<HoldingSeed> seeds) {
+        Account brokerage = accounts.stream()
+                .filter(a -> "BROKERAGE".equals(a.getAccountType()))
+                .findFirst().orElse(null);
+        if (brokerage == null || seeds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Long> tickerToProductId;
+        try {
+            tickerToProductId = etfPoolProvider.getPool().stream()
+                    .filter(info -> info.productId() != null)
+                    .collect(Collectors.toMap(EtfInfo::ticker, EtfInfo::productId, (a, b) -> a));
+        } catch (Exception e) {
+            return List.of();
+        }
+
+        boolean allMapped = seeds.stream().allMatch(s -> tickerToProductId.containsKey(s.ticker()));
+        if (!allMapped) {
+            throw new IllegalStateException("ETF 풀에 없는 티커가 HoldingSeed에 포함되어 있습니다.");
+        }
+
+        List<Holding> desired = seeds.stream()
+                .map(seed -> new Holding(brokerage, tickerToProductId.get(seed.ticker()), seed.evaluationAmount()))
+                .toList();
+        holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
+        return holdingRepository.saveAll(desired);
     }
 
     private List<Pension> savePensions(User user, Scenario scenario) {
@@ -318,6 +358,10 @@ public class AssetMockService {
                             asset("BROKERAGE", "신한투자증권", 80_000_000),
                             asset("IRP", "신한투자증권", 25_000_000)
                     ),
+                    List.of(
+                            holding("433330", 40_000_000),  // SOL 미국S&P500
+                            holding("476030", 40_000_000)   // SOL 미국나스닥100
+                    ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
                     money(250_000), money(180_000), money(1_250_000)
@@ -329,6 +373,10 @@ public class AssetMockService {
                             asset("BROKERAGE", "신한투자증권", 55_000_000),
                             asset("IRP", "신한투자증권", 65_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 25_000_000)
+                    ),
+                    List.of(
+                            holding("433330", 30_000_000),  // SOL 미국S&P500
+                            holding("292500", 25_000_000)   // SOL KRX300
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
@@ -342,6 +390,11 @@ public class AssetMockService {
                             asset("IRP", "신한투자증권", 120_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 60_000_000)
                     ),
+                    List.of(
+                            holding("446720", 55_000_000),  // SOL 미국배당다우존스
+                            holding("438560", 45_000_000),  // SOL 국고채3년
+                            holding("433330", 30_000_000)   // SOL 미국S&P500
+                    ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     money(6_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), money(1_750_000)
@@ -353,6 +406,10 @@ public class AssetMockService {
         return new AssetSeed(category, institutionName, money(amount));
     }
 
+    private static HoldingSeed holding(String ticker, long amount) {
+        return new HoldingSeed(ticker, money(amount));
+    }
+
     private static BigDecimal money(long amount) {
         return BigDecimal.valueOf(amount);
     }
@@ -360,8 +417,12 @@ public class AssetMockService {
     private record AssetSeed(String category, String institutionName, BigDecimal amount) {
     }
 
+    private record HoldingSeed(String ticker, BigDecimal evaluationAmount) {
+    }
+
     private record Scenario(
             List<AssetSeed> assets,
+            List<HoldingSeed> holdings,
             BigDecimal debtBalance,
             BigDecimal monthlyLoanRepayment,
             BigDecimal loanInterestRate,
