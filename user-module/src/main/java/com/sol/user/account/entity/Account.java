@@ -9,10 +9,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "account")
+@Table(name = "account", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_account_number", columnNames = "account_number")
+})
 @Getter
 @NoArgsConstructor
 public class Account {
+
+    public static final String TYPE_DON_WORRY = "DON_WORRY";
+    public static final String INSTITUTION_SHINHAN = "신한은행";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,8 +49,8 @@ public class Account {
     public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
         Account account = new Account();
         account.user = user;
-        account.accountType = "DON_WORRY";
-        account.institutionName = "신한은행";
+        account.accountType = TYPE_DON_WORRY;
+        account.institutionName = INSTITUTION_SHINHAN;
         account.accountNumber = accountNumber;
         account.depositBalance = BigDecimal.ZERO;
         account.existingAccount = false;

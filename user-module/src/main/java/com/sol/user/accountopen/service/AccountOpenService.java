@@ -10,6 +10,7 @@ import com.sol.user.accountopen.dto.IdentityResponse;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +27,6 @@ public class AccountOpenService {
     private static final List<String> REQUIRED_TERM_IDS = List.of(
             "account", "deposit", "account-privacy", "account-third-party"
     );
-    private static final String ACCOUNT_TYPE = "DON_WORRY";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd");
 
     private static final SecureRandom secureRandom = new SecureRandom();
@@ -61,7 +61,7 @@ public class AccountOpenService {
             throw new BaseException(ErrorCode.OTP_NOT_VERIFIED);
         }
 
-        if (accountRepository.existsByUserUserIdAndAccountType(userId, ACCOUNT_TYPE)) {
+        if (accountRepository.existsByUserUserIdAndAccountType(userId, Account.TYPE_DON_WORRY)) {
             throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
         }
 
@@ -70,7 +70,11 @@ public class AccountOpenService {
         String accountNumber = generateAccountNumber();
 
         Account account = Account.createDonWorry(user, accountNumber, today);
-        accountRepository.save(account);
+        try {
+            accountRepository.save(account);
+        } catch (DataIntegrityViolationException e) {
+            throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
+        }
 
         otpService.clearVerified(userId);
 
@@ -93,8 +97,14 @@ public class AccountOpenService {
     }
 
     private String generateAccountNumber() {
-        int middle = 100 + secureRandom.nextInt(900);
-        int last = 100000 + secureRandom.nextInt(900000);
-        return String.format("110-%03d-%06d", middle, last);
+        for (int i = 0; i < 5; i++) {
+            int middle = 100 + secureRandom.nextInt(900);
+            int last = 100000 + secureRandom.nextInt(900000);
+            String candidate = String.format("110-%03d-%06d", middle, last);
+            if (!accountRepository.existsByAccountNumber(candidate)) {
+                return candidate;
+            }
+        }
+        throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 }
