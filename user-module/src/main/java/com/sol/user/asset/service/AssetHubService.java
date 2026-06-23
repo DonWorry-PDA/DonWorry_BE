@@ -1,6 +1,7 @@
 package com.sol.user.asset.service;
 
 import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
@@ -139,14 +140,17 @@ public class AssetHubService {
                     .coverageRate(coverageRate)
                     .build();
         } catch (BaseException e) {
-            // 아직 생활 안정도를 산출하지 않은 사용자 → 빈 미리보기
-            return AssetHubMenus.LifeStability.builder().build();
+            if (e.getErrorCode() == ErrorCode.RESOURCE_NOT_FOUND) {
+                // 아직 생활 안정도를 산출하지 않은 사용자 → 빈 미리보기
+                return AssetHubMenus.LifeStability.builder().build();
+            }
+            throw e;
         }
     }
 
-    /** numerator/denominator 를 정수 % 로. denominator 가 0/null 이면 null. */
+    /** numerator/denominator 를 정수 % 로. 둘 중 하나라도 null 이거나 denominator 가 0 이면 null. */
     private Integer ratePercent(BigDecimal numerator, BigDecimal denominator) {
-        if (denominator == null || denominator.signum() == 0) {
+        if (numerator == null || denominator == null || denominator.signum() == 0) {
             return null;
         }
         return numerator.multiply(BigDecimal.valueOf(100))

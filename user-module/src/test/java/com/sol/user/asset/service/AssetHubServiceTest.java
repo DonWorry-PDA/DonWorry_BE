@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -61,6 +62,8 @@ class AssetHubServiceTest {
                 .containsExactly(60, 20, 12, 8);
         assertThat(response.allocation().stream().mapToInt(AssetAllocationItem::ratio).sum())
                 .isEqualTo(100);
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1300000");
+        assertThat(response.monthlyExpense()).isEqualByComparingTo("2180000");
     }
 
     @Test
@@ -107,6 +110,8 @@ class AssetHubServiceTest {
         assertThat(response.allocation()).isEmpty();
         assertThat(response.menus().salaryMaking().achievementRate()).isNull();
         assertThat(response.changeDirection()).isEqualTo("FLAT");
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1300000");
+        assertThat(response.monthlyExpense()).isEqualByComparingTo("2180000");
     }
 
     @Test
@@ -121,6 +126,20 @@ class AssetHubServiceTest {
 
         assertThat(response.menus().lifeStability().grade()).isNull();
         assertThat(response.menus().lifeStability().coverageRate()).isNull();
+    }
+
+    @Test
+    void 생활안정도_RESOURCE_NOT_FOUND_외_예외는_삼키지_않고_전파() {
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        when(lifeStabilityService.getLatest(USER_ID))
+                .thenThrow(new BaseException(ErrorCode.USER_NOT_FOUND));
+
+        assertThatThrownBy(() -> assetHubService.getHub(USER_ID))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USER_NOT_FOUND);
     }
 
     @Test
