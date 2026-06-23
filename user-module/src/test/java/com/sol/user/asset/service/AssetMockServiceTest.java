@@ -68,7 +68,7 @@ class AssetMockServiceTest {
         when(user.getUserId()).thenReturn(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         Account checking = new Account(
-                user, "CHECKING_CMA", "신한은행", "MOCK-1-1",
+                user, "CMA", "신한은행", "MOCK-1-1",
                 BigDecimal.valueOf(6_000_000), true
         );
         when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(checking));
