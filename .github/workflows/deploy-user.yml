@@ -74,6 +74,11 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           PRODUCT_BASE_URL: ${{ secrets.PRODUCT_BASE_URL }}
+          SOLAPI_API_KEY: ${{ secrets.SOLAPI_API_KEY }}
+          SOLAPI_API_SECRET: ${{ secrets.SOLAPI_API_SECRET }}
+          SOLAPI_FROM_NUMBER: ${{ secrets.SOLAPI_FROM_NUMBER }}
+          ENCRYPTION_SECRET: ${{ secrets.ENCRYPTION_SECRET }}
+          ENCRYPTION_SALT: ${{ secrets.ENCRYPTION_SALT }}
         run: |
           {
             printf "ECR_URI='%s'\n" "$ECR_REGISTRY"
@@ -83,6 +88,11 @@ jobs:
             printf "DB_PASSWORD='%s'\n" "$DB_PASSWORD"
             printf "JWT_SECRET='%s'\n" "$JWT_SECRET"
             printf "PRODUCT_BASE_URL='%s'\n" "$PRODUCT_BASE_URL"
+            printf "SOLAPI_API_KEY='%s'\n" "$SOLAPI_API_KEY"
+            printf "SOLAPI_API_SECRET='%s'\n" "$SOLAPI_API_SECRET"
+            printf "SOLAPI_FROM_NUMBER='%s'\n" "$SOLAPI_FROM_NUMBER"
+            printf "ENCRYPTION_SECRET='%s'\n" "$ENCRYPTION_SECRET"
+            printf "ENCRYPTION_SALT='%s'\n" "$ENCRYPTION_SALT"
           } > user-module/scripts/deploy.env
 
       - name: Upload deployment bundle to S3
