@@ -3,6 +3,7 @@ package com.sol.user.monthlysalary.service;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.AssetGroupDto;
 import com.sol.user.monthlysalary.dto.AssetItemDto;
@@ -11,6 +12,8 @@ import com.sol.user.monthlysalary.dto.SalaryAssetListResponse;
 import com.sol.user.monthlysalary.entity.SalaryAssetExclusion;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -41,6 +45,7 @@ public class SalaryAssetService {
     private final SalaryAssetExclusionRepository exclusionRepository;
     private final UserRepository userRepository;
     private final SalaryAssetMapper salaryAssetMapper;
+    private final ProductBatchClient productBatchClient;
 
     @Transactional(readOnly = true)
     public SalaryAssetListResponse getAssets(Long userId) {
@@ -116,11 +121,16 @@ public class SalaryAssetService {
     }
 
     private AssetGroupDto buildInvestmentGroup(Long userId, Set<String> excludedKeys) {
-        List<AssetItemDto> items =
-                holdingRepository.findByUserIdAndAccountTypes(userId, INVESTMENT_TYPES)
-                        .stream()
-                        .map(holding -> salaryAssetMapper.toHoldingItem(holding, excludedKeys))
-                        .toList();
+        List<HoldingWithProduct> holdings = holdingRepository.findByUserIdAndAccountTypes(userId, INVESTMENT_TYPES);
+
+        Map<Long, ProductBatchItem> productMap = productBatchClient.fetchProducts(
+                holdings.stream().map(HoldingWithProduct::getProductId).toList()
+        );
+
+        List<AssetItemDto> items = holdings.stream()
+                .map(holding -> salaryAssetMapper.toHoldingItem(
+                        holding, productMap.get(holding.getProductId()), excludedKeys))
+                .toList();
 
         return AssetGroupDto.builder()
                 .category(CATEGORY_INVESTMENT)
