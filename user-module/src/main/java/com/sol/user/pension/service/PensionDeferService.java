@@ -2,7 +2,7 @@ package com.sol.user.pension.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
-import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.pension.calculator.PensionDeferCalculator;
 import com.sol.user.pension.dto.PensionDeferComparisonRow;
 import com.sol.user.pension.dto.PensionDeferDetail;
@@ -26,7 +26,7 @@ public class PensionDeferService {
     private static final Set<Integer> VALID_DEFER_RATES = Set.copyOf(PensionDeferCalculator.DEFER_RATE_OPTIONS);
 
     private final PensionRepository pensionRepository;
-    private final HoldingRepository holdingRepository;
+    private final CashFlowEventRepository cashFlowEventRepository;
     private final UserGoalRepository userGoalRepository;
     private final PensionDeferCalculator calculator;
 
@@ -42,7 +42,7 @@ public class PensionDeferService {
         BigDecimal base = pensionRepository.findMonthlyAmount(userId, "NATIONAL")
             .orElseThrow(() -> new BaseException(ErrorCode.PENSION_NOT_FOUND));
 
-        BigDecimal dividendIncome = holdingRepository.sumMonthlyDividendByUserId(userId);
+        BigDecimal dividendIncome = cashFlowEventRepository.sumMonthlyFinancialIncomeByUserId(userId);
 
         BigDecimal targetLivingCost = userGoalRepository.findByUserUserId(userId)
             .map(UserGoal::getMonthlyTargetLivingCost)

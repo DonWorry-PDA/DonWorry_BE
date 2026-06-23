@@ -2,7 +2,7 @@ package com.sol.user.pension.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
-import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.pension.calculator.PensionDeferCalculator;
 import com.sol.user.pension.dto.PensionDeferComparisonRow;
 import com.sol.user.pension.dto.PensionDeferResponse;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 class PensionDeferServiceTest {
 
     @Mock private PensionRepository pensionRepository;
-    @Mock private HoldingRepository holdingRepository;
+    @Mock private CashFlowEventRepository cashFlowEventRepository;
     @Mock private UserGoalRepository userGoalRepository;
     @Mock private PensionDeferCalculator calculator;
     @Mock private UserGoal mockUserGoal;
@@ -35,7 +35,7 @@ class PensionDeferServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PensionDeferService(pensionRepository, holdingRepository,
+        service = new PensionDeferService(pensionRepository, cashFlowEventRepository,
             userGoalRepository, calculator);
     }
 
@@ -82,7 +82,7 @@ class PensionDeferServiceTest {
     void compare_noUserGoal_throwsUserGoalNotFound() {
         when(pensionRepository.findMonthlyAmount(1L, "NATIONAL"))
             .thenReturn(Optional.of(BigDecimal.valueOf(1_200_000)));
-        when(holdingRepository.sumMonthlyDividendByUserId(1L))
+        when(cashFlowEventRepository.sumMonthlyFinancialIncomeByUserId(1L))
             .thenReturn(BigDecimal.valueOf(100_000));
         when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.empty());
 
@@ -100,7 +100,7 @@ class PensionDeferServiceTest {
         BigDecimal target = BigDecimal.valueOf(2_200_000);
 
         when(pensionRepository.findMonthlyAmount(1L, "NATIONAL")).thenReturn(Optional.of(base));
-        when(holdingRepository.sumMonthlyDividendByUserId(1L)).thenReturn(dividend);
+        when(cashFlowEventRepository.sumMonthlyFinancialIncomeByUserId(1L)).thenReturn(dividend);
         when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.of(mockUserGoal));
         when(mockUserGoal.getMonthlyTargetLivingCost()).thenReturn(target);
 
