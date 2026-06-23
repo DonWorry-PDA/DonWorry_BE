@@ -9,6 +9,7 @@ import com.sol.user.portfolio.dto.PlanCoverage;
 import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.type.AllocationRole;
+import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.PlanStatus;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.RecommendationTrack;
@@ -30,8 +31,6 @@ import java.util.stream.Collectors;
 public class PortfolioRecommendationMapper {
 
     private static final String Q3_REFERENCE_LABEL = "안정안 기준 예시";
-    private static final String SAFE_BUCKET_LABEL = "채권·안전자산";
-    private static final String SHORT_TERM_BUCKET_LABEL = "단기 유동성";
     private static final int RATIO_SCALE = 2;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
@@ -118,8 +117,8 @@ public class PortfolioRecommendationMapper {
     }
 
     /**
-     * 화면 배분 항목 병합. holdings(위험버킷 ETF)는 안전버킷을 포함하지 않으므로
-     * safeTarget(바닥자산 포함)·shortTermBucket 집계를 함께 한 리스트로 묶는다.
+     * 화면 배분 항목. holdings는 이제 위험·안전·단기버킷 개별 종목을 모두 포함하므로(STEP5 분해),
+     * 각 holding의 버킷 role을 그대로 표시 role로 매핑한다(집계 항목 없음 → 이중계상 불가).
      * 비중 분모 = riskTarget+safeTarget+shortTermBucket (= 운용자산, 연금저축 제외).
      */
     private List<AllocationView> buildAllocations(PlanAllocation plan) {
@@ -128,12 +127,18 @@ public class PortfolioRecommendationMapper {
                 .add(plan.getShortTermBucket());
 
         List<AllocationView> views = new ArrayList<>();
-        addView(views, SAFE_BUCKET_LABEL, AllocationRole.SAFE, plan.getSafeTarget(), total);
         for (Holding holding : plan.getHoldings()) {
-            addView(views, holding.productName(), AllocationRole.RISK, holding.amount(), total);
+            addView(views, holding.productName(), toAllocationRole(holding.role()), holding.amount(), total);
         }
-        addView(views, SHORT_TERM_BUCKET_LABEL, AllocationRole.SHORT_TERM, plan.getShortTermBucket(), total);
         return views;
+    }
+
+    private AllocationRole toAllocationRole(BucketRole role) {
+        return switch (role) {
+            case RISK -> AllocationRole.RISK;
+            case SAFE -> AllocationRole.SAFE;
+            case SHORT_TERM -> AllocationRole.SHORT_TERM;
+        };
     }
 
     private void addView(List<AllocationView> views, String label, AllocationRole role,

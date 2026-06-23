@@ -33,21 +33,22 @@ class PortfolioAllocationCalculatorTest {
         assertThat(result.getPlans()).extracting(PlanAllocation::getType)
                 .containsExactly(PlanType.STABLE, PlanType.BALANCED, PlanType.LIQUIDITY);
 
-        // 안정안: 환헤지 코어((H), 452360) 100%
+        // 안정안: 환헤지 코어((H), 452360) 100% (위험 holding 1종)
         PlanAllocation stable = plan(result, PlanType.STABLE);
-        assertThat(stable.getHoldings()).hasSize(1);
-        Holding stableCore = stable.getHoldings().get(0);
+        List<Holding> stableRisk = riskHoldings(stable);
+        assertThat(stableRisk).hasSize(1);
+        Holding stableCore = stableRisk.get(0);
         assertThat(stableCore.ticker()).isEqualTo("452360");
         assertThat(stableCore.currency()).isEqualTo(CurrencyExposure.HEDGED);
         assertThat(stableCore.weight()).isEqualByComparingTo("1");
         // riskTarget = 여유분 5.5억 × 위험비중[4][STABLE]=0.45
         assertThat(stable.getRiskTarget()).isEqualByComparingTo("247500000.00");
 
-        // 균형안: 446720(0.35) + 452360(0.35) + 476030(0.30)
+        // 균형안: 446720(0.35) + 452360(0.35) + 476030(0.30) (위험 holding 3종)
         PlanAllocation balanced = plan(result, PlanType.BALANCED);
-        assertThat(balanced.getHoldings()).extracting(Holding::ticker)
+        assertThat(riskHoldings(balanced)).extracting(Holding::ticker)
                 .containsExactly("446720", "452360", "476030");
-        // 가중평균 배당률 = 0.35×3.50 + 0.35×3.40 + 0.30×1.20 = 2.7750
+        // 가중평균 배당률 = 0.35×3.50 + 0.35×3.40 + 0.30×1.20 = 2.7750 (위험 holding만 반영)
         assertThat(balanced.getPlanDividendRate()).isEqualByComparingTo("2.7750");
     }
 
@@ -61,7 +62,7 @@ class PortfolioAllocationCalculatorTest {
                 .containsExactly(PlanType.STABLE, PlanType.LIQUIDITY);
 
         PlanAllocation stable = plan(result, PlanType.STABLE);
-        Holding core = stable.getHoldings().get(0);
+        Holding core = riskHoldings(stable).get(0);
         assertThat(core.ticker()).isEqualTo("446720");                 // (H) 권유불가 → 환노출 강등
         assertThat(core.currency()).isEqualTo(CurrencyExposure.UNHEDGED);
         assertThat(stable.getPlanDividendRate()).isEqualByComparingTo("3.5000");
@@ -89,8 +90,50 @@ class PortfolioAllocationCalculatorTest {
 
         PlanAllocation liquidity = plan(result, PlanType.LIQUIDITY);
         assertThat(liquidity.getShortTermBucket()).isEqualByComparingTo("55000000.00"); // 5.5억 × 0.10
-        // 안정·균형안은 단기버킷 0
-        assertThat(plan(result, PlanType.STABLE).getShortTermBucket()).isEqualByComparingTo("0");
+        // 단기버킷은 CD금리MMF(497880) 1종으로 개별화, 금액 = shortTermBucket
+        List<Holding> shortTerm = liquidity.getHoldings().stream()
+                .filter(h -> h.role() == BucketRole.SHORT_TERM).toList();
+        assertThat(shortTerm).hasSize(1);
+        assertThat(shortTerm.get(0).ticker()).isEqualTo("497880");
+        assertThat(shortTerm.get(0).amount()).isEqualByComparingTo("55000000.00");
+        // 안정·균형안은 단기버킷 0 + SHORT_TERM holding 없음
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+        assertThat(stable.getShortTermBucket()).isEqualByComparingTo("0");
+        assertThat(stable.getHoldings()).noneMatch(h -> h.role() == BucketRole.SHORT_TERM);
+    }
+
+    // ── 안전버킷: 바닥/여유안전 2층이 개별 종목으로 분해되고 합이 safeTarget과 같다 ──────
+
+    @Test
+    void 안전버킷이_개별종목으로_분해되고_금액합이_safeTarget과_같으며_비중합이_1이다() {
+        AllocationResult result = calculator.calculate(activeInput(4));
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+
+        List<Holding> safe = safeHoldings(stable);
+        // 바닥(GOV,CASH_EQ) + 여유안전(CREDIT,GOV,CASH_EQ) → ticker 머지 → 국고채·CD금리MMF·종합채권 3종
+        assertThat(safe).extracting(Holding::ticker)
+                .containsExactlyInAnyOrder("438560", "497880", "436140");
+
+        BigDecimal amountSum = safe.stream().map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(amountSum).isEqualByComparingTo(stable.getSafeTarget());
+
+        BigDecimal weightSum = safe.stream().map(Holding::weight).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(weightSum).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 안전버킷_바닥자산은_국고채70_예금30_비중으로_담긴다() {
+        // 위험비중 0 등급으로는 못 만들지만, 바닥분만 검증하려면 바닥자산 기여분을 분리 계산.
+        // 여기선 머지 후 금액으로 바닥+여유안전 합산 비중을 직접 검증한다(바닥5천+여유안전).
+        AllocationResult result = calculator.calculate(activeInput(4));
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+        // floorAsset=5천, surplusSafe=safeTarget−5천. 국고채 금액 = 5천×0.70 + 여유안전×0.30
+        BigDecimal surplusSafe = stable.getSafeTarget().subtract(new BigDecimal("50000000"));
+        BigDecimal expectedGov = new BigDecimal("50000000").multiply(new BigDecimal("0.70"))
+                .add(surplusSafe.multiply(new BigDecimal("0.30")));
+        Holding gov = safeHoldings(stable).stream()
+                .filter(h -> h.ticker().equals("438560")).findFirst().orElseThrow();
+        assertThat(gov.amount()).isEqualByComparingTo(expectedGov.setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
     // ── 바닥보호 불변식: 모든 안에서 안전목표 >= 바닥자산 ──────────────────────────
@@ -159,7 +202,14 @@ class PortfolioAllocationCalculatorTest {
                 new EtfInfo(null, "452360", "SOL 미국배당다우존스(H)", 2,
                         new BigDecimal("3.40"), "MONTHLY", BucketRole.RISK, CurrencyExposure.HEDGED),
                 new EtfInfo(null, "476030", "SOL 미국나스닥100", 2,
-                        new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED)
+                        new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
+                // 안전버킷 구성 종목(등급≥5)
+                new EtfInfo(null, "438560", "SOL 국고채3년", 5,
+                        new BigDecimal("3.00"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
+                new EtfInfo(null, "436140", "SOL 종합채권(AA-이상)액티브", 5,
+                        new BigDecimal("3.30"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
+                new EtfInfo(null, "497880", "SOL CD금리MMF", 5,
+                        new BigDecimal("3.20"), "MONTHLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED)
         );
     }
 
@@ -168,5 +218,13 @@ class PortfolioAllocationCalculatorTest {
                 .filter(p -> p.getType() == type)
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private List<Holding> riskHoldings(PlanAllocation plan) {
+        return plan.getHoldings().stream().filter(h -> h.role() == BucketRole.RISK).toList();
+    }
+
+    private List<Holding> safeHoldings(PlanAllocation plan) {
+        return plan.getHoldings().stream().filter(h -> h.role() == BucketRole.SAFE).toList();
     }
 }

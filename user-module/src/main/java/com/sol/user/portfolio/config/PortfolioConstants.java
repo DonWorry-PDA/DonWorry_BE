@@ -6,9 +6,12 @@ import com.sol.user.portfolio.type.CurrencyExposure;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.PropensityTier;
+import com.sol.user.portfolio.type.SafeSlot;
+import com.sol.user.portfolio.type.SafeSlotWeight;
 import com.sol.user.portfolio.type.SlotWeight;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -131,6 +134,35 @@ public final class PortfolioConstants {
             PropensityTier.NEUTRAL, List.of(PlanType.STABLE, PlanType.LIQUIDITY)
     );
 
+    // ── 안전·단기버킷 구성 (등급≥5만 사용 → 전 성향 적합, tier/안 무관 단일 규칙) ───────
+    //    floor/surplus는 STEP6가 이미 다르게 다루는 경계(safeTarget = floorAsset + 여유안전).
+    //    안별 차등은 floor 고정·여유안전 변동으로 자동 발생하므로 슬롯 비중을 안별로 두지 않는다.
+
+    /** 안전 슬롯 → ticker (전부 등급≥5 — STABLE 적합성 cap 충족). */
+    public static final Map<SafeSlot, String> SAFE_SLOT_TICKER = Map.of(
+            SafeSlot.GOV, "438560",      // SOL 국고채3년 (5등급)
+            SafeSlot.CREDIT, "436140",   // SOL 종합채권(AA-이상)액티브 (5등급)
+            SafeSlot.CASH_EQ, "497880"   // SOL CD금리MMF (5등급, 예금 대체)
+    );
+
+    /** 바닥자산(원금보존) 구성 — 국고채70 + 예금성30. 비중 합=1.0. */
+    public static final List<SafeSlotWeight> SAFE_FLOOR_COMPOSITION = List.of(
+            new SafeSlotWeight(SafeSlot.GOV, new BigDecimal("0.70")),
+            new SafeSlotWeight(SafeSlot.CASH_EQ, new BigDecimal("0.30"))
+    );
+
+    /** 여유안전(소진 대상) 구성 — 종합채권 중심 + 국고채 + 예금성. 비중 합=1.0. */
+    public static final List<SafeSlotWeight> SAFE_SURPLUS_COMPOSITION = List.of(
+            new SafeSlotWeight(SafeSlot.CREDIT, new BigDecimal("0.50")),
+            new SafeSlotWeight(SafeSlot.GOV, new BigDecimal("0.30")),
+            new SafeSlotWeight(SafeSlot.CASH_EQ, new BigDecimal("0.20"))
+    );
+
+    /** 단기버킷(유동성안 선확보) 구성 — 원금변동 없는 CD금리MMF 100%. 비중 합=1.0. */
+    public static final List<SafeSlotWeight> SHORT_TERM_COMPOSITION = List.of(
+            new SafeSlotWeight(SafeSlot.CASH_EQ, BigDecimal.ONE)
+    );
+
     // ── 정적 일관성 검증 (B안 슬롯 구조 desync를 클래스 로딩 시 fail-fast) ──────────
     static {
         // 1) 각 안의 슬롯 비중 합은 1.0
@@ -152,6 +184,36 @@ public final class PortfolioConstants {
                 }
             }
         });
+        // 3) 안전·단기버킷 sub-bucket 구성 검증 — 비중합=1.0 + ticker가 안전자산·화이트리스트·전성향 적합(등급≥5)
+        int suitableMinGrade = Collections.max(RECOMMENDABLE_MIN_GRADE.values()); // = STABLE cap(5)
+        validateSafeComposition("SAFE_FLOOR_COMPOSITION", SAFE_FLOOR_COMPOSITION, suitableMinGrade);
+        validateSafeComposition("SAFE_SURPLUS_COMPOSITION", SAFE_SURPLUS_COMPOSITION, suitableMinGrade);
+        validateSafeComposition("SHORT_TERM_COMPOSITION", SHORT_TERM_COMPOSITION, suitableMinGrade);
+    }
+
+    private static void validateSafeComposition(String name, List<SafeSlotWeight> composition, int suitableMinGrade) {
+        BigDecimal sum = composition.stream().map(SafeSlotWeight::weight).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (sum.compareTo(BigDecimal.ONE) != 0) {
+            throw new IllegalStateException(name + " 비중 합이 1.0이 아님: " + sum);
+        }
+        for (SafeSlotWeight sw : composition) {
+            String ticker = SAFE_SLOT_TICKER.get(sw.slot());
+            if (ticker == null) {
+                throw new IllegalStateException(name + " SAFE_SLOT_TICKER 매핑 누락: " + sw.slot());
+            }
+            if (!WHITELIST.contains(ticker)) {
+                throw new IllegalStateException(name + " ticker가 화이트리스트에 없음: " + ticker);
+            }
+            if (roleOf(ticker) != BucketRole.SAFE) {
+                throw new IllegalStateException(name + " ticker가 안전자산이 아님: " + ticker);
+            }
+            Integer grade = RISK_GRADE.get(ticker);
+            if (grade == null || grade < suitableMinGrade) {
+                // 등급<5면 STABLE 적합성 위반 — 안전버킷은 전 성향 적합 상품만 허용
+                throw new IllegalStateException(
+                        name + " ticker 등급이 전 성향 적합 기준(" + suitableMinGrade + ") 미만: " + ticker + " grade=" + grade);
+            }
+        }
     }
 
     // ── 접근 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -182,6 +244,10 @@ public final class PortfolioConstants {
 
     public static String resolveTicker(PropensityTier tier, CoreSlot slot) {
         return SLOT_TICKER.get(tier).get(slot);
+    }
+
+    public static String resolveSafeTicker(SafeSlot slot) {
+        return SAFE_SLOT_TICKER.get(slot);
     }
 
     private static Map<PlanType, BigDecimal> planWeights(String stable, String balanced, String liquidity) {

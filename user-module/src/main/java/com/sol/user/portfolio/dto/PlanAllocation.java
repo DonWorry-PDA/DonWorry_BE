@@ -23,5 +23,5 @@ public class PlanAllocation {
     private BigDecimal shortTermBucket;     // 단기버킷 (유동성안만 > 0)
     private BigDecimal planDividendRate;    // 위험보유 가중평균 배당률 (STEP6용)
 
-    private List<Holding> holdings;         // 위험버킷 ETF 구성
+    private List<Holding> holdings;         // 전체 개별 보유 종목 (안전·위험·단기버킷 병합, role로 구분)
 }

@@ -69,8 +69,9 @@ class PortfolioRecommendationMapperTest {
     }
 
     @Test
-    void allocations는_안전버킷과_위험ETF와_단기버킷을_병합하고_비중합이_100이다() {
-        // total = risk 4,000,000 + safe 5,000,000 + short 1,000,000 = 10,000,000
+    void allocations는_holding의_role을_그대로_매핑하고_집계없이_비중합이_100이다() {
+        // total = safe 5,000,000 + risk 4,000,000 + short 1,000,000 = 10,000,000
+        // holdings에 안전·위험·단기 개별 종목이 모두 들어있음(STEP5 분해 결과)
         PlanAllocation plan = PlanAllocation.builder()
                 .type(PlanType.LIQUIDITY)
                 .riskTarget(won(4_000_000))
@@ -79,7 +80,11 @@ class PortfolioRecommendationMapperTest {
                 .surplusSafeAmount(won(5_000_000))
                 .shortTermBucket(won(1_000_000))
                 .planDividendRate(new BigDecimal("3.00"))
-                .holdings(List.of(holding("ETF-A", 3_000_000), holding("ETF-B", 1_000_000)))
+                .holdings(List.of(
+                        holding("국고채", BucketRole.SAFE, 5_000_000),
+                        holding("ETF-A", BucketRole.RISK, 3_000_000),
+                        holding("ETF-B", BucketRole.RISK, 1_000_000),
+                        holding("CD금리MMF", BucketRole.SHORT_TERM, 1_000_000)))
                 .build();
         AllocationResult allocation = allocation(RecommendationTrack.NORMAL, List.of(plan));
         CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
@@ -93,6 +98,8 @@ class PortfolioRecommendationMapperTest {
         assertThat(views).extracting(AllocationView::ratio)
                 .containsExactly(new BigDecimal("50.00"), new BigDecimal("30.00"),
                         new BigDecimal("10.00"), new BigDecimal("10.00"));
+        // 안전버킷이 집계 항목으로 중복 추가되지 않음(이중계상 방지) — 항목 수 = holding 수
+        assertThat(views).hasSize(4);
         BigDecimal ratioSum = views.stream().map(AllocationView::ratio)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(ratioSum).isEqualByComparingTo("100.00");
@@ -148,7 +155,11 @@ class PortfolioRecommendationMapperTest {
     }
 
     private Holding holding(String name, long amount) {
-        return new Holding("000000", name, BucketRole.RISK, CurrencyExposure.UNHEDGED,
+        return holding(name, BucketRole.RISK, amount);
+    }
+
+    private Holding holding(String name, BucketRole role, long amount) {
+        return new Holding("000000", name, role, CurrencyExposure.UNHEDGED,
                 new BigDecimal("1.0"), won(amount));
     }
 
