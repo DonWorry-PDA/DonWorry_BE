@@ -60,7 +60,7 @@ public class PensionDeferService {
             .filter(r -> r.deferRate() == 0)
             .findFirst()
             .map(PensionDeferComparisonRow::coverageRateAfter)
-            .orElse(0);
+            .orElseThrow(() -> new IllegalStateException("No row found for deferRate=0"));
 
         String insight = calculator.generateInsight(deferRate, rows);
 

@@ -58,6 +58,15 @@ class PensionDeferServiceTest {
     }
 
     @Test
+    @DisplayName("범위 밖 deferYears(0) → INVALID_INPUT")
+    void compare_deferYearsZero_throwsInvalidInput() {
+        assertThatThrownBy(() -> service.compare(1L, 70, 0))
+            .isInstanceOf(BaseException.class)
+            .extracting(e -> ((BaseException) e).getErrorCode())
+            .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
     @DisplayName("국민연금 미등록 → PENSION_NOT_FOUND")
     void compare_noPension_throwsPensionNotFound() {
         when(pensionRepository.findMonthlyAmount(1L, "NATIONAL")).thenReturn(Optional.empty());
