@@ -6,12 +6,18 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Entity
-@Table(name = "account")
+@Table(name = "account", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_account_number", columnNames = "account_number")
+})
 @Getter
 @NoArgsConstructor
 public class Account {
+
+    public static final String TYPE_DON_WORRY = "DON_WORRY";
+    public static final String INSTITUTION_SHINHAN = "신한은행";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,6 +42,21 @@ public class Account {
 
     @Column(name = "existing_account")
     private Boolean existingAccount;
+
+    @Column(name = "opened_at")
+    private LocalDate openedAt;
+
+    public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
+        Account account = new Account();
+        account.user = user;
+        account.accountType = TYPE_DON_WORRY;
+        account.institutionName = INSTITUTION_SHINHAN;
+        account.accountNumber = accountNumber;
+        account.depositBalance = BigDecimal.ZERO;
+        account.existingAccount = false;
+        account.openedAt = openedAt;
+        return account;
+    }
 
     public Account(User user, String accountType, String institutionName,
                    String accountNumber, BigDecimal depositBalance, Boolean existingAccount) {

@@ -1,5 +1,6 @@
 package com.sol.user.user.entity;
 
+import com.sol.user.config.IdNumberConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -37,6 +38,13 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Convert(converter = IdNumberConverter.class)
+    @Column(name = "id_number", length = 255)
+    private String idNumber;
 
     @Column(name = "onboarding_completed", nullable = false)
     private Boolean onboardingCompleted = false;
