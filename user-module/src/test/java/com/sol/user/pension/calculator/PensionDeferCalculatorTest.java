@@ -6,7 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PensionDeferCalculatorTest {
@@ -107,7 +106,7 @@ class PensionDeferCalculatorTest {
             BigDecimal.valueOf(100_000), BigDecimal.valueOf(2_200_000)
         );
         assertThat(rows).hasSize(7);
-        assertThat(rows.stream().map(PensionDeferComparisonRow::deferRate).collect(Collectors.toList()))
+        assertThat(rows.stream().map(PensionDeferComparisonRow::deferRate).toList())
             .containsExactly(0, 50, 60, 70, 80, 90, 100);
     }
 
@@ -139,5 +138,40 @@ class PensionDeferCalculatorTest {
             BigDecimal.valueOf(100_000), BigDecimal.valueOf(2_200_000)
         );
         assertThat(calculator.generateInsight(100, rows)).contains("가장 많이 증가");
+    }
+
+    @Test
+    @DisplayName("coverageRateDuring >= 70: '현재 생활비를 일부 확보' 포함")
+    void generateInsight_coverageOk_containsPartialCoverageMessage() {
+        // base가 크면 during도 커서 충당률이 70% 이상 나옴
+        // base=5_000_000, dividend=0, target=2_200_000 → deferRate=50, during=2_500_000 → coverage=113%
+        List<PensionDeferComparisonRow> rows = calculator.calcAllRows(
+            BigDecimal.valueOf(5_000_000), 3,
+            BigDecimal.ZERO, BigDecimal.valueOf(2_200_000)
+        );
+        assertThat(calculator.generateInsight(50, rows)).contains("현재 생활비를 일부 확보");
+    }
+
+    @Test
+    @DisplayName("coverageRateDuring < 70: '생활비 공백' 포함")
+    void generateInsight_coverageLow_containsGapMessage() {
+        // base=1_200_000, dividend=100_000, target=2_200_000 → deferRate=70, during=360_000
+        // coverage_during = (360_000 + 100_000) / 2_200_000 * 100 = 20% → < 70
+        List<PensionDeferComparisonRow> rows = calculator.calcAllRows(
+            BigDecimal.valueOf(1_200_000), 5,
+            BigDecimal.valueOf(100_000), BigDecimal.valueOf(2_200_000)
+        );
+        assertThat(calculator.generateInsight(70, rows)).contains("생활비 공백");
+    }
+
+    @Test
+    @DisplayName("모든 deferRate에서 coverageRateDuring < 70이면 '즉시 수령을 유지' 추천")
+    void generateInsight_noBestRate_recommendsImmediate() {
+        // base=100_000, dividend=0, target=10_000_000 → 모든 옵션에서 during << 70%
+        List<PensionDeferComparisonRow> rows = calculator.calcAllRows(
+            BigDecimal.valueOf(100_000), 1,
+            BigDecimal.ZERO, BigDecimal.valueOf(10_000_000)
+        );
+        assertThat(calculator.generateInsight(50, rows)).contains("즉시 수령을 유지");
     }
 }

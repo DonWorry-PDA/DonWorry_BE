@@ -5,7 +5,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 public class PensionDeferCalculator {
@@ -18,7 +17,7 @@ public class PensionDeferCalculator {
             BigDecimal dividendIncome, BigDecimal targetLivingCost) {
         return DEFER_RATE_OPTIONS.stream()
             .map(rate -> calcRow(base, rate, deferYears, dividendIncome, targetLivingCost))
-            .collect(Collectors.toList());
+            .toList();
     }
 
     public PensionDeferComparisonRow calcRow(
@@ -34,7 +33,7 @@ public class PensionDeferCalculator {
             .deferRate(deferRate)
             .duringDeferMonthly(during)
             .afterDeferMonthly(after)
-            .monthlyIncrease(after - base.longValue())
+            .monthlyIncrease(after - base.setScale(0, RoundingMode.DOWN).longValue())
             .breakEvenMonths(breakEven)
             .coverageRateDuring(rateDuring)
             .coverageRateAfter(rateAfter)
@@ -47,7 +46,7 @@ public class PensionDeferCalculator {
         PensionDeferComparisonRow selected = rows.stream()
             .filter(r -> r.deferRate() == deferRate)
             .findFirst()
-            .orElseThrow(IllegalStateException::new);
+            .orElseThrow(() -> new IllegalStateException("No row found for deferRate: " + deferRate));
 
         String primary;
         if (deferRate == 0) {
@@ -92,7 +91,10 @@ public class PensionDeferCalculator {
         BigDecimal lostTotal = base.multiply(BigDecimal.valueOf(deferRate))
             .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
             .multiply(BigDecimal.valueOf(12L * deferYears));
-        long monthlyGain = afterDeferMonthly - base.longValue();
+        long monthlyGain = afterDeferMonthly - base.setScale(0, RoundingMode.DOWN).longValue();
+        if (monthlyGain <= 0) {
+            throw new IllegalArgumentException("monthlyGain must be positive: deferRate=" + deferRate + ", deferYears=" + deferYears);
+        }
         return lostTotal.divide(BigDecimal.valueOf(monthlyGain), 0, RoundingMode.CEILING)
             .longValue();
     }
