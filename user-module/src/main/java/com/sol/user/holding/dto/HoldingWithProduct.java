@@ -5,9 +5,7 @@ import java.math.BigDecimal;
 public interface HoldingWithProduct {
     Long getHoldingId();
 
-    String getProductName();
-
-    String getProductType();
+    Long getProductId();
 
     BigDecimal getEvaluationAmount();
 }

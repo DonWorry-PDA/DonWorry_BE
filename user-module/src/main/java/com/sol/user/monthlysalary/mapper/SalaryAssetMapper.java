@@ -3,6 +3,7 @@ package com.sol.user.monthlysalary.mapper;
 import com.sol.user.account.entity.Account;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.monthlysalary.dto.AssetItemDto;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -25,13 +26,15 @@ public class SalaryAssetMapper {
                 .build();
     }
 
-    public AssetItemDto toHoldingItem(HoldingWithProduct holding, Set<String> excludedKeys) {
+    public AssetItemDto toHoldingItem(HoldingWithProduct holding, ProductBatchItem product, Set<String> excludedKeys) {
         String assetKey = createHoldingAssetKey(holding.getHoldingId());
+        String productName = product != null ? product.productName() : null;
+        String productType = product != null ? product.productType() : null;
 
         return AssetItemDto.builder()
                 .assetKey(assetKey)
-                .name(holding.getProductName())
-                .description(resolveHoldingDescription(holding.getProductType()))
+                .name(productName)
+                .description(resolveHoldingDescription(productType))
                 .amount(holding.getEvaluationAmount())
                 .excluded(excludedKeys.contains(assetKey))
                 .build();
