@@ -15,6 +15,10 @@ public class PensionDeferCalculator {
     public List<PensionDeferComparisonRow> calcAllRows(
             BigDecimal base, int deferYears,
             BigDecimal dividendIncome, BigDecimal targetLivingCost) {
+        if (base == null || base.compareTo(BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("base must be positive, got: " + base);
+        if (deferYears < 1)
+            throw new IllegalArgumentException("deferYears must be >= 1, got: " + deferYears);
         return DEFER_RATE_OPTIONS.stream()
             .map(rate -> calcRow(base, rate, deferYears, dividendIncome, targetLivingCost))
             .toList();
@@ -23,6 +27,10 @@ public class PensionDeferCalculator {
     public PensionDeferComparisonRow calcRow(
             BigDecimal base, int deferRate, int deferYears,
             BigDecimal dividendIncome, BigDecimal targetLivingCost) {
+        if (base == null || base.compareTo(BigDecimal.ZERO) <= 0)
+            throw new IllegalArgumentException("base must be positive, got: " + base);
+        if (deferYears < 1)
+            throw new IllegalArgumentException("deferYears must be >= 1, got: " + deferYears);
         long during = calcDuringDeferMonthly(base, deferRate);
         long after = calcAfterDeferMonthly(base, deferRate, deferYears);
         Long breakEven = deferRate == 0 ? null
@@ -70,12 +78,14 @@ public class PensionDeferCalculator {
         return primary + recommendation;
     }
 
+    // package-private for testing
     long calcDuringDeferMonthly(BigDecimal base, int deferRate) {
         return base.multiply(BigDecimal.valueOf(100 - deferRate))
             .divide(BigDecimal.valueOf(100), 0, RoundingMode.DOWN)
             .longValue();
     }
 
+    // package-private for testing
     long calcAfterDeferMonthly(BigDecimal base, int deferRate, int deferYears) {
         BigDecimal immediate = base.multiply(BigDecimal.valueOf(100 - deferRate))
             .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
@@ -87,6 +97,7 @@ public class PensionDeferCalculator {
             .longValue();
     }
 
+    // package-private for testing
     long calcBreakEvenMonths(BigDecimal base, int deferRate, int deferYears, long afterDeferMonthly) {
         BigDecimal lostTotal = base.multiply(BigDecimal.valueOf(deferRate))
             .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
@@ -99,13 +110,18 @@ public class PensionDeferCalculator {
             .longValue();
     }
 
+    // package-private for testing
     int calcCoverageRate(BigDecimal monthlyPension, BigDecimal dividendIncome, BigDecimal targetLivingCost) {
+        if (targetLivingCost == null || targetLivingCost.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("targetLivingCost must be positive, got: " + targetLivingCost);
+        }
         return monthlyPension.add(dividendIncome)
             .multiply(BigDecimal.valueOf(100))
             .divide(targetLivingCost, 0, RoundingMode.DOWN)
             .intValue();
     }
 
+    // package-private for testing
     String toStabilityLabel(int coverageRate) {
         return coverageRate >= 70 ? "안정" : "주의";
     }

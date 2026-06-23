@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PensionDeferCalculatorTest {
 
@@ -173,5 +174,29 @@ class PensionDeferCalculatorTest {
             BigDecimal.ZERO, BigDecimal.valueOf(10_000_000)
         );
         assertThat(calculator.generateInsight(50, rows)).contains("즉시 수령을 유지");
+    }
+
+    @Test
+    @DisplayName("calcAllRows: base가 null이면 IllegalArgumentException")
+    void calcAllRows_nullBase_throwsIllegalArgument() {
+        assertThatThrownBy(() -> calculator.calcAllRows(
+            null, 3, BigDecimal.ZERO, BigDecimal.valueOf(2_000_000)))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("calcAllRows: deferYears=0이면 IllegalArgumentException")
+    void calcAllRows_deferYearsZero_throwsIllegalArgument() {
+        assertThatThrownBy(() -> calculator.calcAllRows(
+            BigDecimal.valueOf(1_000_000), 0, BigDecimal.ZERO, BigDecimal.valueOf(2_000_000)))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("calcCoverageRate: targetLivingCost=0이면 IllegalArgumentException")
+    void calcCoverageRate_zeroTarget_throwsIllegalArgument() {
+        assertThatThrownBy(() -> calculator.calcCoverageRate(
+            BigDecimal.valueOf(1_000_000), BigDecimal.ZERO, BigDecimal.ZERO))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 }
