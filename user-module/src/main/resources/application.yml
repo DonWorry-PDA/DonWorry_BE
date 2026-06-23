@@ -1,6 +1,12 @@
 spring:
+  profiles:
+    active: local
   application:
     name: user-module
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   jpa:
     hibernate:
       ddl-auto: update
@@ -15,6 +21,11 @@ server:
 
 product:
   base-url: ${PRODUCT_BASE_URL:http://localhost:8081}
+
+solapi:
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  from-number: ${SOLAPI_FROM_NUMBER}
 
 springdoc:
   swagger-ui:
