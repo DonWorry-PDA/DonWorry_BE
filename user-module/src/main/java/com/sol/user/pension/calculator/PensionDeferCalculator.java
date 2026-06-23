@@ -9,7 +9,7 @@ import java.util.List;
 @Component
 public class PensionDeferCalculator {
 
-    private static final List<Integer> DEFER_RATE_OPTIONS = List.of(0, 50, 60, 70, 80, 90, 100);
+    public static final List<Integer> DEFER_RATE_OPTIONS = List.of(0, 50, 60, 70, 80, 90, 100);
     private static final BigDecimal ANNUAL_BONUS_RATE = new BigDecimal("0.072");
 
     public List<PensionDeferComparisonRow> calcAllRows(

@@ -23,7 +23,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class PensionDeferService {
 
-    private static final Set<Integer> VALID_DEFER_RATES = Set.of(0, 50, 60, 70, 80, 90, 100);
+    private static final Set<Integer> VALID_DEFER_RATES = Set.copyOf(PensionDeferCalculator.DEFER_RATE_OPTIONS);
 
     private final PensionRepository pensionRepository;
     private final HoldingRepository holdingRepository;
@@ -48,19 +48,23 @@ public class PensionDeferService {
             .map(UserGoal::getMonthlyTargetLivingCost)
             .orElseThrow(() -> new BaseException(ErrorCode.USER_GOAL_NOT_FOUND));
 
+        if (targetLivingCost == null || targetLivingCost.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.USER_GOAL_NOT_FOUND);
+        }
+
         List<PensionDeferComparisonRow> rows =
             calculator.calcAllRows(base, deferYears, dividendIncome, targetLivingCost);
 
         PensionDeferComparisonRow selectedRow = rows.stream()
             .filter(r -> r.deferRate() == deferRate)
             .findFirst()
-            .orElseThrow(() -> new IllegalStateException("No row for deferRate: " + deferRate));
+            .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
 
         int coverageRateBefore = rows.stream()
             .filter(r -> r.deferRate() == 0)
             .findFirst()
             .map(PensionDeferComparisonRow::coverageRateAfter)
-            .orElseThrow(() -> new IllegalStateException("No row found for deferRate=0"));
+            .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
 
         String insight = calculator.generateInsight(deferRate, rows);
 
