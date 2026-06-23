@@ -1,6 +1,7 @@
 package com.sol.product.etf.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
 import com.sol.product.etf.service.EtfService;
@@ -48,5 +49,12 @@ public class EtfController {
     @GetMapping("/{productId}")
     public ResponseEntity<ApiResponse<EtfResponse>> getEtfByProductId(@PathVariable Long productId) {
         return ResponseEntity.ok(ApiResponse.ok(etfService.getEtfByProductId(productId)));
+    }
+
+    @Operation(summary = "ETF 월 분배금 일괄 조회 (product_id 목록)")
+    @GetMapping("/monthly-dividends")
+    public ResponseEntity<ApiResponse<List<EtfMonthlyDividendItem>>> getMonthlyDividends(
+            @RequestParam List<Long> productIds) {
+        return ResponseEntity.ok(ApiResponse.ok(etfService.getMonthlyDividends(productIds)));
     }
 }
