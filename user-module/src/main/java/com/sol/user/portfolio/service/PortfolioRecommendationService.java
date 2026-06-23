@@ -13,8 +13,7 @@ import com.sol.user.portfolio.dto.OperationGradeResult;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
-import com.sol.user.portfolio.type.Gender;
-import com.sol.user.portfolio.type.InvestmentPropensity;
+import com.sol.user.survey.service.SurveyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -33,9 +32,12 @@ public class PortfolioRecommendationService {
     private final AlphaCoverageCalculator coverageCalculator;
     private final EtfPoolProvider etfPoolProvider;
     private final PortfolioRecommendationMapper recommendationMapper;
+    private final OperationGradeInputAssembler inputAssembler;
+    private final SurveyService surveyService;
 
     public RecommendationResponse recommend(Long userId) {
-        OperationGradeInput input = createMockInput();
+        OperationGradeInput input = inputAssembler.assemble(userId);
+        int q3 = surveyService.get(userId).getQ3();
 
         // STEP1~4 재사용
         OperationGradeResult grade = operationGradeCalculator.calculate(input);
@@ -45,7 +47,7 @@ public class PortfolioRecommendationService {
         AllocationResult allocation = allocationCalculator.calculate(toAllocationInput(grade, input, pool));
 
         // STEP6 — α충족률·소진모델
-        CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input));
+        CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input, q3));
 
         return recommendationMapper.toResponse(allocation, coverage);
     }
@@ -58,46 +60,28 @@ public class PortfolioRecommendationService {
                 .totalAsset(input.totalAsset())
                 .pensionSaving(input.pensionSaving())
                 .propensity(input.investmentPropensity())
-                .shortTermBucket(MOCK_SHORT_TERM_BUCKET)
+                .shortTermBucket(SHORT_TERM_BUCKET)
                 .pool(pool)
                 .build();
     }
 
-    private CoverageInput toCoverageInput(AllocationResult allocation, OperationGradeResult grade, OperationGradeInput input) {
+    private CoverageInput toCoverageInput(AllocationResult allocation, OperationGradeResult grade,
+                                          OperationGradeInput input, int q3) {
         return CoverageInput.builder()
                 .allocation(allocation)
-                .q3(MOCK_Q3)
+                .q3(q3)
                 .age(input.age())
                 .remainingYears(grade.getRemainingYears())
                 .targetLivingCost(input.targetMonthlyLivingCost())
                 .monthlyNationalPension(input.monthlyNationalPension())
-                .otherRegularIncome(MOCK_OTHER_REGULAR_INCOME)
+                .otherRegularIncome(OTHER_REGULAR_INCOME)
                 .floorAsset(grade.getFloorAsset())
                 .pensionSaving(input.pensionSaving())
                 .build();
     }
 
-    // TODO: 마이데이터·설문 연동 후 실제 데이터로 교체
-    private static final int MOCK_Q3 = 1;
-    private static final BigDecimal MOCK_OTHER_REGULAR_INCOME = BigDecimal.ZERO;
-    private static final BigDecimal MOCK_SHORT_TERM_BUCKET = BigDecimal.ZERO; // 0이면 계산기가 여유분×0.10으로 기본 적용
-
-    private OperationGradeInput createMockInput() {
-        return OperationGradeInput.builder()
-                .age(65)
-                .gender(Gender.MALE)
-                .totalAsset(BigDecimal.valueOf(600_000_000))
-                .pensionSaving(BigDecimal.valueOf(50_000_000))
-                .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
-                .essentialRatio(new BigDecimal("0.72"))
-                .monthlyNationalPension(BigDecimal.valueOf(1_000_000))
-                .availableFinancialAsset(BigDecimal.valueOf(500_000_000))
-                .hasLossInsurance(true)
-                .hasMajorIllnessInsurance(true)
-                .monthlyLoanRepayment(BigDecimal.ZERO)
-                .q1(2)
-                .q2(1)
-                .investmentPropensity(InvestmentPropensity.NEUTRAL)
-                .build();
-    }
+    /** 기타 정기수입(임대·근로 등) — 현재 수집 채널이 없어 0. 데이터 소스 확보 시 교체. */
+    private static final BigDecimal OTHER_REGULAR_INCOME = BigDecimal.ZERO;
+    /** 단기버킷 선확보액 — 0이면 STEP5가 유동성안에 한해 여유분×0.10을 기본 적용. */
+    private static final BigDecimal SHORT_TERM_BUCKET = BigDecimal.ZERO;
 }

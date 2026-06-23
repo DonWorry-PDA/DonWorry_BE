@@ -4,7 +4,6 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.OperationGradeResult;
-import com.sol.user.portfolio.type.Gender;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,7 +30,7 @@ public class OperationGradeCalculator {
         validate(input);
 
         // STEP1 — 바닥자산 & 여유분
-        int remainingYears = calcRemainingYears(input.age(), input.gender());
+        int remainingYears = calcRemainingYears(input.age());
         BigDecimal essentialLivingCost = input.targetMonthlyLivingCost()
                 .multiply(input.essentialRatio());
         BigDecimal floorAsset = calcFloorAsset(input.monthlyNationalPension(), essentialLivingCost, remainingYears);
@@ -76,33 +75,20 @@ public class OperationGradeCalculator {
 
     // ── STEP1 ────────────────────────────────────────────────────────────────
 
-    private int calcRemainingYears(int age, Gender gender) {
-        int expectancy = gender == Gender.MALE ? lookupMale(age) : lookupFemale(age);
-        return Math.min(Math.max(expectancy + 5, 3), 40);
+    private int calcRemainingYears(int age) {
+        return Math.min(Math.max(lookupExpectancy(age) + 5, 3), 40);
     }
 
-    // 통계청 2022 생명표 기준 기대여명 (5세 단위)
-    private int lookupMale(int age) {
-        if (age <= 55) return 26;
-        if (age <= 60) return 22;
-        if (age <= 65) return 18;
-        if (age <= 70) return 15;
-        if (age <= 75) return 11;
-        if (age <= 80) return 8;
-        if (age <= 85) return 6;
-        if (age <= 90) return 4;
-        return 3;
-    }
-
-    private int lookupFemale(int age) {
-        if (age <= 55) return 31;
-        if (age <= 60) return 27;
-        if (age <= 65) return 23;
-        if (age <= 70) return 19;
-        if (age <= 75) return 14;
-        if (age <= 80) return 11;
-        if (age <= 85) return 8;
-        if (age <= 90) return 5;
+    // 통계청 2022 생명표 기준 기대여명 (5세 단위, 남녀 평균 — 성별 미수집이라 합산 근사)
+    private int lookupExpectancy(int age) {
+        if (age <= 55) return 29;  // (남26+여31)/2
+        if (age <= 60) return 25;  // (22+27)/2
+        if (age <= 65) return 21;  // (18+23)/2
+        if (age <= 70) return 17;  // (15+19)/2
+        if (age <= 75) return 13;  // (11+14)/2
+        if (age <= 80) return 10;  // (8+11)/2
+        if (age <= 85) return 7;   // (6+8)/2
+        if (age <= 90) return 5;   // (4+5)/2
         return 3;
     }
 
@@ -181,7 +167,6 @@ public class OperationGradeCalculator {
 
     private void validate(OperationGradeInput input) {
         if (input == null
-                || input.gender() == null
                 || input.investmentPropensity() == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }

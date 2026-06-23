@@ -3,7 +3,6 @@ package com.sol.user.portfolio.calculator;
 import com.sol.common.exception.BaseException;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.OperationGradeResult;
-import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import org.junit.jupiter.api.Test;
 
@@ -205,7 +204,7 @@ class OperationGradeCalculatorTest {
 
     @Test
     void 남은햇수_상한_40년_초과_불가() {
-        OperationGradeInput input = baseBuilder().age(30).gender(Gender.FEMALE).build();
+        OperationGradeInput input = baseBuilder().age(30).build();
 
         OperationGradeResult result = calculator.calculate(input);
 
@@ -214,7 +213,7 @@ class OperationGradeCalculatorTest {
 
     @Test
     void 남은햇수_하한_3년_미만_불가() {
-        OperationGradeInput input = baseBuilder().age(95).gender(Gender.MALE).build();
+        OperationGradeInput input = baseBuilder().age(95).build();
 
         OperationGradeResult result = calculator.calculate(input);
 
@@ -226,7 +225,6 @@ class OperationGradeCalculatorTest {
     private OperationGradeInput.OperationGradeInputBuilder baseBuilder() {
         return OperationGradeInput.builder()
                 .age(65)
-                .gender(Gender.MALE)
                 .totalAsset(BigDecimal.valueOf(300_000_000))
                 .pensionSaving(BigDecimal.valueOf(30_000_000))
                 .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))

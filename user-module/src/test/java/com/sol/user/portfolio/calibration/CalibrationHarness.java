@@ -15,7 +15,6 @@ import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
-import com.sol.user.portfolio.type.Gender;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import org.junit.jupiter.api.Test;
 
@@ -144,7 +143,6 @@ class CalibrationHarness {
         BigDecimal available = total.multiply(new BigDecimal("0.83")).setScale(0, RoundingMode.HALF_UP);
         return OperationGradeInput.builder()
                 .age(age)
-                .gender(Gender.MALE)
                 .totalAsset(total)
                 .pensionSaving(BigDecimal.valueOf(pensionSaving))
                 .targetMonthlyLivingCost(BigDecimal.valueOf(livingCost))
