@@ -14,6 +14,25 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
 
     List<CashFlowEvent> findByUserUserId(Long userId);
 
+    List<CashFlowEvent> findByUserUserIdAndEventDateBetweenOrderByEventDateDescEventIdDesc(
+            Long userId,
+            LocalDate from,
+            LocalDate to
+    );
+
+    @Query("""
+            SELECT event
+            FROM CashFlowEvent event
+            WHERE event.user.userId = :userId
+              AND (event.recurring = true OR event.eventDate BETWEEN :from AND :to)
+            ORDER BY event.eventDate ASC, event.eventId ASC
+            """)
+    List<CashFlowEvent> findCalendarEvents(
+            @Param("userId") Long userId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
     /** 특정 기간(보통 당월) 내 flowType(INCOME/EXPENSE) 금액 합계. 없으면 0. */
     @Query("""
             SELECT COALESCE(SUM(e.amount), 0)

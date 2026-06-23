@@ -15,6 +15,8 @@ public interface PensionRepository extends JpaRepository<Pension, Long> {
 
     List<Pension> findByUserUserId(Long userId);
 
+    List<Pension> findByUserUserIdOrderByPensionIdAsc(Long userId);
+
     @Query("""
         SELECT p.expectedMonthlyAmount
         FROM Pension p
