@@ -44,10 +44,10 @@ class AssetHubServiceTest {
     @Test
     void 자산_분포는_카테고리별로_집계되고_비율_합은_100() {
         when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
-                account("RETIREMENT_PENSION", 60_000_000),
-                account("DEPOSIT_SAVING", 20_000_000),
-                account("STOCK_ETF_FUND", 12_000_000),
-                account("STOCK", 8_000_000)
+                account("IRP", 60_000_000),
+                account("DEPOSIT", 20_000_000),
+                account("BROKERAGE", 12_000_000),
+                account("PENSION_SAVING", 8_000_000)
         ));
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
@@ -57,9 +57,9 @@ class AssetHubServiceTest {
 
         assertThat(response.totalAsset()).isEqualByComparingTo("100000000");
         assertThat(response.allocation()).extracting(AssetAllocationItem::category)
-                .containsExactly("연금", "예금", "ETF", "주식");
+                .containsExactly("연금", "예금", "ETF");
         assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
-                .containsExactly(60, 20, 12, 8);
+                .containsExactly(68, 20, 12);
         assertThat(response.allocation().stream().mapToInt(AssetAllocationItem::ratio).sum())
                 .isEqualTo(100);
         assertThat(response.monthlyIncome()).isEqualByComparingTo("1300000");
@@ -69,9 +69,9 @@ class AssetHubServiceTest {
     @Test
     void 비율_보정으로_나누어떨어지지_않아도_합이_100() {
         when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
-                account("DEPOSIT_SAVING", 1_000_000),
-                account("STOCK_ETF_FUND", 1_000_000),
-                account("STOCK", 1_000_000)
+                account("DEPOSIT", 1_000_000),
+                account("BROKERAGE", 1_000_000),
+                account("IRP", 1_000_000)
         ));
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();

@@ -71,7 +71,7 @@ class LifeStabilityServiceTest {
         when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
                 .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), money(350_000), LocalDateTime.now())));
         when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(
-                new Account(user, "CHECKING_CMA", "신한은행", "MOCK-1", money(18_000_000), true)
+                new Account(user, "CMA", "신한은행", "MOCK-1", money(18_000_000), true)
         ));
         when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of(
                 new Pension(user, "NATIONAL", money(1_150_000), false, 65)

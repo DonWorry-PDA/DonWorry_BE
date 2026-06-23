@@ -31,6 +31,19 @@ public enum ErrorCode {
     // Survey
     SURVEY_NOT_FOUND(HttpStatus.NOT_FOUND, "SURVEY_001", "설문 답변이 없습니다."),
 
+    // OTP
+    OTP_TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "OTP_TOO_MANY_REQUESTS", "단시간 재발송 제한을 초과했습니다."),
+    INVALID_PHONE(HttpStatus.BAD_REQUEST, "INVALID_PHONE", "유효하지 않은 전화번호입니다."),
+    OTP_INVALID(HttpStatus.BAD_REQUEST, "OTP_INVALID", "인증번호가 일치하지 않습니다."),
+    OTP_EXPIRED(HttpStatus.BAD_REQUEST, "OTP_EXPIRED", "인증번호가 만료되었습니다."),
+    OTP_MAX_ATTEMPTS(HttpStatus.BAD_REQUEST, "OTP_MAX_ATTEMPTS", "인증번호 입력 횟수를 초과했습니다."),
+    SMS_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SMS_SEND_FAILED", "SMS 발송에 실패했습니다."),
+
+    // Account Open
+    ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ACCOUNT_ALREADY_EXISTS", "이미 계좌를 보유하고 있습니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "TERMS_NOT_AGREED", "필수 약관에 동의하지 않았습니다."),
+    OTP_NOT_VERIFIED(HttpStatus.FORBIDDEN, "OTP_NOT_VERIFIED", "본인 인증이 완료되지 않았습니다."),
+
     // Pension
     PENSION_NOT_FOUND(HttpStatus.NOT_FOUND, "PENSION_001", "국민연금 정보가 등록되지 않았습니다."),
 

@@ -26,10 +26,9 @@ public enum AssetCategory {
             return ETC;
         }
         return switch (accountType) {
-            case "RETIREMENT_PENSION", "PERSONAL_PENSION" -> PENSION;
-            case "CHECKING_CMA", "DEPOSIT_SAVING" -> DEPOSIT;
-            case "STOCK_ETF_FUND", "MONTHLY_DIVIDEND_ETF", "FUND", "ETF" -> ETF;
-            case "STOCK", "BOND" -> STOCK;
+            case "IRP", "PENSION_SAVING" -> PENSION;
+            case "CMA", "DEPOSIT" -> DEPOSIT;
+            case "BROKERAGE" -> ETF;
             default -> ETC;
         };
     }

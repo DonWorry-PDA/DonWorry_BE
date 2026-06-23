@@ -11,24 +11,37 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    @Mock private UserRepository userRepository;
-    @Mock private JwtUtil jwtUtil;
-    @Mock private User mockUser;
-    @Mock private TokenBlacklistService tokenBlacklistService;
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private JwtUtil jwtUtil;
+
+    @Mock
+    private User mockUser;
+
+    @Mock
+    private TokenBlacklistService tokenBlacklistService;
 
     private AuthService authService;
     private BCryptPasswordEncoder encoder;
@@ -39,63 +52,75 @@ class AuthServiceTest {
         authService = new AuthService(userRepository, jwtUtil, encoder, tokenBlacklistService);
     }
 
-    @Test
-    @DisplayName("올바른 PIN 입력 시 토큰과 onboardingCompleted 반환")
-    void login_validPin_returnsTokenAndOnboardingStatus() {
-        String hashedPin = encoder.encode("123456");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
-        when(mockUser.getPassword()).thenReturn(hashedPin);
-        when(mockUser.getOnboardingCompleted()).thenReturn(false);
-        when(mockUser.getUserId()).thenReturn(1L);
-        when(jwtUtil.generateToken(1L)).thenReturn("token123");
+    @ParameterizedTest(name = "PIN {1} authenticates user {0}")
+    @CsvSource({
+            "1, 123456, false",
+            "2, 654321, true",
+            "3, 333333, false"
+    })
+    @DisplayName("PIN만으로 해당 사용자를 찾아 토큰과 온보딩 상태를 반환한다")
+    void login_validPin_returnsMatchedUserToken(
+            long expectedUserId,
+            String pin,
+            boolean onboardingCompleted
+    ) {
+        User user1 = userWithPin("123456");
+        User user2 = userWithPin("654321");
+        User user3 = userWithPin("333333");
+        User expectedUser = switch ((int) expectedUserId) {
+            case 1 -> user1;
+            case 2 -> user2;
+            case 3 -> user3;
+            default -> throw new IllegalArgumentException("Unexpected test user id");
+        };
 
-        LoginResponse response = authService.login(new LoginRequest(1L, "123456"));
+        when(userRepository.findAllByPasswordIsNotNullOrderByUserIdAsc())
+                .thenReturn(List.of(user1, user2, user3));
+        when(expectedUser.getUserId()).thenReturn(expectedUserId);
+        when(expectedUser.getOnboardingCompleted()).thenReturn(onboardingCompleted);
+        when(jwtUtil.generateToken(expectedUserId)).thenReturn("token-" + expectedUserId);
 
-        assertThat(response.token()).isEqualTo("token123");
-        assertThat(response.onboardingCompleted()).isFalse();
+        LoginResponse response = authService.login(new LoginRequest(pin));
+
+        assertThat(response.token()).isEqualTo("token-" + expectedUserId);
+        assertThat(response.onboardingCompleted()).isEqualTo(onboardingCompleted);
     }
 
     @Test
-    @DisplayName("온보딩 완료 사용자는 onboardingCompleted=true 반환")
-    void login_onboardedUser_returnsOnboardingCompletedTrue() {
-        String hashedPin = encoder.encode("123456");
-        when(userRepository.findById(2L)).thenReturn(Optional.of(mockUser));
-        when(mockUser.getPassword()).thenReturn(hashedPin);
-        when(mockUser.getOnboardingCompleted()).thenReturn(true);
-        when(mockUser.getUserId()).thenReturn(2L);
-        when(jwtUtil.generateToken(2L)).thenReturn("token456");
+    @DisplayName("일치하는 PIN이 없으면 AUTH_001 예외를 발생시킨다")
+    void login_unknownPin_throwsAuth001() {
+        User user1 = userWithPin("123456");
+        User user2 = userWithPin("654321");
+        User user3 = userWithPin("333333");
+        when(userRepository.findAllByPasswordIsNotNullOrderByUserIdAsc())
+                .thenReturn(List.of(user1, user2, user3));
 
-        LoginResponse response = authService.login(new LoginRequest(2L, "123456"));
-
-        assertThat(response.onboardingCompleted()).isTrue();
-    }
-
-    @Test
-    @DisplayName("잘못된 PIN 입력 시 AUTH_001 예외 발생")
-    void login_wrongPin_throwsAuth001() {
-        String hashedPin = encoder.encode("123456");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
-        when(mockUser.getPassword()).thenReturn(hashedPin);
-
-        assertThatThrownBy(() -> authService.login(new LoginRequest(1L, "wrong")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("999999")))
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_001);
+
+        verify(jwtUtil, never()).generateToken(org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test
-    @DisplayName("존재하지 않는 userId 입력 시 AUTH_001 예외 발생")
-    void login_userNotFound_throwsAuth001() {
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+    @DisplayName("동일한 PIN에 둘 이상의 사용자가 매칭되면 인증을 거부한다")
+    void login_duplicatePin_throwsAuth001() {
+        User user1 = userWithPin("123456");
+        User user2 = userWithPin("123456");
+        when(userRepository.findAllByPasswordIsNotNullOrderByUserIdAsc())
+                .thenReturn(List.of(user1, user2));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest(99L, "123456")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("123456")))
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_001);
+
+        verify(jwtUtil, never()).generateToken(org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test
-    @DisplayName("completeOnboarding 호출 시 user.completeOnboarding()이 호출됨")
+    @DisplayName("온보딩 완료 처리 시 사용자의 완료 메서드를 호출한다")
     void completeOnboarding_callsUserCompleteOnboarding() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
 
@@ -105,7 +130,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 userId로 completeOnboarding 호출 시 USER_NOT_FOUND 예외")
+    @DisplayName("존재하지 않는 사용자의 온보딩 완료 요청은 USER_NOT_FOUND를 반환한다")
     void completeOnboarding_userNotFound_throwsUserNotFound() {
         when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -116,7 +141,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("logout 호출 시 토큰이 블랙리스트에 추가됨")
+    @DisplayName("로그아웃 시 토큰을 블랙리스트에 추가한다")
     void logout_addsTokenToBlacklist() {
         Date expiry = new Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000);
         when(jwtUtil.extractExpiration("token123")).thenReturn(expiry);
@@ -124,5 +149,11 @@ class AuthServiceTest {
         authService.logout("token123");
 
         verify(tokenBlacklistService).add("token123", expiry);
+    }
+
+    private User userWithPin(String pin) {
+        User user = mock(User.class);
+        when(user.getPassword()).thenReturn(encoder.encode(pin));
+        return user;
     }
 }

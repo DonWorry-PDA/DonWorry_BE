@@ -159,17 +159,17 @@ class PersonaSimulationTest {
 
     private List<EtfInfo> pool() {
         return List.of(
-                new EtfInfo("446720", "SOL 미국배당다우존스", 3,
+                new EtfInfo(null, "446720", "SOL 미국배당다우존스", 3,
                         new BigDecimal("3.50"), "MONTHLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
-                new EtfInfo("452360", "SOL 미국배당다우존스(H)", 2,
+                new EtfInfo(null, "452360", "SOL 미국배당다우존스(H)", 2,
                         new BigDecimal("3.40"), "MONTHLY", BucketRole.RISK, CurrencyExposure.HEDGED),
-                new EtfInfo("476030", "SOL 미국나스닥100", 2,
+                new EtfInfo(null, "476030", "SOL 미국나스닥100", 2,
                         new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
-                new EtfInfo("438560", "SOL 국고채3년", 5,
+                new EtfInfo(null, "438560", "SOL 국고채3년", 5,
                         new BigDecimal("3.00"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
-                new EtfInfo("436140", "SOL 종합채권(AA-이상)액티브", 5,
+                new EtfInfo(null, "436140", "SOL 종합채권(AA-이상)액티브", 5,
                         new BigDecimal("3.30"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
-                new EtfInfo("497880", "SOL CD금리MMF", 5,
+                new EtfInfo(null, "497880", "SOL CD금리MMF", 5,
                         new BigDecimal("3.20"), "MONTHLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED)
         );
     }

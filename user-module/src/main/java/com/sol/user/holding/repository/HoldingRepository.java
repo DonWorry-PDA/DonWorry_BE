@@ -1,5 +1,6 @@
 package com.sol.user.holding.repository;
 
+import com.sol.user.account.entity.Account;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface HoldingRepository extends JpaRepository<Holding, Long> {
+
+    List<Holding> findByAccountIn(List<Account> accounts);
 
     @EntityGraph(attributePaths = "account")
     List<Holding> findByAccountUserUserIdOrderByHoldingIdAsc(Long userId);
