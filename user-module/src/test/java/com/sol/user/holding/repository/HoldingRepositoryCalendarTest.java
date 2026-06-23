@@ -1,14 +1,13 @@
 package com.sol.user.holding.repository;
 
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -20,6 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
 @ActiveProfiles("test")
 @Transactional
+@Sql(
+        scripts = "/sql/holding-calendar-product-tables.sql",
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
+)
 class HoldingRepositoryCalendarTest {
 
     @Autowired
@@ -27,38 +30,6 @@ class HoldingRepositoryCalendarTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @BeforeEach
-    void setUpProductTables() {
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS financial_product (
-                    product_id BIGINT PRIMARY KEY,
-                    product_name VARCHAR(200)
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS etf_detail (
-                    etf_detail_id BIGINT PRIMARY KEY,
-                    product_id BIGINT,
-                    distribution_interval_months INT
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS dividend_history (
-                    dist_id BIGINT PRIMARY KEY,
-                    product_id BIGINT,
-                    payment_date DATE,
-                    amount_per_unit DECIMAL(15, 2)
-                )
-                """);
-    }
-
-    @AfterEach
-    void dropProductTables() {
-        jdbcTemplate.execute("DROP TABLE IF EXISTS dividend_history");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS etf_detail");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS financial_product");
-    }
 
     @Test
     void findsLatestDividendInputsAndAggregatesUsersQuantityAcrossAccounts() {
