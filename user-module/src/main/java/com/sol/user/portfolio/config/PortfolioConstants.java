@@ -96,6 +96,18 @@ public final class PortfolioConstants {
     public static final BigDecimal EXPECTED_TOTAL_RETURN = new BigDecimal("0.05"); // 위험버킷 기대총수익률 r(배당+자본차익, 고정 가정 — 캘리 노브 아님)
     public static final int PENSION_WITHDRAWAL_MIN_AGE = 55;                       // 연금저축 인출 가능 연령
 
+    // ── STEP1~4(운용등급) 정책 기본값 — 유저 데이터 소스 없음, 정책으로 고정 ──────────────
+    /**
+     * 필수비율 — 목표생활비를 필수/재량으로 가르는 비율(STEP1 바닥자산·STEP2 buffer).
+     * 근거: 국민연금연구원 국민노후보장패널(부부 최소217/적정297 ≈ 73%), 통계청 2024(최소240/적정336 ≈ 71%)의 중간값.
+     */
+    public static final BigDecimal ESSENTIAL_RATIO = new BigDecimal("0.72");
+    /**
+     * 기본 투자자성향 — 증권사 적합성 진단(KYC) 보유값이라 마이데이터·증권 연동 전엔 소스가 없어 위험중립형으로 고정.
+     * 연동되면 증권사 값으로 대체하고, 권유가능등급 1차 필터(isRecommendable)도 함께 배선해야 한다.
+     */
+    public static final InvestmentPropensity DEFAULT_PROPENSITY = InvestmentPropensity.NEUTRAL;
+
     /** Q3(상속 vs 소비) → 여유분 소진비율. 0=상속우선 / 1=반반 / 2=소비우선. */
     public static final Map<Integer, BigDecimal> DEPLETION_RATIO = Map.of(
             0, new BigDecimal("0.3"),
