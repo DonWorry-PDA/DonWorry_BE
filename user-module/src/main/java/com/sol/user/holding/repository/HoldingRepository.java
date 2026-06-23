@@ -2,6 +2,7 @@ package com.sol.user.holding.repository;
 
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.entity.Holding;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,6 +11,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public interface HoldingRepository extends JpaRepository<Holding, Long> {
+    @EntityGraph(attributePaths = "account")
+    List<Holding> findByAccountUserUserIdOrderByHoldingIdAsc(Long userId);
+
     @Query(value = """
             SELECT h.holding_id        AS holdingId,
                    fp.product_name     AS productName,
