@@ -24,9 +24,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class SalaryAssetService {
-    private static final List<String> PENSION_TYPES = List.of("IRP", "PENSION_SAVING");
-    private static final List<String> DEPOSIT_TYPES = List.of("DEPOSIT");
-    private static final List<String> INVESTMENT_TYPES = List.of("BROKERAGE");
+    private static final List<String> PENSION_TYPES = List.of("IRP", "PENSION_SAVING", "RETIREMENT_PENSION", "PERSONAL_PENSION");
+    private static final List<String> DEPOSIT_TYPES = List.of("DEPOSIT", "DEPOSIT_SAVING");
+    private static final List<String> INVESTMENT_TYPES = List.of("BROKERAGE", "STOCK_ETF_FUND");
 
     private static final String CATEGORY_PENSION = "PENSION";
     private static final String CATEGORY_DEPOSIT = "DEPOSIT";
