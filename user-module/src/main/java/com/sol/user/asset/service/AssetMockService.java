@@ -168,23 +168,25 @@ public class AssetMockService {
         if (brokerage == null || seeds.isEmpty()) {
             return List.of();
         }
+        Map<String, Long> tickerToProductId;
         try {
-            Map<String, Long> tickerToProductId = etfPoolProvider.getPool().stream()
+            tickerToProductId = etfPoolProvider.getPool().stream()
                     .filter(info -> info.productId() != null)
                     .collect(Collectors.toMap(EtfInfo::ticker, EtfInfo::productId, (a, b) -> a));
-            List<Holding> existing = holdingRepository.findByAccountIn(List.of(brokerage));
-            holdingRepository.deleteAll(existing);
-            List<Holding> desired = seeds.stream()
-                    .map(seed -> {
-                        Long productId = tickerToProductId.get(seed.ticker());
-                        return productId != null ? new Holding(brokerage, productId, seed.evaluationAmount()) : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .toList();
-            return holdingRepository.saveAll(desired);
         } catch (Exception e) {
             return List.of();
         }
+
+        boolean allMapped = seeds.stream().allMatch(s -> tickerToProductId.containsKey(s.ticker()));
+        if (!allMapped) {
+            throw new IllegalStateException("ETF 풀에 없는 티커가 HoldingSeed에 포함되어 있습니다.");
+        }
+
+        List<Holding> desired = seeds.stream()
+                .map(seed -> new Holding(brokerage, tickerToProductId.get(seed.ticker()), seed.evaluationAmount()))
+                .toList();
+        holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
+        return holdingRepository.saveAll(desired);
     }
 
     private List<Pension> savePensions(User user, Scenario scenario) {
