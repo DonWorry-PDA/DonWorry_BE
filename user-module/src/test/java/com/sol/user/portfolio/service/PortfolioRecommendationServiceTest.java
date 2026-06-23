@@ -73,11 +73,11 @@ class PortfolioRecommendationServiceTest {
 
     private List<EtfInfo> pool() {
         return List.of(
-                new EtfInfo("446720", "SOL 미국배당다우존스", 3,
+                new EtfInfo(null, "446720", "SOL 미국배당다우존스", 3,
                         new BigDecimal("3.50"), "MONTHLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
-                new EtfInfo("452360", "SOL 미국배당다우존스(H)", 2,
+                new EtfInfo(null, "452360", "SOL 미국배당다우존스(H)", 2,
                         new BigDecimal("3.40"), "MONTHLY", BucketRole.RISK, CurrencyExposure.HEDGED),
-                new EtfInfo("476030", "SOL 미국나스닥100", 2,
+                new EtfInfo(null, "476030", "SOL 미국나스닥100", 2,
                         new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED)
         );
     }
