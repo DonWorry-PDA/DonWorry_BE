@@ -27,6 +27,10 @@ solapi:
   api-secret: ${SOLAPI_API_SECRET}
   from-number: ${SOLAPI_FROM_NUMBER}
 
+encryption:
+  secret: ${ENCRYPTION_SECRET}
+  salt: ${ENCRYPTION_SALT}
+
 springdoc:
   swagger-ui:
     path: /api/user/swagger-ui/index.html
