@@ -29,6 +29,8 @@ public class PensionDeferCalculator {
             BigDecimal dividendIncome, BigDecimal targetLivingCost) {
         if (base == null || base.compareTo(BigDecimal.ZERO) <= 0)
             throw new IllegalArgumentException("base must be positive, got: " + base);
+        if (!DEFER_RATE_OPTIONS.contains(deferRate))
+            throw new IllegalArgumentException("deferRate must be one of " + DEFER_RATE_OPTIONS + ", got: " + deferRate);
         if (deferYears < 1)
             throw new IllegalArgumentException("deferYears must be >= 1, got: " + deferYears);
         long during = calcDuringDeferMonthly(base, deferRate);

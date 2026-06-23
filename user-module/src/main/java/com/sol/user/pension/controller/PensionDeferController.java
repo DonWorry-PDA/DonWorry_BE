@@ -1,6 +1,9 @@
 package com.sol.user.pension.controller;
 
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.common.response.ApiResponse;
+import com.sol.user.pension.calculator.PensionDeferCalculator;
 import com.sol.user.pension.dto.PensionDeferResponse;
 import com.sol.user.pension.service.PensionDeferService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +30,9 @@ public class PensionDeferController {
             @RequestAttribute("userId") Long userId,
             @RequestParam @Min(0) @Max(100) int deferRate,
             @RequestParam @Min(1) @Max(5) int deferYears) {
+        if (!PensionDeferCalculator.DEFER_RATE_OPTIONS.contains(deferRate)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
         return ResponseEntity.ok(
             ApiResponse.ok(pensionDeferService.compare(userId, deferRate, deferYears)));
     }

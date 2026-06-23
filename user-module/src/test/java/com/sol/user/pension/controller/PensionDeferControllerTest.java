@@ -60,11 +60,8 @@ class PensionDeferControllerTest {
     }
 
     @Test
-    @DisplayName("잘못된 deferRate → 서비스 INVALID_INPUT → 400")
+    @DisplayName("허용되지 않는 deferRate(30) → 컨트롤러 INVALID_INPUT → 400")
     void compare_invalidDeferRate_returns400() throws Exception {
-        when(pensionDeferService.compare(1L, 30, 5))
-            .thenThrow(new BaseException(ErrorCode.INVALID_INPUT));
-
         mockMvc.perform(get("/api/user/asset/pension-defer")
                 .requestAttr("userId", 1L)
                 .param("deferRate", "30")

@@ -49,7 +49,7 @@ public class PensionDeferService {
             .orElseThrow(() -> new BaseException(ErrorCode.USER_GOAL_NOT_FOUND));
 
         if (targetLivingCost == null || targetLivingCost.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BaseException(ErrorCode.USER_GOAL_NOT_FOUND);
+            throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
         List<PensionDeferComparisonRow> rows =
