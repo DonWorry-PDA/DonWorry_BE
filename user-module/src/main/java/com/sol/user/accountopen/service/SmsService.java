@@ -38,8 +38,12 @@ public class SmsService {
         try {
             messageService.send(message);
         } catch (Exception e) {
-            log.error("SMS 발송 실패 - phone: {}", phone, e);
+            log.error("SMS 발송 실패 - phone: {}", maskPhone(phone), e);
             throw new BaseException(ErrorCode.SMS_SEND_FAILED);
         }
+    }
+
+    private String maskPhone(String phone) {
+        return phone.replaceAll("(\\d{3}-)(\\d{4})(-\\d{4})", "$1****$3");
     }
 }
