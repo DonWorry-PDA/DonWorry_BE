@@ -92,15 +92,16 @@ public class EtfService {
         if (productIds == null || productIds.isEmpty()) {
             return List.of();
         }
+        List<Long> distinctIds = productIds.stream().distinct().toList();
         Map<Long, DividendHistory> latestDividendMap = dividendHistoryRepository
-                .findLatestByProductIds(productIds).stream()
+                .findLatestByProductIds(distinctIds).stream()
                 .collect(Collectors.toMap(
                         d -> d.getProduct().getProductId(),
                         Function.identity(),
                         (first, ignored) -> first
                 ));
 
-        return etfDetailRepository.findAllByProductProductIdIn(productIds).stream()
+        return etfDetailRepository.findAllByProductProductIdIn(distinctIds).stream()
                 .filter(e -> e.getDistributionIntervalMonths() != null && e.getDistributionIntervalMonths() > 0)
                 .map(e -> {
                     Long productId = e.getProduct().getProductId();
