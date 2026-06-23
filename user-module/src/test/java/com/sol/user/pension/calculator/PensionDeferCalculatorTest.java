@@ -193,6 +193,14 @@ class PensionDeferCalculatorTest {
     }
 
     @Test
+    @DisplayName("calcCoverageRate: dividendIncome=null은 0으로 처리")
+    void calcCoverageRate_nullDividend_treatsAsZero() {
+        int result = calculator.calcCoverageRate(
+            BigDecimal.valueOf(1_200_000), null, BigDecimal.valueOf(2_000_000));
+        assertThat(result).isEqualTo(60);
+    }
+
+    @Test
     @DisplayName("calcCoverageRate: targetLivingCost=0이면 IllegalArgumentException")
     void calcCoverageRate_zeroTarget_throwsIllegalArgument() {
         assertThatThrownBy(() -> calculator.calcCoverageRate(

@@ -115,7 +115,8 @@ public class PensionDeferCalculator {
         if (targetLivingCost == null || targetLivingCost.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("targetLivingCost must be positive, got: " + targetLivingCost);
         }
-        return monthlyPension.add(dividendIncome)
+        BigDecimal dividend = dividendIncome != null ? dividendIncome : BigDecimal.ZERO;
+        return monthlyPension.add(dividend)
             .multiply(BigDecimal.valueOf(100))
             .divide(targetLivingCost, 0, RoundingMode.DOWN)
             .intValue();
