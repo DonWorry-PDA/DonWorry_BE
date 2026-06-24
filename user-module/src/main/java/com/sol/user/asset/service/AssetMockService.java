@@ -413,7 +413,9 @@ public class AssetMockService {
                             holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                    money(6_000_000), money(2_000_000), money(464_000),
+                    // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
+                    // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
+                    money(9_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), money(1_750_000)
             );
         };
