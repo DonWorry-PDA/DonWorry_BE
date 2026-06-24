@@ -8,4 +8,6 @@ public interface HoldingWithProduct {
     Long getProductId();
 
     BigDecimal getEvaluationAmount();
+
+    String getAccountType();
 }
