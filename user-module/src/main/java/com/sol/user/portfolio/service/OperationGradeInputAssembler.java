@@ -10,6 +10,7 @@ import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
 import com.sol.user.portfolio.dto.OperationGradeInput;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
 import com.sol.user.user.entity.User;
@@ -92,6 +93,11 @@ public class OperationGradeInputAssembler {
                 .map(debt -> nullToZero(debt.getMonthlyRepayment()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // 증권 적합성진단(KYC) 성향 — 연동 전이면 null이라 정책 기본값으로 대체. 권유가능등급 필터(#118)의 입력.
+        InvestmentPropensity propensity = user.getInvestmentPropensity() != null
+                ? user.getInvestmentPropensity()
+                : PortfolioConstants.DEFAULT_PROPENSITY;
+
         return OperationGradeInput.builder()
                 .age(user.getAge())
                 .totalAsset(totalAsset)
@@ -105,7 +111,7 @@ public class OperationGradeInputAssembler {
                 .monthlyLoanRepayment(monthlyLoanRepayment)
                 .q1(survey.getQ1())
                 .q2(survey.getQ2())
-                .investmentPropensity(PortfolioConstants.DEFAULT_PROPENSITY)
+                .investmentPropensity(propensity)
                 .build();
     }
 
