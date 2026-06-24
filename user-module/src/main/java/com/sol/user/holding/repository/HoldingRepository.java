@@ -22,7 +22,8 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
     @Query(value = """
             SELECT h.holding_id        AS holdingId,
                    h.product_id        AS productId,
-                   h.evaluation_amount AS evaluationAmount
+                   h.evaluation_amount AS evaluationAmount,
+                   a.account_type      AS accountType
             FROM holding h
             JOIN account a ON h.account_id = a.account_id
             WHERE a.user_id = :userId
@@ -32,6 +33,17 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             @Param("userId") Long userId,
             @Param("accountTypes") List<String> accountTypes
     );
+
+    @Query(value = """
+            SELECT h.holding_id        AS holdingId,
+                   h.product_id        AS productId,
+                   h.evaluation_amount AS evaluationAmount,
+                   a.account_type      AS accountType
+            FROM holding h
+            JOIN account a ON h.account_id = a.account_id
+            WHERE a.user_id = :userId
+            """, nativeQuery = true)
+    List<HoldingWithProduct> findHoldingsWithAccountTypeByUserId(@Param("userId") Long userId);
 
     // 사용자의 전체 보유 종목 (product_id, quantity) — product-module REST로 ETF 여부 판별 후 월 분배금 계산에 사용
     @Query(value = """

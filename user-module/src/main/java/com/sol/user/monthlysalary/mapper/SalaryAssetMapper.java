@@ -48,6 +48,20 @@ public class SalaryAssetMapper {
         return HOLDING_ASSET_KEY_PREFIX + holdingId;
     }
 
+    public String resolveAccountTypeLabel(String accountType) {
+        if (accountType == null) {
+            return "기타";
+        }
+        return switch (accountType) {
+            case "IRP" -> "IRP";
+            case "PENSION_SAVING" -> "연금저축";
+            case "DEPOSIT" -> "예금";
+            case "CMA" -> "CMA";
+            case "BROKERAGE" -> "증권";
+            default -> accountType;
+        };
+    }
+
     private String resolveAccountName(String accountType) {
         if (accountType == null) {
             return null;
@@ -56,6 +70,8 @@ public class SalaryAssetMapper {
             case "IRP" -> "IRP";
             case "PENSION_SAVING" -> "연금저축";
             case "DEPOSIT" -> "정기예금";
+            case "CMA" -> "CMA";
+            case "BROKERAGE" -> "증권계좌";
             default -> accountType;
         };
     }
@@ -68,6 +84,7 @@ public class SalaryAssetMapper {
             case "IRP" -> "연금 계좌";
             case "PENSION_SAVING" -> "세액공제 계좌";
             case "DEPOSIT" -> "예금 이자 수령 자산";
+            case "CMA" -> "수시 입출금 자산";
             default -> null;
         };
     }
@@ -80,7 +97,6 @@ public class SalaryAssetMapper {
             case "ETF" -> "분배금 수령 가능 상품";
             case "FUND" -> "펀드 분배금 가능 상품";
             case "BOND" -> "채권 이자 수령 가능 상품";
-            case "STOCK" -> "배당 수령 가능 상품";
             default -> null;
         };
     }
