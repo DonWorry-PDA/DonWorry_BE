@@ -2,18 +2,16 @@ package com.sol.user.notification.controller;
 
 import com.sol.common.response.ApiResponse;
 import com.sol.user.notification.dto.NotificationResponse;
+import com.sol.user.notification.dto.NotificationSettingResponse;
+import com.sol.user.notification.dto.NotificationSettingToggleRequest;
 import com.sol.user.notification.service.NotificationService;
+import com.sol.user.notification.service.NotificationSettingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -25,6 +23,7 @@ import java.util.List;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationSettingService notificationSettingService;
 
     @Operation(summary = "SSE 알림 구독", description = "실시간 알림 수신을 위한 SSE 연결")
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -52,6 +51,23 @@ public class NotificationController {
             @PathVariable Long notificationId,
             @RequestAttribute("userId") Long userId) {
         notificationService.markAsRead(notificationId, userId);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @Operation(summary = "알림 설정 조회")
+    @GetMapping("/settings")
+    public ResponseEntity<ApiResponse<List<NotificationSettingResponse>>> getSettings(
+            @RequestAttribute("userId") Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(notificationSettingService.getSettings(userId)));
+    }
+
+    @Operation(summary = "알림 설정 토글")
+    @PatchMapping("/settings/{id}")
+    public ResponseEntity<ApiResponse<Void>> toggleSetting(
+            @PathVariable String id,
+            @RequestBody NotificationSettingToggleRequest request,
+            @RequestAttribute("userId") Long userId) {
+        notificationSettingService.toggleSetting(userId, id, request.enabled());
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }
