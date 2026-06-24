@@ -74,6 +74,10 @@ project(':product-module') {
         runtimeOnly 'com.mysql:mysql-connector-j'
 
         implementation 'org.jsoup:jsoup:1.17.2'
+
+        // LS 증권 WebSocket 실시간 시세
+        implementation 'org.springframework.boot:spring-boot-starter-websocket'
+        implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     }
 }
 
