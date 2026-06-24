@@ -132,16 +132,20 @@ public class AlphaCoverageCalculator {
         // 55세 미만이면 연금저축 인출 불가 → 원금소진·수익 모두 0, 전액 상속
         boolean canWithdrawPension = input.age() >= PortfolioConstants.PENSION_WITHDRAWAL_MIN_AGE;
 
-        // ── 원금소진액(세 자산 동일 소진비율) — 상속분/월수령에 함께 쓰이므로 한 곳에 모음 ──
+        BigDecimal dividendFrac = dividendFraction(plan.getPlanDividendRate());
+
+        // ── 소진분/보존분 분리 ──
+        // 소진분: 남은햇수에 걸쳐 인출 → 연금지급식(PMT)으로 "줄어드는 잔액 이자 + 원금 회수"를 함께 계산.
+        //   (직선소진 + 전액이자로 더하던 기존식은 이미 쓴 원금에서 이자가 계속 나오는 이중계상이라 폐기)
+        // 보존분: 영구 보유 → 이자/배당만 수입, 원금은 상속.
         BigDecimal riskDeplete = surplusRisk.multiply(ratio);
         BigDecimal safeDeplete = surplusSafe.multiply(ratio);
         BigDecimal pensionDeplete = canWithdrawPension ? pensionSaving.multiply(ratio) : BigDecimal.ZERO;
+        BigDecimal riskPreserved = surplusRisk.subtract(riskDeplete);
+        BigDecimal safePreserved = surplusSafe.subtract(safeDeplete);
+        BigDecimal pensionPreserved = pensionSaving.subtract(pensionDeplete); // 인출 불가 시 전액 보존
 
-        BigDecimal dividendFrac = dividendFraction(plan.getPlanDividendRate());
-        // 자본차익률 = max(r − 배당률, 0). 파생값(독립 계수 아님), 음수=자본잠식이라 clamp.
-        BigDecimal capitalGainRate = PortfolioConstants.EXPECTED_TOTAL_RETURN.subtract(dividendFrac).max(BigDecimal.ZERO);
-
-        // 지속가능 월수령(원금 보존: 이자·배당만 — 원금소진·자본차익실현 제외)
+        // 지속가능 월수령(원금 전액 보존 가정: 이자·배당만 — 소진/자본차익 제외)
         BigDecimal sustainable = input.monthlyNationalPension()
                 .add(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
                 .add(monthlyYield(surplusSafe, PortfolioConstants.SAFE_RATE))
@@ -150,21 +154,43 @@ public class AlphaCoverageCalculator {
             sustainable = sustainable.add(monthlyYield(pensionSaving, PortfolioConstants.PENSION_SAVING_RATE));
         }
 
-        // 총인출 월수령 = 지속가능 + 원금소진(안전·위험) + 위험 자본차익 실현 + 연금소진
-        BigDecimal total = sustainable
-                .add(monthlyDepletion(safeDeplete, years))
-                .add(monthlyDepletion(riskDeplete, years))
-                .add(monthlyCapitalGain(surplusRisk, capitalGainRate, years));
+        // 총인출 월수령(소진 시나리오): 바닥·보존분은 이자/배당, 소진분은 연금지급식(PMT).
+        //   위험 소진분은 총수익률(r=배당+자본차익)로 연금화 → 자본차익이 소진분 annuity에 내재된다.
+        //   보존분 자본차익은 미실현(상속으로 귀속) → 기존 "전액 surplusRisk capgain" 이중계상 제거.
+        BigDecimal total = input.monthlyNationalPension()
+                .add(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
+                .add(monthlyYield(safePreserved, PortfolioConstants.SAFE_RATE))
+                .add(monthlyAnnuity(safeDeplete, PortfolioConstants.SAFE_RATE, years))
+                .add(monthlyYield(riskPreserved, dividendFrac))
+                .add(monthlyAnnuity(riskDeplete, PortfolioConstants.EXPECTED_TOTAL_RETURN, years));
         if (canWithdrawPension) {
-            total = total.add(monthlyDepletion(pensionDeplete, years));
+            total = total
+                    .add(monthlyYield(pensionPreserved, PortfolioConstants.PENSION_SAVING_RATE))
+                    .add(monthlyAnnuity(pensionDeplete, PortfolioConstants.PENSION_SAVING_RATE, years));
         }
 
-        // 상속분 = 미소진 여유위험 + 미소진 여유안전 + 미소진 연금저축 (자산 보존 일관성 위해 연금저축 포함)
-        BigDecimal inheritance = surplusRisk.subtract(riskDeplete)
-                .add(surplusSafe.subtract(safeDeplete))
-                .add(pensionSaving.subtract(pensionDeplete));
+        // 상속분 = 미소진 여유위험(실질 자본상승 복리) + 미소진 여유안전 + 미소진 연금저축.
+        //   보존 위험분(안 파는 배당주)은 주가가 실질로 오른 만큼 물려줄 자산이 커진다.
+        //   실질자본상승률 = max(총수익 r − 배당률 − 물가, 0). 배당주는 r−배당이 작아 ≈0(매우 보수),
+        //   저배당 성장주만 (+). "무조건 우상향 아님"을 물가 차감 + 0클램프로 구조 반영.
+        //   안전·연금 보존분은 수익(이자)을 이미 수입으로 빼갔으니 원금 그대로(중복성장 방지).
+        BigDecimal realCapitalGainRate = PortfolioConstants.EXPECTED_TOTAL_RETURN
+                .subtract(dividendFrac)
+                .subtract(PortfolioConstants.EXPECTED_INFLATION)
+                .max(BigDecimal.ZERO);
+        BigDecimal riskInheritance = compound(riskPreserved, realCapitalGainRate, years);
+        BigDecimal inheritance = riskInheritance.add(safePreserved).add(pensionPreserved);
 
         return new Computed(sustainable, total, inheritance);
+    }
+
+    /** 원금을 연 성장률로 N년 복리 성장시킨 값(상속가치용). rate≤0이면 원금 그대로. */
+    private BigDecimal compound(BigDecimal principal, BigDecimal annualRate, BigDecimal years) {
+        if (principal.signum() <= 0 || annualRate.signum() <= 0) {
+            return principal.max(BigDecimal.ZERO);
+        }
+        int n = years.intValueExact();
+        return principal.multiply(BigDecimal.ONE.add(annualRate).pow(n));
     }
 
     /** 연 수익(원금 × 연이율)을 월로. rate는 분수(0.035). */
@@ -179,22 +205,23 @@ public class AlphaCoverageCalculator {
     }
 
     /**
-     * 위험 여유분 자본차익 실현분: 원금×((1+cg)^N − 1)을 N년에 걸쳐 월로. cg=자본차익률(분수, 1차 단순식).
-     *
-     * <p>의도적 근사: principal은 소진비율 적용 전 surplusRisk 전액 기준.
-     * 엄밀히는 보존분(surplusRisk−riskDeplete)에만 자본차익을 얹어야 하지만,
-     * 소진분은 점진 매도되므로 평균 절반만 N년 보유 → 현재 식은 과대 계상.
-     * mock 연동 후 D2 정교화(별도 이슈)에서 수정 예정.
+     * 소진분 연금지급식 월수령. 연 PMT = PV·r / (1 − (1+r)^−N), 월수령 = 연PMT / 12.
+     * "줄어드는 잔액에서 받는 이자 + 원금 회수"를 한 식으로 합쳐, 직선소진+전액이자 이중계상을 제거한다.
+     * r은 자산별 총수익률(안전 SAFE_RATE, 위험 EXPECTED_TOTAL_RETURN, 연금 PENSION_SAVING_RATE).
      */
-    private BigDecimal monthlyCapitalGain(BigDecimal principal, BigDecimal capitalGainRate, BigDecimal years) {
-        if (principal.signum() <= 0 || capitalGainRate.signum() <= 0) {
+    private BigDecimal monthlyAnnuity(BigDecimal principal, BigDecimal annualRate, BigDecimal years) {
+        if (principal.signum() <= 0) {
             return BigDecimal.ZERO;
         }
+        if (annualRate.signum() <= 0) {
+            return monthlyDepletion(principal, years); // 이율 0이면 단순 직선소진으로 폴백
+        }
         int n = years.intValueExact();
-        BigDecimal growth = BigDecimal.ONE.add(capitalGainRate).pow(n).subtract(BigDecimal.ONE);
-        return principal.multiply(growth)
-                .divide(years, CALC_SCALE, RoundingMode.HALF_UP)
-                .divide(TWELVE, CALC_SCALE, RoundingMode.HALF_UP);
+        BigDecimal discountFactor = BigDecimal.ONE
+                .divide(BigDecimal.ONE.add(annualRate).pow(n), CALC_SCALE, RoundingMode.HALF_UP);
+        BigDecimal annualPmt = principal.multiply(annualRate)
+                .divide(BigDecimal.ONE.subtract(discountFactor), CALC_SCALE, RoundingMode.HALF_UP);
+        return annualPmt.divide(TWELVE, CALC_SCALE, RoundingMode.HALF_UP);
     }
 
     /** 배당률(plan 가중평균, %단위 예: 2.7750)을 분수로 변환. */

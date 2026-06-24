@@ -38,7 +38,7 @@ class NotificationRepositoryTest {
                 .build();
         notificationRepository.save(notification);
 
-        List<Notification> result = notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(user.getUserId());
+        List<Notification> result = notificationRepository.findTop100ByUserUserIdOrderByCreatedAtDesc(user.getUserId());
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getNotificationType()).isEqualTo(NotificationType.BALANCE_ALERT);
@@ -59,7 +59,7 @@ class NotificationRepositoryTest {
                 .content("삼성전자 배당금이 내일 지급됩니다.")
                 .build());
 
-        List<Notification> result = notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(userB.getUserId());
+        List<Notification> result = notificationRepository.findTop100ByUserUserIdOrderByCreatedAtDesc(userB.getUserId());
 
         assertThat(result).isEmpty();
     }
