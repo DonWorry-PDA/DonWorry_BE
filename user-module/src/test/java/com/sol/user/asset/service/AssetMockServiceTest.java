@@ -130,6 +130,34 @@ class AssetMockServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void assignsAccountNumberByTypeSoDriftedLegacyDataDoesNotCollide() {
+        User user = mock(User.class);
+        when(user.getUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        // 드리프트된 레거시: BROKERAGE 계정이 인덱스1 번호(MOCK-1-1)를 점유.
+        // (과거 인덱스 기반 번호 부여 + 시나리오 자산 순서 변경의 잔존 상태)
+        Account drifted = new Account(
+                user, "BROKERAGE", "신한투자증권", "MOCK-1-1", BigDecimal.valueOf(80_000_000), true);
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(drifted));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(accountRepository).saveAll(captor.capture());
+        List<Account> saved = toList((Iterable<Account>) captor.getValue());
+
+        // 모든 account_number가 accountType 기준으로 부여되고 서로 충돌하지 않는다.
+        assertThat(saved).allSatisfy(account ->
+                assertThat(account.getAccountNumber())
+                        .isEqualTo("MOCK-1-" + account.getAccountType()));
+        assertThat(saved).extracting(Account::getAccountNumber).doesNotHaveDuplicates();
+        // 드리프트된 BROKERAGE는 매칭되어 번호가 재정렬되고 MOCK-1-1을 더는 보유하지 않는다.
+        assertThat(saved).extracting(Account::getAccountNumber).doesNotContain("MOCK-1-1");
+    }
+
+    @Test
     void recalculatesLifeStabilityAfterSync() {
         User user = mock(User.class);
         when(userRepository.findById(3L)).thenReturn(Optional.of(user));

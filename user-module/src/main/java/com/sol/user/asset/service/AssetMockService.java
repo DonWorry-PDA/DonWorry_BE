@@ -160,10 +160,16 @@ public class AssetMockService {
                         && account.getAccountNumber().startsWith("MOCK-"))
                 .toList();
         List<Account> desired = new ArrayList<>();
-        for (int i = 0; i < seeds.size(); i++) {
-            AssetSeed seed = seeds.get(i);
+        for (AssetSeed seed : seeds) {
+            // account_number를 accountType 기준으로 부여한다(#130).
+            // 과거엔 시드 인덱스(MOCK-{userId}-{i+1}) 기반이라, 시나리오 자산 목록/순서가
+            // 바뀐 레거시 데이터에서는 upsert 매칭 키(accountType)와 번호가 어긋났다.
+            // 그 경우 한 계정은 신규 INSERT로, 다른 기존 계정은 같은 번호를 보유한 채
+            // UPDATE로 처리되는데, Hibernate가 INSERT를 UPDATE보다 먼저 flush 하면서
+            // account_number 유니크 충돌(500)이 발생했다. 번호를 타입 기준으로 고정하면
+            // 매칭 키와 번호가 항상 일치해 재동기화가 멱등해지고 충돌이 원천 차단된다.
             desired.add(new Account(user, seed.category(), seed.institutionName(),
-                    "MOCK-" + userId + "-" + (i + 1), seed.amount(), true));
+                    "MOCK-" + userId + "-" + seed.category(), seed.amount(), true));
         }
         return upsertByKey(existing, desired, Account::getAccountType,
                 (target, seed) -> target.updateMock(seed.getInstitutionName(),
@@ -414,7 +420,9 @@ public class AssetMockService {
                             holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                    money(6_000_000), money(2_000_000), money(464_000),
+                    // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
+                    // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
+                    money(9_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), money(1_750_000)
             );
         };
