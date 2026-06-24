@@ -50,4 +50,9 @@ public class UserGoal {
         this.monthlyExpectedMedicalCost = monthlyExpectedMedicalCost;
         this.updatedAt = now;
     }
+
+    public void updateTargetLivingCost(BigDecimal monthlyTargetLivingCost, LocalDateTime now) {
+        this.monthlyTargetLivingCost = monthlyTargetLivingCost;
+        this.updatedAt = now;
+    }
 }
