@@ -68,6 +68,47 @@ class PortfolioAllocationCalculatorTest {
         assertThat(stable.getPlanDividendRate()).isEqualByComparingTo("3.5000");
     }
 
+    // ── #118 권유가능등급 필터: 안정형/안정추구형은 위험버킷이 비고 안전으로 흡수된다 ──────
+
+    @Test
+    void 안정형은_위험버킷이_비고_위험액이_안전으로_흡수된다() {
+        // STABLE(권유최소등급5)은 NEUTRAL tier로 매핑되나, 위험코어 446720(등급3)은 권유 불가 → 위험 0
+        AllocationResult result = calculator.calculate(stableInput(3));
+
+        assertThat(result.getPlans()).extracting(PlanAllocation::getType)
+                .containsExactly(PlanType.STABLE, PlanType.LIQUIDITY); // NEUTRAL tier 안 구성
+
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+        assertThat(riskHoldings(stable)).isEmpty();
+        assertThat(stable.getRiskTarget()).isEqualByComparingTo("0");
+        assertThat(stable.getPlanDividendRate()).isEqualByComparingTo("0");
+        // 위험 0 → 안전목표 = 총자산 − 연금저축 − 단기버킷(안정안은 0)
+        assertThat(stable.getSafeTarget()).isEqualByComparingTo("600000000.00");
+        // 안전버킷이 모든 금액을 흡수(합 = safeTarget)
+        BigDecimal safeSum = safeHoldings(stable).stream()
+                .map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(safeSum).isEqualByComparingTo(stable.getSafeTarget());
+    }
+
+    @Test
+    void 안정추구형도_위험등급_초과상품이_배분되지_않는다() {
+        // STABLE_SEEKING(권유최소등급4) — 446720(등급3) < 4 → 권유 불가
+        AllocationResult result = calculator.calculate(stableSeekingInput(3));
+
+        assertThat(result.getPlans()).allSatisfy(p ->
+                assertThat(riskHoldings(p)).isEmpty());
+    }
+
+    @Test
+    void 위험중립형은_권유가능_위험상품을_여전히_배분받는다() {
+        // 회귀: NEUTRAL(권유최소등급3) — 446720(등급3) >= 3 → 권유 가능, 필터는 no-op
+        AllocationResult result = calculator.calculate(neutralInput(3));
+
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+        assertThat(riskHoldings(stable)).extracting(Holding::ticker).containsExactly("446720");
+        assertThat(stable.getRiskTarget()).isGreaterThan(BigDecimal.ZERO);
+    }
+
     // ── 구조적 부족: 여유분<=0 → 트랙 전환, 3안 스킵 ──────────────────────────────
 
     @Test
@@ -182,6 +223,14 @@ class PortfolioAllocationCalculatorTest {
 
     private AllocationInput neutralInput(int grade) {
         return baseBuilder(grade).propensity(InvestmentPropensity.NEUTRAL).build();
+    }
+
+    private AllocationInput stableInput(int grade) {
+        return baseBuilder(grade).propensity(InvestmentPropensity.STABLE).build();
+    }
+
+    private AllocationInput stableSeekingInput(int grade) {
+        return baseBuilder(grade).propensity(InvestmentPropensity.STABLE_SEEKING).build();
     }
 
     private AllocationInput.AllocationInputBuilder baseBuilder(int grade) {
