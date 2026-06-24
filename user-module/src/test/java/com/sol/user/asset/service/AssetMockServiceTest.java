@@ -13,6 +13,7 @@ import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -56,7 +57,8 @@ class AssetMockServiceTest {
     @ParameterizedTest
     @MethodSource("scenarios")
     void createsScenarioWithSpecifiedSummary(MockType mockType, long totalAsset,
-                                             long totalDebt, long netAsset, int holdingCount) {
+                                             long totalDebt, long netAsset, int holdingCount,
+                                             InvestmentPropensity expectedPropensity) {
         User user = mock(User.class);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         returnArgumentsFromSaveAll();
@@ -69,7 +71,8 @@ class AssetMockServiceTest {
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
         assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(7);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
-
+        // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력
+        verify(user).assignInvestmentPropensity(expectedPropensity);
     }
 
     @Test
@@ -145,9 +148,12 @@ class AssetMockServiceTest {
 
     private static Stream<Arguments> scenarios() {
         return Stream.of(
-                Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 2),
-                Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 2),
-                Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 3)
+                Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 2,
+                        InvestmentPropensity.ACTIVE),
+                Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 2,
+                        InvestmentPropensity.NEUTRAL),
+                Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 3,
+                        InvestmentPropensity.STABLE)
         );
     }
 
