@@ -2,6 +2,7 @@ package com.sol.user.monthlysalary.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.repository.HoldingRepository;
@@ -20,25 +21,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class SalaryAssetService {
-    private static final List<String> PENSION_TYPES = List.of("IRP", "PENSION_SAVING");
-    private static final List<String> DEPOSIT_TYPES = List.of("DEPOSIT");
-    private static final List<String> INVESTMENT_TYPES = List.of("BROKERAGE");
 
-    private static final String CATEGORY_PENSION = "PENSION";
-    private static final String CATEGORY_DEPOSIT = "DEPOSIT";
-    private static final String CATEGORY_INVESTMENT = "INVESTMENT";
-
-    private static final String CATEGORY_LABEL_PENSION = "연금";
-    private static final String CATEGORY_LABEL_DEPOSIT = "예금";
-    private static final String CATEGORY_LABEL_INVESTMENT = "투자";
+    private static final String DON_WORRY_TYPE = "DON_WORRY";
+    private static final String STOCK_PRODUCT_TYPE = "STOCK";
 
     private final AccountRepository accountRepository;
     private final HoldingRepository holdingRepository;
@@ -85,58 +76,45 @@ public class SalaryAssetService {
     }
 
     private List<AssetGroupDto> buildAssetGroups(Long userId, Set<String> excludedKeys) {
-        return List.of(
-                buildPensionGroup(userId, excludedKeys),
-                buildDepositGroup(userId, excludedKeys),
-                buildInvestmentGroup(userId, excludedKeys)
-        );
-    }
+        Map<String, List<AssetItemDto>> itemsByType = new LinkedHashMap<>();
 
-    private AssetGroupDto buildPensionGroup(Long userId, Set<String> excludedKeys) {
-        List<AssetItemDto> items =
-                accountRepository.findByUserUserIdAndAccountTypeIn(userId, PENSION_TYPES)
-                        .stream()
-                        .map(account -> salaryAssetMapper.toAccountItem(account, excludedKeys))
-                        .toList();
+        // 계좌 (DON_WORRY 제외) → accountType별 그루핑
+        accountRepository.findByUserUserIdAndAccountTypeNot(userId, DON_WORRY_TYPE)
+                .forEach(account -> {
+                    String type = account.getAccountType();
+                    itemsByType.computeIfAbsent(type, k -> new ArrayList<>())
+                            .add(salaryAssetMapper.toAccountItem(account, excludedKeys));
+                });
 
-        return AssetGroupDto.builder()
-                .category(CATEGORY_PENSION)
-                .categoryLabel(CATEGORY_LABEL_PENSION)
-                .items(items)
-                .build();
-    }
+        // 보유 종목 (STOCK 제외) → account의 accountType별 그루핑
+        List<HoldingWithProduct> allHoldings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
 
-    private AssetGroupDto buildDepositGroup(Long userId, Set<String> excludedKeys) {
-        List<AssetItemDto> items =
-                accountRepository.findByUserUserIdAndAccountTypeIn(userId, DEPOSIT_TYPES)
-                        .stream()
-                        .map(account -> salaryAssetMapper.toAccountItem(account, excludedKeys))
-                        .toList();
+        if (!allHoldings.isEmpty()) {
+            Map<Long, ProductBatchItem> productMap = productBatchClient.fetchProducts(
+                    allHoldings.stream().map(HoldingWithProduct::getProductId).toList()
+            );
 
-        return AssetGroupDto.builder()
-                .category(CATEGORY_DEPOSIT)
-                .categoryLabel(CATEGORY_LABEL_DEPOSIT)
-                .items(items)
-                .build();
-    }
+            allHoldings.stream()
+                    .filter(h -> !isStockProduct(productMap.get(h.getProductId())))
+                    .forEach(holding -> {
+                        String type = holding.getAccountType();
+                        itemsByType.computeIfAbsent(type, k -> new ArrayList<>())
+                                .add(salaryAssetMapper.toHoldingItem(
+                                        holding, productMap.get(holding.getProductId()), excludedKeys));
+                    });
+        }
 
-    private AssetGroupDto buildInvestmentGroup(Long userId, Set<String> excludedKeys) {
-        List<HoldingWithProduct> holdings = holdingRepository.findByUserIdAndAccountTypes(userId, INVESTMENT_TYPES);
-
-        Map<Long, ProductBatchItem> productMap = productBatchClient.fetchProducts(
-                holdings.stream().map(HoldingWithProduct::getProductId).toList()
-        );
-
-        List<AssetItemDto> items = holdings.stream()
-                .map(holding -> salaryAssetMapper.toHoldingItem(
-                        holding, productMap.get(holding.getProductId()), excludedKeys))
+        return itemsByType.entrySet().stream()
+                .map(entry -> AssetGroupDto.builder()
+                        .category(entry.getKey())
+                        .categoryLabel(salaryAssetMapper.resolveAccountTypeLabel(entry.getKey()))
+                        .items(entry.getValue())
+                        .build())
                 .toList();
+    }
 
-        return AssetGroupDto.builder()
-                .category(CATEGORY_INVESTMENT)
-                .categoryLabel(CATEGORY_LABEL_INVESTMENT)
-                .items(items)
-                .build();
+    private boolean isStockProduct(ProductBatchItem product) {
+        return product != null && STOCK_PRODUCT_TYPE.equals(product.productType());
     }
 
     private void validateRequestedAssetKeys(Long userId, List<String> requestedAssetKeys) {
@@ -157,14 +135,21 @@ public class SalaryAssetService {
     private Set<String> getAvailableAssetKeys(Long userId) {
         Set<String> availableAssetKeys = new HashSet<>();
 
-        accountRepository.findByUserUserIdAndAccountTypeIn(userId, PENSION_TYPES)
-                .forEach(account -> availableAssetKeys.add(salaryAssetMapper.createAccountAssetKey(account.getAccountId())));
+        accountRepository.findByUserUserIdAndAccountTypeNot(userId, DON_WORRY_TYPE)
+                .forEach(account -> availableAssetKeys.add(
+                        salaryAssetMapper.createAccountAssetKey(account.getAccountId())));
 
-        accountRepository.findByUserUserIdAndAccountTypeIn(userId, DEPOSIT_TYPES)
-                .forEach(account -> availableAssetKeys.add(salaryAssetMapper.createAccountAssetKey(account.getAccountId())));
+        List<HoldingWithProduct> allHoldings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
 
-        holdingRepository.findByUserIdAndAccountTypes(userId, INVESTMENT_TYPES)
-                .forEach(holding -> availableAssetKeys.add(salaryAssetMapper.createHoldingAssetKey(holding.getHoldingId())));
+        if (!allHoldings.isEmpty()) {
+            Map<Long, ProductBatchItem> productMap = productBatchClient.fetchProducts(
+                    allHoldings.stream().map(HoldingWithProduct::getProductId).toList()
+            );
+            allHoldings.stream()
+                    .filter(h -> !isStockProduct(productMap.get(h.getProductId())))
+                    .forEach(h -> availableAssetKeys.add(
+                            salaryAssetMapper.createHoldingAssetKey(h.getHoldingId())));
+        }
 
         return availableAssetKeys;
     }
