@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -137,7 +138,9 @@ class PortfolioRecommendationIntegrationTest {
                     ++productId,
                     ticker,
                     "SOL " + ticker,
-                    PortfolioConstants.RISK_GRADE.getOrDefault(ticker, 3),
+                    Objects.requireNonNull(
+                            PortfolioConstants.RISK_GRADE.get(ticker),
+                            "Missing risk grade mapping for ticker: " + ticker),
                     new BigDecimal("3.00"),
                     "MONTHLY",
                     PortfolioConstants.roleOf(ticker),

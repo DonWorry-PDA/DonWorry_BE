@@ -121,16 +121,7 @@ class PersonaSimulationTest {
     private CoverageResult run(String name, OperationGradeInput input, int q3, BigDecimal otherIncome) {
         OperationGradeResult grade = gradeCalc.calculate(input);
 
-        AllocationInput allocInput = AllocationInput.builder()
-                .finalGrade(grade.getFinalGrade())
-                .surplus(grade.getSurplus())
-                .floorAsset(grade.getFloorAsset())
-                .totalAsset(input.totalAsset())
-                .pensionSaving(input.pensionSaving())
-                .propensity(input.investmentPropensity())
-                .shortTermBucket(BigDecimal.ZERO)
-                .pool(pool())
-                .build();
+        AllocationInput allocInput = allocationInput(grade, input);
         AllocationResult alloc = allocCalc.calculate(allocInput);
 
         CoverageInput covInput = CoverageInput.builder()
