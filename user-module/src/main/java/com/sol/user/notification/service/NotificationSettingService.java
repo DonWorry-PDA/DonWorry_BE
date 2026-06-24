@@ -33,7 +33,7 @@ public class NotificationSettingService {
     @Transactional
     public void toggleSetting(Long userId, String id, boolean enabled) {
         if (!VALID_IDS.contains(id)) {
-            throw new BaseException(ErrorCode.NOTIFICATION_SETTING_NOT_FOUND);
+            throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         NotificationSetting setting = notificationSettingRepository.findById(userId)
                 .orElseGet(() -> createDefault(userId));
