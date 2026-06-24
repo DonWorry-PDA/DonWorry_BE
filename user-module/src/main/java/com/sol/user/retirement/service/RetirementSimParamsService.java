@@ -36,7 +36,9 @@ public class RetirementSimParamsService {
                 .setScale(0, RoundingMode.HALF_UP);
 
         BigDecimal monthlyLiving = userGoalRepository.findByUserUserId(userId)
-                .map(UserGoal::getMonthlyTargetLivingCost)
+                .map(g -> g.getMonthlyTargetLivingCost() != null
+                        ? g.getMonthlyTargetLivingCost()
+                        : BigDecimal.ZERO)
                 .orElse(BigDecimal.ZERO)
                 .setScale(0, RoundingMode.HALF_UP);
 

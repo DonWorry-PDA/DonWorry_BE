@@ -104,6 +104,22 @@ class RetirementSimParamsServiceTest {
     }
 
     @Test
+    @DisplayName("UserGoal이 있어도 monthlyTargetLivingCost가 null이면 0을 반환한다")
+    void getParams_userGoalPresentButLivingCostNull_returnsZero() {
+        User user = mock(User.class);
+        when(user.getAge()).thenReturn(50);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of());
+        UserGoal goalWithNullCost = new UserGoal(user, null, null, LocalDateTime.now());
+        when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.of(goalWithNullCost));
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of());
+
+        RetirementSimParamsResponse result = service.getParams(1L);
+
+        assertThat(result.monthlyLivingKrw()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 userId이면 BaseException을 던진다")
     void getParams_userNotFound_throwsException() {
         when(userRepository.findById(99L)).thenReturn(Optional.empty());
