@@ -14,6 +14,7 @@ import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,6 +52,7 @@ class AssetMockServiceTest {
     @Mock InsurancePolicyRepository insurancePolicyRepository;
     @Mock HoldingRepository holdingRepository;
     @Mock EtfPoolProvider etfPoolProvider;
+    @Mock LifeStabilityService lifeStabilityService;
 
     @InjectMocks AssetMockService assetMockService;
 
@@ -125,6 +127,17 @@ class AssetMockServiceTest {
         // userId 3 → STABLE (총자산 4억 3,500만, 무부채)
         assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("435000000");
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void recalculatesLifeStabilityAfterSync() {
+        User user = mock(User.class);
+        when(userRepository.findById(3L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.sync(3L);
+
+        verify(lifeStabilityService).recalculateFromUserDataIfReady(3L);
     }
 
     private void returnArgumentsFromSaveAll() {
