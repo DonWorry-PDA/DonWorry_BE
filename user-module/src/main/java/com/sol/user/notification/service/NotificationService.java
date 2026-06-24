@@ -55,7 +55,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationResponse> getNotifications(Long userId) {
-        return notificationRepository.findTop10ByUserUserIdOrderByCreatedAtDesc(userId)
+        return notificationRepository.findTop100ByUserUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(NotificationResponse::from)
                 .toList();

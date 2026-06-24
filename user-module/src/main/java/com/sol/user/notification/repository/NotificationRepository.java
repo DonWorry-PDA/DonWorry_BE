@@ -12,7 +12,7 @@ import java.util.List;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    List<Notification> findTop10ByUserUserIdOrderByCreatedAtDesc(Long userId);
+    List<Notification> findTop100ByUserUserIdOrderByCreatedAtDesc(Long userId);
 
     @Modifying
     @Query("UPDATE Notification n SET n.read = true WHERE n.user.userId = :userId AND n.read = false")

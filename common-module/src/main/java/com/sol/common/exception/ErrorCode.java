@@ -22,6 +22,7 @@ public enum ErrorCode {
 
     // Notification
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_001", "알림을 찾을 수 없습니다."),
+    NOTIFICATION_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_002", "알림 설정을 찾을 수 없습니다."),
 
     // Auth
     AUTH_001(HttpStatus.UNAUTHORIZED, "AUTH_001", "인증에 실패했습니다"),
