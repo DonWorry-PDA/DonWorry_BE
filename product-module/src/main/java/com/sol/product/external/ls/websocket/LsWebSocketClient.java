@@ -146,7 +146,10 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                     String drate = response.body().drate();
                     String sign = response.body().sign();
                     etfRealtimeCache.save(ticker, price, change, drate, sign);
-                    etfPriceWebSocketHandler.broadcast(EtfPricePayload.of(ticker, price, change, drate, sign));
+                    EtfPricePayload pricePayload = EtfPricePayload.of(ticker, price, change, drate, sign);
+                    if (pricePayload != null) {
+                        etfPriceWebSocketHandler.broadcast(pricePayload);
+                    }
                 }
             }
         } catch (Exception e) {

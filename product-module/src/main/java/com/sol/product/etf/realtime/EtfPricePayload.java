@@ -14,6 +14,9 @@ public record EtfPricePayload(
         String sign
 ) {
     public static EtfPricePayload of(String ticker, String price, String change, String drate, String sign) {
+        if (price == null || price.isBlank() || change == null || change.isBlank() || drate == null || drate.isBlank()) {
+            return null;
+        }
         return new EtfPricePayload(
                 ticker,
                 Long.parseLong(price.trim()),

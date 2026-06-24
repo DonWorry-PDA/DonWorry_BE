@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -25,10 +26,10 @@ public class EtfClosingPriceScheduler {
     private final EtfDetailRepository etfDetailRepository;
     private final DailyPriceRepository dailyPriceRepository;
 
-    @Scheduled(cron = "0 35 15 * * MON-FRI")
+    @Scheduled(cron = "0 35 15 * * MON-FRI", zone = "Asia/Seoul")
     @Transactional
     public void saveClosingPrices() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
         log.info("ETF 종가 저장 시작: {}", today);
 
         Map<String, EtfDetail> etfByTicker = etfDetailRepository
@@ -38,8 +39,11 @@ public class EtfClosingPriceScheduler {
         int saved = 0;
         for (String ticker : EtfTickerWhitelist.TICKERS) {
             Map<String, String> raw = etfRealtimeCache.getRaw(ticker);
-            if (raw.isEmpty() || raw.get("price") == null || raw.get("price").isBlank()) {
-                log.warn("ETF 종가 Redis 캐시 없음: {}", ticker);
+            String price = raw.get("price");
+            String change = raw.get("change");
+            String drate = raw.get("drate");
+            if (isBlank(price) || isBlank(change) || isBlank(drate)) {
+                log.warn("ETF 종가 Redis 캐시 불완전: {}", ticker);
                 continue;
             }
 
@@ -56,14 +60,18 @@ public class EtfClosingPriceScheduler {
             dailyPriceRepository.save(DailyPrice.builder()
                     .product(etfDetail.getProduct())
                     .priceDate(today)
-                    .closingPrice(new BigDecimal(raw.get("price")))
-                    .priceChange(new BigDecimal(raw.get("change")))
-                    .changeRate(new BigDecimal(raw.get("drate")))
+                    .closingPrice(new BigDecimal(price))
+                    .priceChange(new BigDecimal(change))
+                    .changeRate(new BigDecimal(drate))
                     .build());
 
             saved++;
         }
 
         log.info("ETF 종가 저장 완료: {}건 / {}개 티커", saved, EtfTickerWhitelist.TICKERS.size());
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

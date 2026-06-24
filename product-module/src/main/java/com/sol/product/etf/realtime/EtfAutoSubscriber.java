@@ -7,6 +7,8 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -17,15 +19,17 @@ public class EtfAutoSubscriber {
     @EventListener(ApplicationReadyEvent.class)
     public void autoSubscribe() {
         log.info("ETF 실시간 구독 시작: {}개", EtfTickerWhitelist.TICKERS.size());
-        for (String ticker : EtfTickerWhitelist.TICKERS) {
-            lsWebSocketClient.subscribe(ticker);
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
+        CompletableFuture.runAsync(() -> {
+            for (String ticker : EtfTickerWhitelist.TICKERS) {
+                lsWebSocketClient.subscribe(ticker);
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
-        }
-        log.info("ETF 실시간 구독 등록 완료");
+            log.info("ETF 실시간 구독 등록 완료");
+        });
     }
 }

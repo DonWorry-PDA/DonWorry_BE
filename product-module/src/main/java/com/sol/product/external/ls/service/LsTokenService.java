@@ -2,9 +2,11 @@ package com.sol.product.external.ls.service;
 
 import com.sol.product.external.ls.LsProperties;
 import com.sol.product.external.ls.dto.LsTokenResponse;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -20,7 +22,15 @@ public class LsTokenService {
 
     private final LsProperties lsProperties;
     private final StringRedisTemplate redisTemplate;
-    private final RestClient restClient = RestClient.create();
+    private RestClient restClient;
+
+    @PostConstruct
+    public void init() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
+    }
 
     public String getToken() {
         String cached = redisTemplate.opsForValue().get(REDIS_TOKEN_KEY);
@@ -47,6 +57,10 @@ public class LsTokenService {
                 .body(body)
                 .retrieve()
                 .body(LsTokenResponse.class);
+
+        if (response == null || response.accessToken() == null || response.accessToken().isBlank()) {
+            throw new IllegalStateException("LS증권 토큰 발급 실패: 빈 응답");
+        }
 
         redisTemplate.opsForValue().set(
                 REDIS_TOKEN_KEY,
