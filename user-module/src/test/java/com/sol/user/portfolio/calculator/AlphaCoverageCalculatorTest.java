@@ -12,6 +12,7 @@ import com.sol.user.portfolio.type.RecommendationTrack;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,6 +129,43 @@ class AlphaCoverageCalculatorTest {
 
         BigDecimal conserved = stable.getInheritanceAmount().add(principalDepleted).add(floorAsset);
         assertThat(conserved).isEqualByComparingTo(totalAsset);
+    }
+
+    // ── 저배당: 보존 위험자산이 실질 자본성장으로 상속에 복리 반영 (compound() 성장경로) ──
+
+    @Test
+    void 저배당_보존위험자산은_실질자본성장률로_상속에_복리반영된다() {
+        // 배당 0.5% → realCapitalGainRate = 4.5%(총수익) − 0.5%(배당) − 2%(물가) = 2% > 0
+        //   → compound() 성장경로 진입(배당 3%면 음수라 0클램프되어 이 분기가 안 탔음).
+        // 안전·연금·바닥을 0으로 두어 위험 보존분 성장만 상속에 남도록 분리한다.
+        PlanAllocation lowDividend = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.valueOf(100_000_000))
+                .surplusSafeAmount(BigDecimal.ZERO)
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("0.5000"))
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .q3(0) // 상속우선: 소진비율 0.3 → 위험 보존분 0.7
+                .pensionSaving(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.ZERO)
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL)
+                        .plans(List.of(lowDividend))
+                        .build())
+                .build();
+
+        PlanCoverage pc = calculator.calculate(input).getPlanCoverages().get(0);
+
+        // 보존 위험원금 = 1억 × (1 − 0.3) = 7천만. 성장이 적용됐다면 상속이 원금을 초과해야 한다.
+        BigDecimal preservedRiskPrincipal = BigDecimal.valueOf(70_000_000);
+        assertThat(pc.getInheritanceAmount()).isGreaterThan(preservedRiskPrincipal);
+        // 정확값 고정: 7천만 × (1 + 2%)^20 (remainingYears=20). 물가차감·지수가 바뀌면 깨지도록 상수 직기입.
+        BigDecimal expected = preservedRiskPrincipal
+                .multiply(BigDecimal.ONE.add(new BigDecimal("0.02")).pow(20))
+                .setScale(2, RoundingMode.HALF_UP);
+        assertThat(pc.getInheritanceAmount()).isEqualByComparingTo(expected);
     }
 
     // ── helper ────────────────────────────────────────────────────────────────
