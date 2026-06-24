@@ -1,4 +1,15 @@
+ls:
+  api:
+    base-url: https://openapi.ls-sec.co.kr:8080
+    ws-url: wss://openapi.ls-sec.co.kr:9443/websocket
+    app-key: ${LS_APP_KEY}
+    app-secret: ${LS_APP_SECRET}
+
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
