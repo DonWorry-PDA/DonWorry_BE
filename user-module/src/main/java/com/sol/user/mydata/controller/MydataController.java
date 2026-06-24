@@ -1,6 +1,8 @@
 package com.sol.user.mydata.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.user.mydata.dto.InstitutionConnectRequest;
+import com.sol.user.mydata.dto.InstitutionConnectResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
 import com.sol.user.mydata.dto.MydataAccountResponse;
 import com.sol.user.mydata.dto.MydataHoldingResponse;
@@ -10,11 +12,14 @@ import com.sol.user.mydata.service.InstitutionService;
 import com.sol.user.mydata.service.MydataQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,6 +41,14 @@ public class MydataController {
     public ResponseEntity<ApiResponse<List<InstitutionResponse>>> getInstitutions(
             @RequestAttribute("userId") Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(institutionService.getInstitutions(userId)));
+    }
+
+    @Operation(summary = "금융기관 연결")
+    @PostMapping("/connect")
+    public ResponseEntity<ApiResponse<InstitutionConnectResponse>> connect(
+            @RequestAttribute("userId") Long userId,
+            @RequestBody @Valid InstitutionConnectRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(institutionService.connect(userId, request.institutionIds())));
     }
 
     @Operation(summary = "연결 계좌 목록 조회")

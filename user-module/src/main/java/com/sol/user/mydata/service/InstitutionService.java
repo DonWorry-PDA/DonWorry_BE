@@ -1,15 +1,22 @@
 package com.sol.user.mydata.service;
 
+import com.sol.common.exception.BaseException;
+import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.mydata.dto.InstitutionConnectResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
 import com.sol.user.mydata.type.InstitutionCode;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +37,7 @@ public class InstitutionService {
 
     private final AccountRepository accountRepository;
     private final AssetConnectionRepository assetConnectionRepository;
+    private final UserRepository userRepository;
 
     public List<InstitutionResponse> getInstitutions(Long userId) {
         Set<String> connectedDbNames = assetConnectionRepository.findByUserUserId(userId).stream()
@@ -57,5 +65,39 @@ public class InstitutionService {
                     return InstitutionResponse.of(code, connected, products);
                 })
                 .toList();
+    }
+
+    @Transactional
+    public InstitutionConnectResponse connect(Long userId, List<String> institutionIds) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+
+        List<InstitutionCode> codes = institutionIds.stream()
+                .distinct()
+                .map(id -> InstitutionCode.fromId(id)
+                        .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT)))
+                .toList();
+
+        Map<String, AssetConnection> existingByDbName = assetConnectionRepository.findByUserUserId(userId).stream()
+                .collect(Collectors.toMap(AssetConnection::getInstitutionName, c -> c, (a, b) -> a));
+
+        LocalDateTime now = LocalDateTime.now();
+        List<AssetConnection> toSave = new ArrayList<>();
+
+        for (InstitutionCode code : codes) {
+            String category = "bank".equals(code.getType()) ? "BANK" : "SECURITIES";
+            for (String dbName : code.getDbNames()) {
+                AssetConnection existing = existingByDbName.get(dbName);
+                if (existing != null) {
+                    existing.updateMock(dbName, now);
+                    toSave.add(existing);
+                } else {
+                    toSave.add(new AssetConnection(user, dbName, category, "CONNECTED", now));
+                }
+            }
+        }
+
+        assetConnectionRepository.saveAll(toSave);
+        return new InstitutionConnectResponse(codes.size());
     }
 }
