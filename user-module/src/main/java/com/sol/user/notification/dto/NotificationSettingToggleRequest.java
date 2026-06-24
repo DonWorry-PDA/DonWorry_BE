@@ -1,4 +1,6 @@
 package com.sol.user.notification.dto;
 
-public record NotificationSettingToggleRequest(boolean enabled) {
+import jakarta.validation.constraints.NotNull;
+
+public record NotificationSettingToggleRequest(@NotNull Boolean enabled) {
 }

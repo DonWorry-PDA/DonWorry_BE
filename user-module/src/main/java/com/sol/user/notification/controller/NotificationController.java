@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -65,7 +66,7 @@ public class NotificationController {
     @PatchMapping("/settings/{id}")
     public ResponseEntity<ApiResponse<Void>> toggleSetting(
             @PathVariable String id,
-            @RequestBody NotificationSettingToggleRequest request,
+            @Valid @RequestBody NotificationSettingToggleRequest request,
             @RequestAttribute("userId") Long userId) {
         notificationSettingService.toggleSetting(userId, id, request.enabled());
         return ResponseEntity.ok(ApiResponse.ok(null));
