@@ -1,10 +1,12 @@
 package com.sol.user.mydata.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.user.mydata.dto.InstitutionResponse;
 import com.sol.user.mydata.dto.MydataAccountResponse;
 import com.sol.user.mydata.dto.MydataHoldingResponse;
 import com.sol.user.mydata.dto.MydataPensionResponse;
 import com.sol.user.mydata.dto.MydataTransactionsResponse;
+import com.sol.user.mydata.service.InstitutionService;
 import com.sol.user.mydata.service.MydataQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,14 @@ import java.util.List;
 public class MydataController {
 
     private final MydataQueryService mydataQueryService;
+    private final InstitutionService institutionService;
+
+    @Operation(summary = "금융기관 목록 조회 (연결 가능 + 이미 연결된 기관)")
+    @GetMapping("/institutions")
+    public ResponseEntity<ApiResponse<List<InstitutionResponse>>> getInstitutions(
+            @RequestAttribute("userId") Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(institutionService.getInstitutions(userId)));
+    }
 
     @Operation(summary = "연결 계좌 목록 조회")
     @GetMapping("/accounts")
