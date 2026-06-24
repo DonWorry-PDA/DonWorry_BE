@@ -16,6 +16,10 @@ docker run -d \
   -e "SPRING_DATASOURCE_URL=$DB_URL" \
   -e "SPRING_DATASOURCE_USERNAME=$DB_USER" \
   -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
+  -e "LS_APP_KEY=$LS_APP_KEY" \
+  -e "LS_APP_SECRET=$LS_APP_SECRET" \
+  -e "REDIS_HOST=$REDIS_HOST" \
+  -e "REDIS_PORT=$REDIS_PORT" \
   "$ECR_URI/donworry/product-module:$IMAGE_TAG"
 
 echo "product-module started: $IMAGE_TAG"

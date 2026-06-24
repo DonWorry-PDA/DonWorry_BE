@@ -72,6 +72,10 @@ jobs:
           DB_URL: ${{ secrets.DB_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          LS_APP_KEY: ${{ secrets.LS_APP_KEY }}
+          LS_APP_SECRET: ${{ secrets.LS_APP_SECRET }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
         run: |
           {
             printf "ECR_URI='%s'\n" "$ECR_REGISTRY"
@@ -79,6 +83,10 @@ jobs:
             printf "DB_URL='%s'\n" "$DB_URL"
             printf "DB_USER='%s'\n" "$DB_USER"
             printf "DB_PASSWORD='%s'\n" "$DB_PASSWORD"
+            printf "LS_APP_KEY='%s'\n" "$LS_APP_KEY"
+            printf "LS_APP_SECRET='%s'\n" "$LS_APP_SECRET"
+            printf "REDIS_HOST='%s'\n" "$REDIS_HOST"
+            printf "REDIS_PORT='%s'\n" "$REDIS_PORT"
           } > product-module/scripts/deploy.env
 
       - name: Upload deployment bundle to S3
