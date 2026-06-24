@@ -10,6 +10,7 @@ docker pull $ECR_URI/donworry/product-module:$IMAGE_TAG
 
 docker run -d \
   --name product-module \
+  --network donworry-net \
   --restart unless-stopped \
   -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
