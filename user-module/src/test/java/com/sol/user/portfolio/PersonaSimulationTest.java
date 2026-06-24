@@ -10,6 +10,8 @@ import com.sol.user.portfolio.dto.CoverageResult;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.dto.OperationGradeResult;
+import com.sol.user.portfolio.dto.Holding;
+import com.sol.user.portfolio.dto.PlanAllocation;
 import com.sol.user.portfolio.dto.PlanCoverage;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,12 +61,35 @@ class PersonaSimulationTest {
         assertThat(r.getPlanCoverages()).hasSize(2); // 위험중립형 2안
     }
 
-    // ── 파이프라인 실행 + 출력 ───────────────────────────────────────────────────
+    // ── #118 성향 스윕: 같은 자산(여유 8억)에 성향만 바꿔 위험버킷이 어떻게 조절되는지 검증/출력 ──
 
-    private CoverageResult run(String name, OperationGradeInput input, int q3, BigDecimal otherIncome) {
-        OperationGradeResult grade = gradeCalc.calculate(input);
+    @Test
+    void 성향스윕_여유8억_권유가능등급_필터가_위험버킷을_성향별로_조절한다() {
+        System.out.println("PROPENSITY-SWEEP| 여유(8억) 동일 자산, 성향만 변경 — 위험버킷 권유가능등급 필터(#118)");
+        for (InvestmentPropensity propensity : List.of(
+                InvestmentPropensity.AGGRESSIVE, InvestmentPropensity.ACTIVE, InvestmentPropensity.NEUTRAL,
+                InvestmentPropensity.STABLE_SEEKING, InvestmentPropensity.STABLE)) {
 
-        AllocationInput allocInput = AllocationInput.builder()
+            OperationGradeInput input = active8Builder().investmentPropensity(propensity).build();
+            OperationGradeResult grade = gradeCalc.calculate(input);
+            AllocationResult alloc = allocCalc.calculate(allocationInput(grade, input));
+
+            printAllocation(propensity, alloc);
+
+            if (propensity == InvestmentPropensity.STABLE || propensity == InvestmentPropensity.STABLE_SEEKING) {
+                // 안정형·안정추구형 — 모든 안에서 위험 holding이 0이어야 한다(부적합 위험 ETF 차단)
+                assertThat(alloc.getPlans()).allSatisfy(plan ->
+                        assertThat(plan.getHoldings()).noneMatch(h -> h.role() == BucketRole.RISK));
+            } else {
+                // 위험중립형 이상 — 적어도 한 안에는 위험 holding이 존재
+                assertThat(alloc.getPlans()).anySatisfy(plan ->
+                        assertThat(plan.getHoldings()).anyMatch(h -> h.role() == BucketRole.RISK));
+            }
+        }
+    }
+
+    private AllocationInput allocationInput(OperationGradeResult grade, OperationGradeInput input) {
+        return AllocationInput.builder()
                 .finalGrade(grade.getFinalGrade())
                 .surplus(grade.getSurplus())
                 .floorAsset(grade.getFloorAsset())
@@ -73,6 +99,29 @@ class PersonaSimulationTest {
                 .shortTermBucket(BigDecimal.ZERO)
                 .pool(pool())
                 .build();
+    }
+
+    private void printAllocation(InvestmentPropensity propensity, AllocationResult alloc) {
+        for (PlanAllocation plan : alloc.getPlans()) {
+            String riskDesc = plan.getHoldings().stream()
+                    .filter(h -> h.role() == BucketRole.RISK)
+                    .map(h -> h.ticker() + "(" + h.amount().longValue() + ")")
+                    .collect(Collectors.joining(", "));
+            BigDecimal safeSum = plan.getHoldings().stream()
+                    .filter(h -> h.role() == BucketRole.SAFE)
+                    .map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+            System.out.printf("PROPENSITY-SWEEP|   %-14s %-9s 위험=[%s] 위험계=%,d 안전계=%,d%n",
+                    propensity, plan.getType(), riskDesc.isEmpty() ? "없음" : riskDesc,
+                    plan.getRiskTarget().longValue(), safeSum.longValue());
+        }
+    }
+
+    // ── 파이프라인 실행 + 출력 ───────────────────────────────────────────────────
+
+    private CoverageResult run(String name, OperationGradeInput input, int q3, BigDecimal otherIncome) {
+        OperationGradeResult grade = gradeCalc.calculate(input);
+
+        AllocationInput allocInput = allocationInput(grade, input);
         AllocationResult alloc = allocCalc.calculate(allocInput);
 
         CoverageInput covInput = CoverageInput.builder()
@@ -108,12 +157,15 @@ class PersonaSimulationTest {
     // ── 페르소나 입력 ────────────────────────────────────────────────────────────
 
     private OperationGradeInput active8() {
+        return active8Builder().build();
+    }
+
+    private OperationGradeInput.OperationGradeInputBuilder active8Builder() {
         return base()
                 .age(60).totalAsset(BigDecimal.valueOf(800_000_000)).pensionSaving(BigDecimal.valueOf(50_000_000))
                 .availableFinancialAsset(BigDecimal.valueOf(700_000_000))
                 .monthlyNationalPension(BigDecimal.valueOf(1_200_000))
-                .investmentPropensity(InvestmentPropensity.ACTIVE)
-                .build();
+                .investmentPropensity(InvestmentPropensity.ACTIVE);
     }
 
     private OperationGradeInput shortage() {

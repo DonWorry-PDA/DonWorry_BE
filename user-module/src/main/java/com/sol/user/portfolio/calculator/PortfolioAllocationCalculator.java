@@ -9,6 +9,7 @@ import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.dto.Holding;
 import com.sol.user.portfolio.dto.PlanAllocation;
 import com.sol.user.portfolio.type.BucketRole;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.portfolio.type.PlanType;
 import com.sol.user.portfolio.type.PropensityTier;
 import com.sol.user.portfolio.type.RecommendationTrack;
@@ -86,6 +87,15 @@ public class PortfolioAllocationCalculator {
                 .subtract(shortTermBucket);
         riskTarget = riskTarget.min(maxRiskForFloor).max(BigDecimal.ZERO);
 
+        // 위험버킷 — 배당률은 위험 holding만으로 가중평균(STEP6 입력, 안전·단기 섞이면 오염되므로 먼저 계산)
+        // #118: 권유가능등급 필터로 성향상 부적합한 위험 코어 슬롯은 제외되므로,
+        // 실제 배분된 위험액으로 riskTarget을 재계산한다(제외분은 아래 safeTarget이 잔여로 흡수).
+        List<Holding> riskHoldings = buildRiskHoldings(plan, tier, input.propensity(), riskTarget, byTicker);
+        riskTarget = riskHoldings.stream()
+                .map(Holding::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
+
         BigDecimal safeTarget = input.totalAsset()
                 .subtract(riskTarget)
                 .subtract(input.pensionSaving())
@@ -94,10 +104,6 @@ public class PortfolioAllocationCalculator {
         // STEP6용 분리값
         BigDecimal surplusRiskAmount = riskTarget;
         BigDecimal surplusSafeAmount = surplus.subtract(riskTarget).subtract(shortTermBucket).max(BigDecimal.ZERO);
-
-        // 위험버킷 — 배당률은 위험 holding만으로 가중평균(STEP6 입력, 안전·단기 섞이면 오염되므로 먼저 계산)
-        List<Holding> riskHoldings = buildRiskHoldings(plan, tier, riskTarget, byTicker);
-        BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
 
         // 안전버킷 — 바닥(원금보존)/여유안전(소진) 2층. 합이 정확히 safeTarget이 되도록 여유안전분=safeTarget−바닥자산.
         // 바닥보호 불변식상 safeTarget >= floorAsset이 보장되나, 입력 불일치 시에도 "안전합=safeTarget" 계약이
@@ -125,7 +131,7 @@ public class PortfolioAllocationCalculator {
                 .build();
     }
 
-    private List<Holding> buildRiskHoldings(PlanType plan, PropensityTier tier,
+    private List<Holding> buildRiskHoldings(PlanType plan, PropensityTier tier, InvestmentPropensity propensity,
                                             BigDecimal riskTarget, Map<String, EtfInfo> byTicker) {
         if (riskTarget.compareTo(BigDecimal.ZERO) <= 0) {
             return List.of();
@@ -136,6 +142,11 @@ public class PortfolioAllocationCalculator {
             EtfInfo etf = byTicker.get(ticker);
             if (etf == null) {
                 throw new BaseException(ErrorCode.INVALID_INPUT); // 풀에 필수 코어 종목 누락
+            }
+            // #118: 성향상 권유 불가한 위험등급이면 이 슬롯을 제외 → 해당 금액은 호출 측에서 안전버킷이 흡수.
+            // 슬롯 비중은 재정규화하지 않아(reduce-to-safe), 적합성상 못 담는 위험을 남은 위험상품에 몰지 않는다.
+            if (!PortfolioConstants.isRecommendable(propensity, etf.riskGrade())) {
+                continue;
             }
             holdings.add(new Holding(
                     etf.ticker(),

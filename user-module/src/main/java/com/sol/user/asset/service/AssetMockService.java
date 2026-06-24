@@ -23,6 +23,7 @@ import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
@@ -121,6 +122,9 @@ public class AssetMockService {
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
         Scenario scenario = scenarioOf(mockType);
         LocalDateTime generatedAt = LocalDateTime.now();
+
+        // 증권 적합성진단(KYC) 성향 목업 — 연동 전까지 시나리오별로 다른 성향을 시드해 추천 차등을 시연한다.
+        user.assignInvestmentPropensity(scenario.propensity());
 
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
         List<Holding> holdings = saveHoldings(accounts, scenario.holdings());
@@ -363,6 +367,7 @@ public class AssetMockService {
     private Scenario scenarioOf(MockType mockType) {
         return switch (mockType) {
             case NEED_IMPROVEMENT -> new Scenario(
+                    InvestmentPropensity.ACTIVE,
                     List.of(
                             asset("CMA", "신한은행", 6_000_000),
                             asset("DEPOSIT", "신한은행", 12_000_000),
@@ -378,6 +383,7 @@ public class AssetMockService {
                     money(250_000), money(180_000), money(1_250_000)
             );
             case NEED_COMPLEMENT -> new Scenario(
+                    InvestmentPropensity.NEUTRAL,
                     List.of(
                             asset("CMA", "신한은행", 18_000_000),
                             asset("DEPOSIT", "신한은행", 45_000_000),
@@ -394,6 +400,7 @@ public class AssetMockService {
                     money(200_000), money(180_000), money(1_400_000)
             );
             case STABLE -> new Scenario(
+                    InvestmentPropensity.STABLE,
                     List.of(
                             asset("CMA", "신한은행", 35_000_000),
                             asset("DEPOSIT", "신한은행", 90_000_000),
@@ -435,6 +442,7 @@ public class AssetMockService {
     }
 
     private record Scenario(
+            InvestmentPropensity propensity,
             List<AssetSeed> assets,
             List<HoldingSeed> holdings,
             BigDecimal debtBalance,
