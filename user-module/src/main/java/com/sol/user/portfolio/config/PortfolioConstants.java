@@ -90,10 +90,19 @@ public final class PortfolioConstants {
             5, planWeights("0.58", "0.72", "0.50")
     );
 
-    // ── STEP6 소진모델 가정치 (★캘리브레이션 대상). 배당률은 상수 아님 — plan별 가중평균(DB) ──
+    // ── STEP6 소진모델 가정치 — 한국 공인 장기가정 앵커(상품 무관 거시변수라 ETF 추천에도 적용) ──
     public static final BigDecimal SAFE_RATE = new BigDecimal("0.035");            // 안전금리(연, 분수)
-    public static final BigDecimal PENSION_SAVING_RATE = new BigDecimal("0.05");   // 연금저축수익률(연, 분수)
-    public static final BigDecimal EXPECTED_TOTAL_RETURN = new BigDecimal("0.05"); // 위험버킷 기대총수익률 r(배당+자본차익, 고정 가정 — 캘리 노브 아님)
+    public static final BigDecimal PENSION_SAVING_RATE = new BigDecimal("0.05");   // 연금저축수익률(연, 분수). ※EXPECTED_TOTAL_RETURN<이 값 — 재앵커 검토 대상
+    /**
+     * 위험버킷 장기 기대총수익률 r(배당+자본차익). 앵커: 국민연금 제5차 재정추계(2023) 장기
+     * 기금투자수익률 가정 4.5%(인구 중위·거시 중립). 출처: 보건복지부 '제5차 국민연금 재정추계 결과'(2023.3).
+     * (이전엔 Vanguard forward CMA 기반 5.0% — 국내 공인 앵커로 교체.)
+     */
+    public static final BigDecimal EXPECTED_TOTAL_RETURN = new BigDecimal("0.045");
+    /**
+     * 장기 기대물가(연). 앵커: 한국은행 물가안정목표 2.0%. 상속가치 실질 자본상승 계산에서 차감.
+     */
+    public static final BigDecimal EXPECTED_INFLATION = new BigDecimal("0.02");
     public static final int PENSION_WITHDRAWAL_MIN_AGE = 55;                       // 연금저축 인출 가능 연령
 
     // ── STEP1~4(운용등급) 정책 기본값 — 유저 데이터 소스 없음, 정책으로 고정 ──────────────

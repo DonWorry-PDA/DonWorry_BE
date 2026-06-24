@@ -24,7 +24,22 @@ class AlphaCoverageCalculatorTest {
 
     @Test
     void 정상_운용분이_알파를_넘으면_충족률은_100퍼센트로_캡되고_band는_SUFFICIENT() {
-        CoverageResult result = calculator.calculate(baseBuilder().build());
+        // 여유분을 크게 잡아 운용 월수령이 α(200만)를 확실히 초과 → 충족률 100% 캡 검증
+        // (PMT 소진모델에선 기본 여유분으론 α 미달이라, 캡 경로를 타도록 여유분을 키운다)
+        PlanAllocation rich = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.valueOf(200_000_000))
+                .surplusSafeAmount(BigDecimal.valueOf(400_000_000))
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("3.0000"))
+                .holdings(List.of())
+                .build();
+        CoverageResult result = calculator.calculate(baseBuilder()
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL)
+                        .plans(List.of(rich))
+                        .build())
+                .build());
 
         assertThat(result.getTrack()).isEqualTo(RecommendationTrack.NORMAL);
         assertThat(result.getAlpha()).isEqualByComparingTo("2000000"); // 300만−100만−0
