@@ -87,6 +87,24 @@ public class LifeStabilityService {
         return toResponse(saved, messageGenerator.generateImprovementMessages(calculated));
     }
 
+    /**
+     * 온보딩(UserGoal)이 완료된 사용자에 한해 저장된 원천 데이터로 재계산·저장한다.
+     * UserGoal이 없으면(온보딩 전) 아무것도 하지 않는다.
+     * <p>
+     * 자산 동기화 흐름에서 호출되므로, 미완료 사용자에게서 예외를 던지지 않는다.
+     * 같은 트랜잭션 안에서 {@link #recalculateFromUserData}의 예외가 새어 나가면
+     * 트랜잭션이 rollback-only로 마킹되어 동기화 전체가 깨지기 때문이다.
+     */
+    @Transactional
+    public void recalculateFromUserDataIfReady(Long userId) {
+        boolean onboardingDone = userGoalRepository
+                .findTopByUserUserIdOrderByUpdatedAtDesc(userId)
+                .isPresent();
+        if (onboardingDone) {
+            recalculateFromUserData(userId);
+        }
+    }
+
     @Transactional
     public LifeStabilityResponse recalculateFromUserData(Long userId) {
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)

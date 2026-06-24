@@ -30,6 +30,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LifeStabilityServiceTest {
@@ -103,6 +105,36 @@ class LifeStabilityServiceTest {
         assertThat(response.indicators().debtBurdenStatus()).isEqualTo("안정");
         assertThat(response.indicators().medicalPreparednessStatus()).isEqualTo("보완 필요");
         assertThat(response.indicators().liquidityStatus()).isEqualTo("안정");
+    }
+
+    @Test
+    void recalculateFromUserDataIfReadySkipsWhenOnboardingNotDone() {
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.empty());
+
+        service.recalculateFromUserDataIfReady(1L);
+
+        verify(stabilityScoreRepository, never()).save(any());
+    }
+
+    @Test
+    void recalculateFromUserDataIfReadySavesWhenOnboardingDone() {
+        User user = mock(User.class);
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), money(350_000), LocalDateTime.now())));
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of());
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Pension(user, "NATIONAL", money(1_150_000), false, 65)
+        ));
+        when(debtRepository.findByUserUserId(1L)).thenReturn(List.of());
+        when(insurancePolicyRepository.findByUserUserId(1L)).thenReturn(List.of());
+        when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of());
+        when(stabilityScoreRepository.save(any(StabilityScore.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recalculateFromUserDataIfReady(1L);
+
+        verify(stabilityScoreRepository).save(any(StabilityScore.class));
     }
 
     private CashFlowEvent event(User user, String eventType, String flowType, long amount) {

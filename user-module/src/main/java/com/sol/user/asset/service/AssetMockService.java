@@ -23,6 +23,7 @@ import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class AssetMockService {
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
     private final EtfPoolProvider etfPoolProvider;
+    private final LifeStabilityService lifeStabilityService;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -80,7 +82,7 @@ public class AssetMockService {
 
     /**
      * 개발/시연용 시드. 기존 목업 원천 데이터를 모두 지우고 지정한 시나리오로 새로 생성한다.
-     * (StabilityScore 이력은 건드리지 않는다.)
+     * 원천 데이터가 갱신되면 {@link #create}에서 생활 안정도도 함께 재계산된다.
      */
     @Transactional
     public MockAssetResponse seed(Long userId, MockType mockType) {
@@ -127,6 +129,10 @@ public class AssetMockService {
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
         List<AssetConnection> connections = saveConnections(user, generatedAt);
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario);
+
+        // 원천 데이터 저장 직후 생활 안정도를 재계산해 항상 최신 결과가 존재하도록 한다.
+        // 온보딩(UserGoal) 전 사용자는 내부에서 스킵된다.
+        lifeStabilityService.recalculateFromUserDataIfReady(userId);
 
         return new MockAssetResponse(
                 mockType,
