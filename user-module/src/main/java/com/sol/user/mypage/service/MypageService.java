@@ -35,11 +35,12 @@ public class MypageService {
         LocalDateTime now = LocalDateTime.now();
         user.updateProfile(request.age(), request.retired(), request.nationalPensionReceiving(), now);
 
-        UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
-
+        BigDecimal currentTargetLivingCost = null;
         if (monthlyTargetLivingCost != null) {
+            UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
             goal.updateTargetLivingCost(monthlyTargetLivingCost, now);
+            currentTargetLivingCost = goal.getMonthlyTargetLivingCost();
         }
 
         return new MypageResponse(
@@ -47,7 +48,7 @@ public class MypageService {
                 user.getAge(),
                 user.getRetired(),
                 user.getNationalPensionReceiving(),
-                goal.getMonthlyTargetLivingCost()
+                currentTargetLivingCost
         );
     }
 }
