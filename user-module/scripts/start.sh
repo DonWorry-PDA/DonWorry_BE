@@ -13,6 +13,7 @@ docker pull $ECR_URI/donworry/user-module:$IMAGE_TAG
 # 컨테이너 실행
 docker run -d \
   --name user-module \
+  --network donworry-net \
   --restart unless-stopped \
   -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
@@ -26,6 +27,8 @@ docker run -d \
   -e "SOLAPI_FROM_NUMBER=$SOLAPI_FROM_NUMBER" \
   -e "ENCRYPTION_SECRET=$ENCRYPTION_SECRET" \
   -e "ENCRYPTION_SALT=$ENCRYPTION_SALT" \
+  -e "REDIS_HOST=$REDIS_HOST" \
+  -e "REDIS_PORT=$REDIS_PORT" \
   "$ECR_URI/donworry/user-module:$IMAGE_TAG"
 
 echo "user-module started: $IMAGE_TAG"

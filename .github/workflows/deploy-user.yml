@@ -79,6 +79,8 @@ jobs:
           SOLAPI_FROM_NUMBER: ${{ secrets.SOLAPI_FROM_NUMBER }}
           ENCRYPTION_SECRET: ${{ secrets.ENCRYPTION_SECRET }}
           ENCRYPTION_SALT: ${{ secrets.ENCRYPTION_SALT }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
         run: |
           {
             printf "ECR_URI='%s'\n" "$ECR_REGISTRY"
@@ -93,6 +95,8 @@ jobs:
             printf "SOLAPI_FROM_NUMBER='%s'\n" "$SOLAPI_FROM_NUMBER"
             printf "ENCRYPTION_SECRET='%s'\n" "$ENCRYPTION_SECRET"
             printf "ENCRYPTION_SALT='%s'\n" "$ENCRYPTION_SALT"
+            printf "REDIS_HOST='%s'\n" "$REDIS_HOST"
+            printf "REDIS_PORT='%s'\n" "$REDIS_PORT"
           } > user-module/scripts/deploy.env
 
       - name: Upload deployment bundle to S3
