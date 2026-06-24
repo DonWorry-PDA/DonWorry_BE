@@ -4,6 +4,8 @@ import com.sol.common.response.ApiResponse;
 import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
+import com.sol.product.etf.realtime.EtfRealtimeResponse;
+import com.sol.product.etf.realtime.EtfRealtimeService;
 import com.sol.product.etf.service.EtfService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,6 +22,7 @@ import java.util.List;
 public class EtfController {
 
     private final EtfService etfService;
+    private final EtfRealtimeService etfRealtimeService;
 
     @Operation(summary = "ETF 전체 조회")
     @GetMapping
@@ -56,5 +59,17 @@ public class EtfController {
     public ResponseEntity<ApiResponse<List<EtfMonthlyDividendItem>>> getMonthlyDividends(
             @RequestParam List<Long> productIds) {
         return ResponseEntity.ok(ApiResponse.ok(etfService.getMonthlyDividends(productIds)));
+    }
+
+    @Operation(summary = "ETF 실시간 시세 전체 조회 (화이트리스트 26종)")
+    @GetMapping("/realtime")
+    public ResponseEntity<ApiResponse<List<EtfRealtimeResponse>>> getAllRealtime() {
+        return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getAllRealtime()));
+    }
+
+    @Operation(summary = "ETF 실시간 시세 단건 조회")
+    @GetMapping("/realtime/{ticker}")
+    public ResponseEntity<ApiResponse<EtfRealtimeResponse>> getRealtime(@PathVariable String ticker) {
+        return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getRealtime(ticker)));
     }
 }
