@@ -74,4 +74,8 @@ public class Account {
         this.depositBalance = depositBalance;
         this.existingAccount = true;
     }
+
+    public void deductBalance(BigDecimal amount) {
+        this.depositBalance = this.depositBalance.subtract(amount);
+    }
 }
