@@ -1,5 +1,6 @@
 package com.sol.user.portfolio.service;
 
+import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
@@ -43,6 +44,7 @@ public class PortfolioRecommendationService {
     private final SurveyService surveyService;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final HoldingRepository holdingRepository;
+    private final AccountRepository accountRepository;
 
     public RecommendationResponse recommend(Long userId) {
         // 설문 1회 조회 — q1/q2(STEP1~4 운용등급)는 assembler가, q3(STEP6 소진모델)는 여기서 재사용
@@ -73,9 +75,15 @@ public class PortfolioRecommendationService {
         // 화면 비교용 before 값 (현재 현금흐름 충당률 59% 등)
         CashFlowDiagnosisResponse cashFlow = cashFlowDiagnosisService.diagnose(userId);
 
+        // BROKERAGE 예수금 — 프론트 이체 필요액 계산용 (Σholdings - brokerageBalance = 실제 이체액)
+        BigDecimal brokerageBalance = accountRepository
+                .findByUserUserIdAndAccountType(userId, "BROKERAGE")
+                .map(a -> a.getDepositBalance() != null ? a.getDepositBalance() : BigDecimal.ZERO)
+                .orElse(BigDecimal.ZERO);
+
         return recommendationMapper.toResponse(allocation, coverage,
                 cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost(),
-                existingEvalByProductId);
+                existingEvalByProductId, brokerageBalance);
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {

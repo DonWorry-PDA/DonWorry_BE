@@ -37,7 +37,8 @@ public class PortfolioRecommendationMapper {
 
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
                                              BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost,
-                                             Map<Long, BigDecimal> existingEvalByProductId) {
+                                             Map<Long, BigDecimal> existingEvalByProductId,
+                                             BigDecimal brokerageBalance) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -66,6 +67,7 @@ public class PortfolioRecommendationMapper {
                 .currentMonthlyShortfall(currentShortfall)
                 .q3ReferenceLabel(q3Label)
                 .q3Scenarios(coverage.getQ3Scenarios())
+                .brokerageBalance(brokerageBalance)
                 .build();
     }
 
