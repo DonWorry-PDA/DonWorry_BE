@@ -3,7 +3,9 @@ package com.sol.user.consultation.service;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.consultation.dto.ConsultationCreateRequest;
+import com.sol.user.consultation.dto.ConsultationMemoUpdateRequest;
 import com.sol.user.consultation.dto.ConsultationResponse;
+import com.sol.user.consultation.dto.ConsultationScheduleUpdateRequest;
 import com.sol.user.consultation.entity.Consultation;
 import com.sol.user.consultation.repository.ConsultationRepository;
 import com.sol.user.consultation.repository.ConsultationSummaryRepository;
@@ -22,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,6 +69,43 @@ class ConsultationServiceTest {
                 new ConsultationCreateRequest(null, LocalDateTime.now(), null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void createWithPastScheduleThrows() {
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().minusDays(1), null)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void changeScheduleWithPastThrows() {
+        assertThatThrownBy(() -> service.changeSchedule(1L, 10L,
+                new ConsultationScheduleUpdateRequest(LocalDateTime.now().minusHours(1))))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void updateMemoTooLongThrows() {
+        String tooLong = "a".repeat(1001);
+        assertThatThrownBy(() -> service.updateMemo(1L, 10L,
+                new ConsultationMemoUpdateRequest(tooLong)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void getMyConsultationsUsesBatchSummaryLookup() {
+        when(consultationRepository.findByUserIdOrderByScheduledAtDesc(1L))
+                .thenReturn(List.of(reservedConsultation(), reservedConsultation()));
+        when(summaryRepository.findByConsultationIdIn(any())).thenReturn(List.of());
+
+        service.getMyConsultations(1L);
+
+        verify(summaryRepository, times(1)).findByConsultationIdIn(any());
+        verify(summaryRepository, never()).findByConsultationId(any());
     }
 
     @Test

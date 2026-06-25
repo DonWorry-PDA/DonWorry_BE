@@ -29,15 +29,18 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ConsultationService {
 
+    private static final int MAX_MEMO_LENGTH = 1000;
+
     private final ConsultationRepository consultationRepository;
     private final ConsultationSummaryRepository consultationSummaryRepository;
 
     /** 예약 생성 — 유형별 기본 방식/지점/상담원을 배정한다. */
     @Transactional
     public ConsultationResponse create(Long userId, ConsultationCreateRequest request) {
-        if (request == null || request.consultType() == null || request.scheduledAt() == null) {
+        if (request == null || request.consultType() == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
+        requireFutureSchedule(request.scheduledAt());
         ConsultType type = request.consultType();
         ConsultMethod method = defaultMethod(type);
 
@@ -76,6 +79,7 @@ public class ConsultationService {
         if (request == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
+        requireFutureSchedule(request.scheduledAt());
         Consultation consultation = findOwned(userId, consultationId);
         consultation.changeSchedule(request.scheduledAt());
         boolean hasSummary = consultationSummaryRepository.findByConsultationId(consultationId).isPresent();
@@ -98,6 +102,9 @@ public class ConsultationService {
     @Transactional
     public void updateMemo(Long userId, Long consultationId, ConsultationMemoUpdateRequest request) {
         if (request == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if (request.memo() != null && request.memo().length() > MAX_MEMO_LENGTH) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         Consultation consultation = findOwned(userId, consultationId);
@@ -179,10 +186,17 @@ public class ConsultationService {
         if (consultations.isEmpty()) {
             return Set.of();
         }
-        return consultations.stream()
-                .map(Consultation::getId)
-                .filter(id -> consultationSummaryRepository.findByConsultationId(id).isPresent())
+        List<Long> ids = consultations.stream().map(Consultation::getId).toList();
+        // N+1 방지: 상담별 조회 대신 한 번에 요약을 가져온다.
+        return consultationSummaryRepository.findByConsultationIdIn(ids).stream()
+                .map(ConsultationSummary::getConsultationId)
                 .collect(Collectors.toSet());
+    }
+
+    private void requireFutureSchedule(LocalDateTime scheduledAt) {
+        if (scheduledAt == null || scheduledAt.isBefore(LocalDateTime.now())) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private ConsultMethod defaultMethod(ConsultType type) {

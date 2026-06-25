@@ -10,5 +10,7 @@ public interface ConsultationSummaryRepository extends JpaRepository<Consultatio
 
     Optional<ConsultationSummary> findByConsultationId(Long consultationId);
 
+    List<ConsultationSummary> findByConsultationIdIn(List<Long> consultationIds);
+
     void deleteByConsultationIdIn(List<Long> consultationIds);
 }
