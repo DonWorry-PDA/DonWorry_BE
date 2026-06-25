@@ -60,7 +60,8 @@ class AssetMockServiceTest {
     @MethodSource("scenarios")
     void createsScenarioWithSpecifiedSummary(MockType mockType, long totalAsset,
                                              long totalDebt, long netAsset, int holdingCount,
-                                             InvestmentPropensity expectedPropensity) {
+                                             InvestmentPropensity expectedPropensity,
+                                             int expectedCashflowCount) {
         User user = mock(User.class);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         returnArgumentsFromSaveAll();
@@ -71,7 +72,7 @@ class AssetMockServiceTest {
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo(BigDecimal.valueOf(totalDebt));
         assertThat(response.assetSummary().netAsset()).isEqualByComparingTo(BigDecimal.valueOf(netAsset));
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
-        assertThat(response.generatedCounts().cashflowEvents()).isGreaterThanOrEqualTo(150);
+        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(expectedCashflowCount);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
         // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력
         verify(user).assignInvestmentPropensity(expectedPropensity);
@@ -185,14 +186,18 @@ class AssetMockServiceTest {
 
         java.time.LocalDate currentMonthStart = java.time.LocalDate.now().withDayOfMonth(1);
 
-        saved.stream()
+        List<com.sol.user.cashflow.entity.CashFlowEvent> currentMonthEvents = saved.stream()
                 .filter(e -> java.time.YearMonth.from(e.getEventDate())
                         .equals(java.time.YearMonth.from(currentMonthStart)))
-                .forEach(e -> assertThat(e.getRecurring()).isTrue());
+                .toList();
+        assertThat(currentMonthEvents).isNotEmpty();
+        assertThat(currentMonthEvents).allSatisfy(e -> assertThat(e.getRecurring()).isTrue());
 
-        saved.stream()
+        List<com.sol.user.cashflow.entity.CashFlowEvent> pastEvents = saved.stream()
                 .filter(e -> e.getEventDate().isBefore(currentMonthStart))
-                .forEach(e -> assertThat(e.getRecurring()).isFalse());
+                .toList();
+        assertThat(pastEvents).isNotEmpty();
+        assertThat(pastEvents).allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
     }
 
     private void returnArgumentsFromSaveAll() {
@@ -217,11 +222,11 @@ class AssetMockServiceTest {
     private static Stream<Arguments> scenarios() {
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 2,
-                        InvestmentPropensity.ACTIVE),
+                        InvestmentPropensity.ACTIVE, 150),
                 Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 2,
-                        InvestmentPropensity.NEUTRAL),
+                        InvestmentPropensity.NEUTRAL, 156),
                 Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 3,
-                        InvestmentPropensity.STABLE)
+                        InvestmentPropensity.STABLE, 156)
         );
     }
 
