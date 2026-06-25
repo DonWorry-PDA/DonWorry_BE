@@ -71,7 +71,7 @@ public class SalaryAssetMapper {
             case "PENSION_SAVING" -> "연금저축";
             case "DEPOSIT" -> "정기예금";
             case "CMA" -> "CMA";
-            case "BROKERAGE" -> "증권계좌";
+            case "BROKERAGE" -> "예수금";
             default -> accountType;
         };
     }
