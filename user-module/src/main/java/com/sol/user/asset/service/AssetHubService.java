@@ -5,6 +5,7 @@ import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
+import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubMenus;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.asset.type.AssetCategory;
@@ -45,6 +46,7 @@ public class AssetHubService {
     private final CashFlowEventRepository cashFlowEventRepository;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final LifeStabilityService lifeStabilityService;
+    private final AssetAggregator assetAggregator;
 
     public AssetHubResponse getHub(Long userId) {
         Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(userId);
@@ -145,8 +147,8 @@ public class AssetHubService {
                         .currentAmount(cashFlow.getMonthlyCashFlow())
                         .build())
                 .lifeStability(buildLifeStabilityPreview(userId))
-                // 후속 이슈에서 채움: 투자 건강검진(#2) / 국민연금 연기(#5) / 월간 리포트(#6)
-                .investmentCheck(new AssetHubMenus.InvestmentCheck(null))
+                .investmentCheck(buildInvestmentCheckPreview(userId))
+                // 후속 이슈에서 채움: 국민연금 연기(#5) / 월간 리포트(#6)
                 .pensionDefer(AssetHubMenus.PensionDefer.builder().build())
                 .retirementSim(new AssetHubMenus.RetirementSim(true))
                 .monthlyReport(AssetHubMenus.MonthlyReport.builder().build())
@@ -171,6 +173,17 @@ public class AssetHubService {
             }
             throw e;
         }
+    }
+
+    /**
+     * 투자 건강검진 미리보기 — 현금흐름 자산(비연금 비STOCK 보유) / 순자산 비율.
+     * 상세({@link InvestmentCheckService})와 동일하게 {@link AssetBreakdown} 기준이라 허브·상세 숫자가 일치한다.
+     * 자산이 없으면(순자산 0) null 로 내려간다.
+     */
+    private AssetHubMenus.InvestmentCheck buildInvestmentCheckPreview(Long userId) {
+        AssetBreakdown breakdown = assetAggregator.aggregate(userId);
+        Integer ratio = ratePercent(breakdown.nonStockHoldingValue(), breakdown.grossTotal());
+        return new AssetHubMenus.InvestmentCheck(ratio);
     }
 
     /** numerator/denominator 를 정수 % 로. 둘 중 하나라도 null 이거나 denominator 가 0 이면 null. */

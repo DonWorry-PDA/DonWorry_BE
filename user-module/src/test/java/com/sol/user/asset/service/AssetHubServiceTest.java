@@ -5,6 +5,7 @@ import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
+import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
@@ -47,6 +48,7 @@ class AssetHubServiceTest {
     @Mock CashFlowEventRepository cashFlowEventRepository;
     @Mock CashFlowDiagnosisService cashFlowDiagnosisService;
     @Mock LifeStabilityService lifeStabilityService;
+    @Mock AssetAggregator assetAggregator;
 
     @InjectMocks AssetHubService assetHubService;
 
@@ -55,6 +57,9 @@ class AssetHubServiceTest {
         // 예수금만 계약: 대부분 테스트는 보유종목 없음. ETF/주식 분포가 필요한 테스트만 override.
         lenient().when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
                 .thenReturn(List.of());
+        // 투자 건강검진 미리보기는 별도 검증 — 기본은 빈 자산(순자산 0 → ratio null).
+        lenient().when(assetAggregator.aggregate(USER_ID)).thenReturn(new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
     }
 
     @Test
@@ -194,6 +199,22 @@ class AssetHubServiceTest {
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    void 투자건강검진_미리보기는_현금흐름자산_순자산_비율() {
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        // 현금 2천 / 현금흐름(비STOCK 보유) 3천 / 주식 5천 = 순자산 1억 → 30%
+        when(assetAggregator.aggregate(USER_ID)).thenReturn(new AssetBreakdown(
+                BigDecimal.valueOf(20_000_000), BigDecimal.ZERO, BigDecimal.valueOf(30_000_000),
+                BigDecimal.ZERO, BigDecimal.valueOf(50_000_000)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().investmentCheck().cashflowAssetRatio()).isEqualTo(30);
     }
 
     @Test
