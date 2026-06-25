@@ -49,7 +49,11 @@ public enum ErrorCode {
     PENSION_NOT_FOUND(HttpStatus.NOT_FOUND, "PENSION_001", "국민연금 정보가 등록되지 않았습니다."),
 
     // User Goal
-    USER_GOAL_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_GOAL_001", "목표 생활비를 먼저 설정해주세요.");
+    USER_GOAL_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_GOAL_001", "목표 생활비를 먼저 설정해주세요."),
+
+    // Consultation
+    CONSULTATION_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_001", "상담 내역을 찾을 수 없습니다."),
+    CONSULTATION_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_002", "상담 요약을 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

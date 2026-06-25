@@ -34,7 +34,7 @@ public class SmsService {
         Message message = new Message();
         message.setFrom(fromNumber);
         message.setTo(phone.replace("-", ""));
-        message.setText("[신한 은퇴솔루션] 인증번호는 [" + otp + "] 입니다. 3분 내에 입력해 주세요.");
+        message.setText("[신한 연금SOL사] 인증번호는 [" + otp + "] 입니다. 3분 내에 입력해 주세요.");
         try {
             messageService.send(message);
         } catch (Exception e) {

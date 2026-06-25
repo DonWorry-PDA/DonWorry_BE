@@ -9,6 +9,7 @@ import java.math.BigDecimal;
  * 안 내 개별 보유 종목. STEP5에서 위험·안전·단기버킷 모두 개별 종목으로 분해된다(role로 버킷 구분).
  */
 public record Holding(
+        Long productId,
         String ticker,
         String productName,
         BucketRole role,

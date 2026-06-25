@@ -163,7 +163,7 @@ class PortfolioRecommendationMapperTest {
     }
 
     private Holding holding(String name, BucketRole role, long amount) {
-        return new Holding("000000", name, role, CurrencyExposure.UNHEDGED,
+        return new Holding(null, "000000", name, role, CurrencyExposure.UNHEDGED,
                 new BigDecimal("1.0"), won(amount));
     }
 
