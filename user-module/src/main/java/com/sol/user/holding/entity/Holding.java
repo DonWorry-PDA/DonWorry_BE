@@ -6,9 +6,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Entity
-@Table(name = "holding")
+@Table(name = "holding", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_holding_account_product", columnNames = {"account_id", "product_id"})
+})
 @Getter
 @NoArgsConstructor
 public class Holding {
@@ -45,5 +48,31 @@ public class Holding {
         this.productId = productId;
         this.evaluationAmount = evaluationAmount;
         this.quantity = quantity;
+    }
+
+    public static Holding ofBuy(Account account, Long productId, BigDecimal quantity, BigDecimal currentPrice) {
+        Holding h = new Holding();
+        h.account = account;
+        h.productId = productId;
+        h.quantity = quantity;
+        h.avgPurchasePrice = currentPrice.toPlainString();
+        h.evaluationAmount = quantity.multiply(currentPrice).setScale(0, RoundingMode.HALF_UP);
+        h.unrealizedGainLoss = "0";
+        h.frozen = false;
+        return h;
+    }
+
+    public void addPurchase(BigDecimal newQuantity, BigDecimal currentPrice) {
+        BigDecimal oldAvg = (avgPurchasePrice == null || avgPurchasePrice.isBlank())
+                ? currentPrice : new BigDecimal(avgPurchasePrice);
+        BigDecimal totalQty = this.quantity.add(newQuantity);
+        BigDecimal newAvg = this.quantity.multiply(oldAvg)
+                .add(newQuantity.multiply(currentPrice))
+                .divide(totalQty, 2, RoundingMode.HALF_UP);
+        this.quantity = totalQty;
+        this.avgPurchasePrice = newAvg.toPlainString();
+        this.evaluationAmount = totalQty.multiply(currentPrice).setScale(0, RoundingMode.HALF_UP);
+        this.unrealizedGainLoss = currentPrice.subtract(newAvg)
+                .multiply(totalQty).setScale(0, RoundingMode.HALF_UP).toPlainString();
     }
 }
