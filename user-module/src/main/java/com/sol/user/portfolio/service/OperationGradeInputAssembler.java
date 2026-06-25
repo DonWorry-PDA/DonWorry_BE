@@ -2,8 +2,8 @@ package com.sol.user.portfolio.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
-import com.sol.user.account.entity.Account;
-import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.asset.dto.AssetBreakdown;
+import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
@@ -28,16 +28,15 @@ import java.util.Set;
 /**
  * userId → OperationGradeInput(STEP1~4 입력) 조립. OperationGradeService·PortfolioRecommendationService 공용.
  *
- * <p>자산 집계 규칙(A안): totalAsset = 전 계좌 잔액 합(BROKERAGE 잔액에 ETF 평가액이 이미 반영돼 holding 별도합산 안 함),
- * pensionSaving = 연금저축+IRP(55세 인출제약 트랙), availableFinancialAsset = totalAsset − pensionSaving(즉시 인출 가능분).
+ * <p>자산 집계는 {@link AssetAggregator}에 위임(예수금만 계약): totalAsset = 예수금 + 비STOCK 보유종목 평가액
+ * (개별주식 제외 — 청산 전제라 월급 재원 아님), pensionSaving = 연금저축+IRP(55세 인출제약 트랙),
+ * availableFinancialAsset = totalAsset − pensionSaving(즉시 인출 가능분).
  * gender 미수집(합산 기대여명), essentialRatio·investmentPropensity는 정책 상수({@link PortfolioConstants}).
  */
 @Component
 @RequiredArgsConstructor
 public class OperationGradeInputAssembler {
 
-    /** 55세 인출제약이 걸린 연금 계좌 — 운용 모수에서 분리. */
-    private static final Set<String> PENSION_ACCOUNT_TYPES = Set.of("PENSION_SAVING", "IRP");
     private static final String NATIONAL_PENSION_TYPE = "NATIONAL";
     /** 실손보험 유형. */
     private static final Set<String> LOSS_INSURANCE_TYPES = Set.of("INDEMNITY");
@@ -45,7 +44,7 @@ public class OperationGradeInputAssembler {
     private static final Set<String> MAJOR_ILLNESS_TYPES = Set.of("CANCER", "NURSING");
 
     private final UserRepository userRepository;
-    private final AccountRepository accountRepository;
+    private final AssetAggregator assetAggregator;
     private final PensionRepository pensionRepository;
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
@@ -68,15 +67,10 @@ public class OperationGradeInputAssembler {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
-        List<Account> accounts = accountRepository.findByUserUserId(userId);
-        BigDecimal totalAsset = accounts.stream()
-                .map(account -> nullToZero(account.getDepositBalance()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal pensionSaving = accounts.stream()
-                .filter(account -> PENSION_ACCOUNT_TYPES.contains(account.getAccountType()))
-                .map(account -> nullToZero(account.getDepositBalance()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal availableFinancialAsset = totalAsset.subtract(pensionSaving).max(BigDecimal.ZERO);
+        AssetBreakdown assets = assetAggregator.aggregate(userId);
+        BigDecimal totalAsset = assets.operatingTotal();
+        BigDecimal pensionSaving = assets.pensionSaving();
+        BigDecimal availableFinancialAsset = assets.availableFinancialAsset();
 
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));

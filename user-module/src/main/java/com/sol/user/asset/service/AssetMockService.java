@@ -355,13 +355,23 @@ public class AssetMockService {
     private AssetSummaryResponse createAssetSummary(Scenario scenario) {
         Map<String, BigDecimal> grouped = new LinkedHashMap<>();
         scenario.assets().forEach(seed -> grouped.merge(seed.category(), seed.amount(), BigDecimal::add));
+
+        // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
+        BigDecimal holdingsTotal = scenario.holdings().stream()
+                .map(HoldingSeed::evaluationAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (holdingsTotal.signum() > 0) {
+            grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
+        }
+
         List<AssetGroupSummary> groups = grouped.entrySet().stream()
                 .map(entry -> new AssetGroupSummary(entry.getKey(), entry.getValue()))
                 .toList();
 
         BigDecimal totalAsset = scenario.assets().stream()
                 .map(AssetSeed::amount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .add(holdingsTotal);
         return new AssetSummaryResponse(
                 totalAsset,
                 scenario.debtBalance(),
@@ -377,7 +387,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 6_000_000),
                             asset("DEPOSIT", "신한은행", 12_000_000),
-                            asset("BROKERAGE", "신한투자증권", 80_000_000),
+                            // 예수금만 계약: BROKERAGE 잔액=예수금(현금). 종목 가치(8천만)는 holdings가 보유 → 예수금 0(완전투자).
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 25_000_000)
                     ),
                     List.of(
@@ -393,7 +404,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 18_000_000),
                             asset("DEPOSIT", "신한은행", 45_000_000),
-                            asset("BROKERAGE", "신한투자증권", 55_000_000),
+                            // 예수금만 계약: 종목 가치(5천5백만)는 holdings 보유 → BROKERAGE 예수금 0.
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 65_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 25_000_000)
                     ),
@@ -410,7 +422,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 35_000_000),
                             asset("DEPOSIT", "신한은행", 90_000_000),
-                            asset("BROKERAGE", "신한투자증권", 130_000_000),
+                            // 예수금만 계약: 종목 가치(1억3천만)는 holdings 보유 → BROKERAGE 예수금 0.
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 120_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 60_000_000)
                     ),

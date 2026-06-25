@@ -1,7 +1,7 @@
 package com.sol.user.portfolio.service;
 
-import com.sol.user.account.entity.Account;
-import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.asset.dto.AssetBreakdown;
+import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.repository.PensionRepository;
@@ -27,7 +27,7 @@ import static org.mockito.Mockito.mock;
 class OperationGradeInputAssemblerTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final AccountRepository accountRepository = mock(AccountRepository.class);
+    private final AssetAggregator assetAggregator = mock(AssetAggregator.class);
     private final PensionRepository pensionRepository = mock(PensionRepository.class);
     private final DebtRepository debtRepository = mock(DebtRepository.class);
     private final InsurancePolicyRepository insurancePolicyRepository = mock(InsurancePolicyRepository.class);
@@ -35,7 +35,7 @@ class OperationGradeInputAssemblerTest {
     private final SurveyService surveyService = mock(SurveyService.class);
 
     private final OperationGradeInputAssembler assembler = new OperationGradeInputAssembler(
-            userRepository, accountRepository, pensionRepository, debtRepository,
+            userRepository, assetAggregator, pensionRepository, debtRepository,
             insurancePolicyRepository, userGoalRepository, surveyService);
 
     // ── #118-B: 증권 적합성진단 성향(User.investmentPropensity) 배선 ──────────────────
@@ -66,10 +66,10 @@ class OperationGradeInputAssemblerTest {
         given(user.getInvestmentPropensity()).willReturn(propensity);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-        Account account = mock(Account.class);
-        given(account.getDepositBalance()).willReturn(BigDecimal.valueOf(600_000_000));
-        given(account.getAccountType()).willReturn("BROKERAGE");
-        given(accountRepository.findByUserUserId(1L)).willReturn(List.of(account));
+        // 증권 예수금 6억 + 종목 없음 → operatingTotal 6억, 연금저축 0
+        given(assetAggregator.aggregate(1L)).willReturn(
+                new AssetBreakdown(BigDecimal.valueOf(600_000_000), BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO));
 
         UserGoal goal = mock(UserGoal.class);
         given(goal.getMonthlyTargetLivingCost()).willReturn(BigDecimal.valueOf(3_000_000));
