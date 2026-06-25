@@ -110,8 +110,10 @@ public class PortfolioRecommendationMapper {
 
         BigDecimal monthlyIncome = coverage.getMonthlyIncome();
         BigDecimal totalCoverageRate = coverageRate(monthlyIncome, targetMonthlyLivingCost);
-        BigDecimal residualShortfall = targetMonthlyLivingCost.subtract(monthlyIncome).max(BigDecimal.ZERO)
-                .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+        BigDecimal residualShortfall = (targetMonthlyLivingCost == null || monthlyIncome == null)
+                ? BigDecimal.ZERO.setScale(RATIO_SCALE)
+                : targetMonthlyLivingCost.subtract(monthlyIncome).max(BigDecimal.ZERO)
+                        .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
 
         return PlanResponse.builder()
                 .type(plan.getType())
@@ -181,9 +183,9 @@ public class PortfolioRecommendationMapper {
         };
     }
 
-    /** 월수령 / 목표생활비 × 100 (%). 목표생활비가 0이면 0 반환. */
+    /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */
     private BigDecimal coverageRate(BigDecimal monthlyIncome, BigDecimal targetLivingCost) {
-        if (targetLivingCost == null || targetLivingCost.signum() <= 0) {
+        if (monthlyIncome == null || targetLivingCost == null || targetLivingCost.signum() <= 0) {
             return BigDecimal.ZERO.setScale(RATIO_SCALE);
         }
         return monthlyIncome.multiply(HUNDRED).divide(targetLivingCost, RATIO_SCALE, RoundingMode.HALF_UP);
