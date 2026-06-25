@@ -72,6 +72,12 @@ public class AssetMockService {
     );
     private static final MockType DEFAULT_SCENARIO = MockType.NEED_COMPLEMENT;
 
+    // Days 1-28 excluding fixed-event days (5=pension, 10=maintenance, 15=insurance, 20=interest, 27=loan, 28=dividend)
+    private static final int[] TEMPLATE_DAYS = {
+            1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14,
+            16, 17, 18, 19, 21, 22, 23, 24, 25, 26
+    };
+
     /**
      * 사용자용 마이데이터 연결/재동기화. userId에 배정된 시나리오를 업서트한다.
      * 시나리오가 userId마다 고정이므로 재호출해도 같은 상태로 수렴하며 이전 데이터가 남지 않는다.
@@ -302,10 +308,14 @@ public class AssetMockService {
                     dividendIncome, "INCOME", status, recurring));
         }
 
-        events.add(event(user, monthStart.withDayOfMonth(10), "MAINTENANCE", "아파트 관리비",
-                scenario.monthlyMaintenanceExpense(), "EXPENSE", status, recurring));
-        events.add(event(user, monthStart.withDayOfMonth(15), "INSURANCE", "신한라이프 보험료",
-                scenario.monthlyInsurancePremium(), "EXPENSE", status, recurring));
+        if (scenario.monthlyMaintenanceExpense().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(10), "MAINTENANCE", "아파트 관리비",
+                    scenario.monthlyMaintenanceExpense(), "EXPENSE", status, recurring));
+        }
+        if (scenario.monthlyInsurancePremium().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(15), "INSURANCE", "신한라이프 보험료",
+                    scenario.monthlyInsurancePremium(), "EXPENSE", status, recurring));
+        }
         if (scenario.monthlyLoanRepayment().signum() > 0) {
             events.add(event(user, monthStart.withDayOfMonth(27), "LOAN", "신한은행 대출상환",
                     scenario.monthlyLoanRepayment(), "EXPENSE", status, recurring));
@@ -314,7 +324,7 @@ public class AssetMockService {
         List<MockTransactionTemplates.TransactionTemplate> templates = scenario.transactions();
         for (int i = 0; i < templates.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = templates.get(i);
-            int day = (i * 3 + 1) % 28 + 1;
+            int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
             long amount = applyVariation(t.baseAmount(), monthStart.getMonthValue(), i);
             events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
                     BigDecimal.valueOf(amount), "EXPENSE", status, recurring));
