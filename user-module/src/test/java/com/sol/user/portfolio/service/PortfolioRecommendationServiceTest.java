@@ -1,5 +1,7 @@
 package com.sol.user.portfolio.service;
 
+import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.calculator.AlphaCoverageCalculator;
 import com.sol.user.portfolio.calculator.OperationGradeCalculator;
 import com.sol.user.portfolio.calculator.PortfolioAllocationCalculator;
@@ -37,6 +39,7 @@ class PortfolioRecommendationServiceTest {
     private final EtfPoolProvider etfPoolProvider = mock(EtfPoolProvider.class);
     private final OperationGradeInputAssembler inputAssembler = mock(OperationGradeInputAssembler.class);
     private final SurveyService surveyService = mock(SurveyService.class);
+    private final CashFlowDiagnosisService cashFlowDiagnosisService = mock(CashFlowDiagnosisService.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
@@ -45,7 +48,8 @@ class PortfolioRecommendationServiceTest {
             etfPoolProvider,
             new PortfolioRecommendationMapper(),
             inputAssembler,
-            surveyService
+            surveyService,
+            cashFlowDiagnosisService
     );
 
     @Test
@@ -54,6 +58,12 @@ class PortfolioRecommendationServiceTest {
         given(inputAssembler.assemble(eq(1L), any(SurveyAnswerResponse.class))).willReturn(neutralInput());
         given(surveyService.get(1L)).willReturn(
                 SurveyAnswerResponse.builder().q1(2).q2(1).q3(1).build());
+        // 화면 비교용 before 현금흐름 — toResponse가 충당률/부족액 계산에 사용
+        given(cashFlowDiagnosisService.diagnose(1L)).willReturn(
+                CashFlowDiagnosisResponse.builder()
+                        .monthlyCashFlow(BigDecimal.valueOf(1_000_000))
+                        .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
+                        .build());
 
         RecommendationResponse response = service.recommend(1L);
 
