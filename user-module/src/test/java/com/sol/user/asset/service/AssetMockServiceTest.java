@@ -71,7 +71,7 @@ class AssetMockServiceTest {
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo(BigDecimal.valueOf(totalDebt));
         assertThat(response.assetSummary().netAsset()).isEqualByComparingTo(BigDecimal.valueOf(netAsset));
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
-        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(7);
+        assertThat(response.generatedCounts().cashflowEvents()).isGreaterThanOrEqualTo(150);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
         // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력
         verify(user).assignInvestmentPropensity(expectedPropensity);
@@ -166,6 +166,33 @@ class AssetMockServiceTest {
         assetMockService.sync(3L);
 
         verify(lifeStabilityService).recalculateFromUserDataIfReady(3L);
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void currentMonthEventsAreRecurringPastMonthEventsAreNot() {
+        User user = mock(User.class);
+        when(user.getUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<com.sol.user.cashflow.entity.CashFlowEvent> saved =
+                toList((Iterable<com.sol.user.cashflow.entity.CashFlowEvent>) captor.getValue());
+
+        java.time.LocalDate currentMonthStart = java.time.LocalDate.now().withDayOfMonth(1);
+
+        saved.stream()
+                .filter(e -> java.time.YearMonth.from(e.getEventDate())
+                        .equals(java.time.YearMonth.from(currentMonthStart)))
+                .forEach(e -> assertThat(e.getRecurring()).isTrue());
+
+        saved.stream()
+                .filter(e -> e.getEventDate().isBefore(currentMonthStart))
+                .forEach(e -> assertThat(e.getRecurring()).isFalse());
     }
 
     private void returnArgumentsFromSaveAll() {
