@@ -5,6 +5,7 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.type.MockType;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.StockTickerProductId;
@@ -18,17 +19,19 @@ import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -61,7 +64,8 @@ class AssetMockServiceTest {
     @MethodSource("scenarios")
     void createsScenarioWithSpecifiedSummary(MockType mockType, long totalAsset,
                                              long totalDebt, long netAsset, int holdingCount,
-                                             InvestmentPropensity expectedPropensity) {
+                                             InvestmentPropensity expectedPropensity,
+                                             int expectedCashflowCount) {
         User user = mock(User.class);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         returnArgumentsFromSaveAll();
@@ -72,7 +76,7 @@ class AssetMockServiceTest {
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo(BigDecimal.valueOf(totalDebt));
         assertThat(response.assetSummary().netAsset()).isEqualByComparingTo(BigDecimal.valueOf(netAsset));
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
-        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(7);
+        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(expectedCashflowCount);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
         // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력
         verify(user).assignInvestmentPropensity(expectedPropensity);
@@ -164,6 +168,33 @@ class AssetMockServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void currentMonthEventsAreRecurringPastMonthEventsAreNot() {
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        YearMonth currentMonth = YearMonth.now();
+        List<CashFlowEvent> thisMonth = saved.stream()
+                .filter(e -> YearMonth.from(e.getEventDate()).equals(currentMonth))
+                .toList();
+        List<CashFlowEvent> pastMonths = saved.stream()
+                .filter(e -> YearMonth.from(e.getEventDate()).isBefore(currentMonth))
+                .toList();
+
+        assertThat(thisMonth).isNotEmpty();
+        assertThat(thisMonth).allSatisfy(e -> assertThat(e.getRecurring()).isTrue());
+        assertThat(pastMonths).isNotEmpty();
+        assertThat(pastMonths).allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
+    }
+
+    @Test
     void recalculatesLifeStabilityAfterSync() {
         User user = mock(User.class);
         when(userRepository.findById(3L)).thenReturn(Optional.of(user));
@@ -197,13 +228,17 @@ class AssetMockServiceTest {
     private static Stream<Arguments> scenarios() {
         // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
         //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
+        // cashflowEvents = 6개월치 buildMonthEvents 합산:
+        //  NEED_IMPROVEMENT: (6 고정 + 19 템플릿) × 6개월 = 150
+        //  NEED_COMPLEMENT:  (6 고정 + 20 템플릿) × 6개월 = 156
+        //  STABLE:           (5 고정 + 21 템플릿) × 6개월 = 156  (대출 없음 → 고정 5개)
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
-                        InvestmentPropensity.ACTIVE),
+                        InvestmentPropensity.ACTIVE, 150),
                 Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL),
+                        InvestmentPropensity.NEUTRAL, 156),
                 Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
-                        InvestmentPropensity.STABLE)
+                        InvestmentPropensity.STABLE, 156)
         );
     }
 
