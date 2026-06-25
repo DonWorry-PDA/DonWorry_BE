@@ -22,6 +22,12 @@ public class RecommendationResponse {
 
     private List<PlanResponse> plans;          // 구조적부족이면 빈 리스트
 
+    // 설계안 적용 전 현황 — 화면의 "59% → 84%" 비교 표시용
+    private BigDecimal targetMonthlyLivingCost;   // 목표 생활비
+    private BigDecimal currentMonthlyCashFlow;    // 현재 월 현금흐름 (국민연금 + 배당)
+    private BigDecimal currentCoverageRate;       // 현재 생활비 충당률 % (예: 59)
+    private BigDecimal currentMonthlyShortfall;   // 현재 월 부족액 (예: 90만)
+
     private String q3ReferenceLabel;           // Q3 표 기준 안내 (예: "안정안 기준 예시")
     private List<Q3Scenario> q3Scenarios;
 }

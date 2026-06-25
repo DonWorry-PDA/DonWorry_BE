@@ -1,5 +1,7 @@
 package com.sol.user.portfolio.service;
 
+import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.calculator.AlphaCoverageCalculator;
 import com.sol.user.portfolio.calculator.OperationGradeCalculator;
 import com.sol.user.portfolio.calculator.PortfolioAllocationCalculator;
@@ -35,6 +37,7 @@ public class PortfolioRecommendationService {
     private final PortfolioRecommendationMapper recommendationMapper;
     private final OperationGradeInputAssembler inputAssembler;
     private final SurveyService surveyService;
+    private final CashFlowDiagnosisService cashFlowDiagnosisService;
 
     public RecommendationResponse recommend(Long userId) {
         // 설문 1회 조회 — q1/q2(STEP1~4 운용등급)는 assembler가, q3(STEP6 소진모델)는 여기서 재사용
@@ -52,7 +55,11 @@ public class PortfolioRecommendationService {
         // STEP6 — α충족률·소진모델
         CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input, q3));
 
-        return recommendationMapper.toResponse(allocation, coverage);
+        // 화면 비교용 before 값 (현재 현금흐름 충당률 59% 등)
+        CashFlowDiagnosisResponse cashFlow = cashFlowDiagnosisService.diagnose(userId);
+
+        return recommendationMapper.toResponse(allocation, coverage,
+                cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost());
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {

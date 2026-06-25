@@ -34,7 +34,8 @@ public class PortfolioRecommendationMapper {
     private static final int RATIO_SCALE = 2;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
-    public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage) {
+    public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
+                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -42,16 +43,24 @@ public class PortfolioRecommendationMapper {
         PlanType recommendedType = resolveRecommendedType(coverage.getTrack(), allocation.getPlans(), coverageByType);
 
         List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType))
+                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
+
+        BigDecimal currentCoverageRate = coverageRate(currentMonthlyCashFlow, targetMonthlyLivingCost);
+        BigDecimal currentShortfall = targetMonthlyLivingCost.subtract(currentMonthlyCashFlow).max(BigDecimal.ZERO)
+                .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
 
         return RecommendationResponse.builder()
                 .track(coverage.getTrack())   // STEP6가 확정한 최종 트랙
                 .alpha(coverage.getAlpha())
                 .band(coverage.getBand())
                 .plans(plans)
+                .targetMonthlyLivingCost(targetMonthlyLivingCost)
+                .currentMonthlyCashFlow(currentMonthlyCashFlow)
+                .currentCoverageRate(currentCoverageRate)
+                .currentMonthlyShortfall(currentShortfall)
                 .q3ReferenceLabel(q3Label)
                 .q3Scenarios(coverage.getQ3Scenarios())
                 .build();
@@ -87,7 +96,8 @@ public class PortfolioRecommendationMapper {
 
     private PlanResponse toPlanResponse(PlanAllocation plan,
                                         Map<PlanType, PlanCoverage> coverageByType,
-                                        PlanType recommendedType) {
+                                        PlanType recommendedType,
+                                        BigDecimal targetMonthlyLivingCost) {
         PlanCoverage coverage = coverageByType.get(plan.getType());
         if (coverage == null) {
             // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
@@ -97,6 +107,13 @@ public class PortfolioRecommendationMapper {
         PlanStatus status = plan.getType() == recommendedType
                 ? PlanStatus.RECOMMENDED
                 : PlanStatus.AVAILABLE;
+
+        BigDecimal monthlyIncome = coverage.getMonthlyIncome();
+        BigDecimal totalCoverageRate = coverageRate(monthlyIncome, targetMonthlyLivingCost);
+        BigDecimal residualShortfall = (targetMonthlyLivingCost == null || monthlyIncome == null)
+                ? BigDecimal.ZERO.setScale(RATIO_SCALE)
+                : targetMonthlyLivingCost.subtract(monthlyIncome).max(BigDecimal.ZERO)
+                        .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
 
         return PlanResponse.builder()
                 .type(plan.getType())
@@ -109,10 +126,12 @@ public class PortfolioRecommendationMapper {
                 .shortTermBucket(plan.getShortTermBucket())
                 .holdings(plan.getHoldings())
                 .allocations(buildAllocations(plan))
-                .monthlyIncome(coverage.getMonthlyIncome())
+                .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
                 .sustainableCoverageRate(coverage.getSustainableCoverageRate())
                 .inheritanceAmount(coverage.getInheritanceAmount())
+                .totalCoverageRate(totalCoverageRate)
+                .residualMonthlyShortfall(residualShortfall)
                 .build();
     }
 
@@ -162,5 +181,13 @@ public class PortfolioRecommendationMapper {
             case BALANCED -> "균형 월급형";
             case LIQUIDITY -> "여유자금 성장형";
         };
+    }
+
+    /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */
+    private BigDecimal coverageRate(BigDecimal monthlyIncome, BigDecimal targetLivingCost) {
+        if (monthlyIncome == null || targetLivingCost == null || targetLivingCost.signum() <= 0) {
+            return BigDecimal.ZERO.setScale(RATIO_SCALE);
+        }
+        return monthlyIncome.multiply(HUNDRED).divide(targetLivingCost, RATIO_SCALE, RoundingMode.HALF_UP);
     }
 }
