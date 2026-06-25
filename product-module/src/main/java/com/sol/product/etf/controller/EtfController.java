@@ -72,4 +72,10 @@ public class EtfController {
     public ResponseEntity<ApiResponse<EtfRealtimeResponse>> getRealtime(@PathVariable String ticker) {
         return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getRealtime(ticker)));
     }
+
+    @Operation(summary = "ETF 현재가 단건 조회 (Redis → 일봉 종가 fallback)")
+    @GetMapping("/{productId}/price")
+    public ResponseEntity<ApiResponse<Long>> getCurrentPrice(@PathVariable Long productId) {
+        return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getCurrentPriceByProductId(productId)));
+    }
 }
