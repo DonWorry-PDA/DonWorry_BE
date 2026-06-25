@@ -8,6 +8,8 @@ import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.trade.dto.BuyRequest;
 import com.sol.user.trade.dto.BuyResponse;
+import com.sol.user.trade.dto.TransferRequest;
+import com.sol.user.trade.dto.TransferResponse;
 import com.sol.user.trade.entity.TradeHistory;
 import com.sol.user.trade.infra.rest.EtfPriceClient;
 import com.sol.user.trade.repository.TradeHistoryRepository;
@@ -17,6 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -49,5 +56,46 @@ public class TradeService {
                 );
 
         return new BuyResponse(request.productId(), request.quantity(), rawPrice, totalAmount, trade.getTradedAt());
+    }
+
+    @Transactional
+    public TransferResponse transfer(Long userId, TransferRequest request) {
+        // BROKERAGE accountId 확인 (락 획득 전 ID만 조회)
+        Account brokerage = accountRepository.findByUserUserIdAndAccountType(userId, "BROKERAGE")
+                .orElseThrow(() -> new BaseException(ErrorCode.BROKERAGE_ACCOUNT_NOT_FOUND));
+
+        List<Long> fromIds = request.transfers().stream()
+                .map(TransferRequest.TransferItem::fromAccountId)
+                .distinct()
+                .toList();
+
+        if (fromIds.contains(brokerage.getAccountId())) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+
+        // 모든 계좌를 accountId 오름차순으로 한 번에 락 (deadlock 방지)
+        List<Long> allIds = Stream.concat(fromIds.stream(), Stream.of(brokerage.getAccountId()))
+                .sorted()
+                .toList();
+
+        List<Account> locked = accountRepository.findAllByIdAndUserIdForUpdate(allIds, userId);
+        if (locked.size() != allIds.size()) {
+            // 소유하지 않은 계좌가 포함된 경우
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+
+        Map<Long, Account> byId = locked.stream()
+                .collect(Collectors.toMap(Account::getAccountId, a -> a));
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (TransferRequest.TransferItem item : request.transfers()) {
+            byId.get(item.fromAccountId()).deductBalance(item.amount());
+            total = total.add(item.amount());
+        }
+
+        Account brokerageAccount = byId.get(brokerage.getAccountId());
+        brokerageAccount.addBalance(total);
+
+        return new TransferResponse(brokerageAccount.getDepositBalance(), LocalDateTime.now());
     }
 }
