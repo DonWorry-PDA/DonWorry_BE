@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -188,22 +189,26 @@ public class PortfolioRecommendationMapper {
 
     /**
      * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
-     * 이미 충분히 보유한 종목(net ≤ 0)은 목록에서 제거한다.
+     * 동일 productId가 SAFE/SHORT_TERM 버킷에 중복 등장(예: SOL CD금리MMF)하는 경우
+     * remaining을 순차 차감해 이중 공제를 방지한다. net ≤ 0인 항목은 제거.
      */
     private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId) {
         if (existingByProductId.isEmpty()) {
             return holdings;
         }
-        return holdings.stream()
-                .map(h -> {
-                    BigDecimal existing = existingByProductId.getOrDefault(h.productId(), BigDecimal.ZERO);
-                    BigDecimal net = h.amount().subtract(existing).max(BigDecimal.ZERO)
-                            .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
-                    return new Holding(h.productId(), h.ticker(), h.productName(),
-                            h.role(), h.currency(), h.weight(), net);
-                })
-                .filter(h -> h.amount().compareTo(BigDecimal.ZERO) > 0)
-                .toList();
+        Map<Long, BigDecimal> remaining = new HashMap<>(existingByProductId);
+        List<Holding> result = new ArrayList<>();
+        for (Holding h : holdings) {
+            BigDecimal rem = remaining.getOrDefault(h.productId(), BigDecimal.ZERO);
+            BigDecimal net = h.amount().subtract(rem).max(BigDecimal.ZERO)
+                    .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+            remaining.put(h.productId(), rem.subtract(h.amount().min(rem)));
+            if (net.compareTo(BigDecimal.ZERO) > 0) {
+                result.add(new Holding(h.productId(), h.ticker(), h.productName(),
+                        h.role(), h.currency(), h.weight(), net));
+            }
+        }
+        return result;
     }
 
     /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */

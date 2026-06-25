@@ -27,6 +27,10 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     Optional<Account> findByUserUserIdAndAccountType(Long userId, String accountType);
 
+    @Query("SELECT a.accountId FROM Account a WHERE a.user.userId = :userId AND a.accountType = :accountType")
+    Optional<Long> findAccountIdByUserIdAndAccountType(@Param("userId") Long userId,
+                                                       @Param("accountType") String accountType);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Account a WHERE a.user.userId = :userId AND a.accountType = :accountType")
     Optional<Account> findByUserUserIdAndAccountTypeForUpdate(@Param("userId") Long userId,

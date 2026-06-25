@@ -60,8 +60,8 @@ public class TradeService {
 
     @Transactional
     public TransferResponse transfer(Long userId, TransferRequest request) {
-        // BROKERAGE accountId 확인 (락 획득 전 ID만 조회)
-        Account brokerage = accountRepository.findByUserUserIdAndAccountType(userId, "BROKERAGE")
+        // 엔티티 로딩 없이 ID만 조회 — 이후 PESSIMISTIC_WRITE 경로에서 처음 로딩되도록 해 stale 캐시 방지
+        Long brokerageAccountId = accountRepository.findAccountIdByUserIdAndAccountType(userId, "BROKERAGE")
                 .orElseThrow(() -> new BaseException(ErrorCode.BROKERAGE_ACCOUNT_NOT_FOUND));
 
         List<Long> fromIds = request.transfers().stream()
@@ -69,12 +69,12 @@ public class TradeService {
                 .distinct()
                 .toList();
 
-        if (fromIds.contains(brokerage.getAccountId())) {
+        if (fromIds.contains(brokerageAccountId)) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
         // 모든 계좌를 accountId 오름차순으로 한 번에 락 (deadlock 방지)
-        List<Long> allIds = Stream.concat(fromIds.stream(), Stream.of(brokerage.getAccountId()))
+        List<Long> allIds = Stream.concat(fromIds.stream(), Stream.of(brokerageAccountId))
                 .sorted()
                 .toList();
 
@@ -93,7 +93,7 @@ public class TradeService {
             total = total.add(item.amount());
         }
 
-        Account brokerageAccount = byId.get(brokerage.getAccountId());
+        Account brokerageAccount = byId.get(brokerageAccountId);
         brokerageAccount.addBalance(total);
 
         return new TransferResponse(brokerageAccount.getDepositBalance(), LocalDateTime.now());

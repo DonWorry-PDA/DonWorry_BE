@@ -60,9 +60,10 @@ public class PortfolioRecommendationService {
         // STEP6 — α충족률·소진모델
         CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input, q3));
 
-        // 기존 보유종목 평가액 — productId별 합산 (동일 종목 여러 계좌 보유 대비)
+        // BROKERAGE 계좌 보유종목 평가액 — 매수 실행 대상 계좌만 차감 (IRP 등 타 계좌 제외)
         Map<Long, BigDecimal> existingEvalByProductId = holdingRepository
                 .findHoldingsWithAccountTypeByUserId(userId).stream()
+                .filter(h -> "BROKERAGE".equals(h.getAccountType()))
                 .collect(Collectors.toMap(
                         HoldingWithProduct::getProductId,
                         h -> h.getEvaluationAmount() == null ? BigDecimal.ZERO : h.getEvaluationAmount(),
