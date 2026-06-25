@@ -20,6 +20,10 @@ class CalendarEventMapperTest {
         assertThat(mapper.toCategory("INSURANCE")).isEqualTo(CalendarEventCategory.PAYMENT);
         assertThat(mapper.toCategory("CARD")).isEqualTo(CalendarEventCategory.PAYMENT);
         assertThat(mapper.toCategory("LOAN")).isEqualTo(CalendarEventCategory.PAYMENT);
+        assertThat(mapper.toCategory("TRANSPORT")).isEqualTo(CalendarEventCategory.PAYMENT);
+        assertThat(mapper.toCategory("UTILITY")).isEqualTo(CalendarEventCategory.PAYMENT);
+        assertThat(mapper.toCategory("PHONE")).isEqualTo(CalendarEventCategory.PAYMENT);
+        assertThat(mapper.toCategory("MEDICAL")).isEqualTo(CalendarEventCategory.PAYMENT);
         assertThat(mapper.toCategory("MATURITY")).isEqualTo(CalendarEventCategory.MATURITY);
         assertThat(mapper.toCategory("UNKNOWN")).isEqualTo(CalendarEventCategory.ETC);
         assertThat(mapper.toCategory(null)).isEqualTo(CalendarEventCategory.ETC);

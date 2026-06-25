@@ -73,6 +73,12 @@ public class AssetMockService {
     );
     private static final MockType DEFAULT_SCENARIO = MockType.NEED_COMPLEMENT;
 
+    // Days 1-28 excluding fixed-event days (5=pension, 10=maintenance, 15=insurance, 20=interest, 27=loan, 28=dividend)
+    private static final int[] TEMPLATE_DAYS = {
+            1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14,
+            16, 17, 18, 19, 21, 22, 23, 24, 25, 26
+    };
+
     /**
      * 사용자용 마이데이터 연결/재동기화. userId에 배정된 시나리오를 업서트한다.
      * 시나리오가 userId마다 고정이므로 재호출해도 같은 상태로 수렴하며 이전 데이터가 남지 않는다.
@@ -311,29 +317,73 @@ public class AssetMockService {
                 assetConnectionRepository::deleteAll, assetConnectionRepository::saveAll);
     }
 
-    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
-        LocalDate month = LocalDate.now().withDayOfMonth(1);
+    private List<CashFlowEvent> buildMonthEvents(User user, LocalDate monthStart,
+                                                  Scenario scenario, boolean recurring) {
+        String status = recurring ? "SCHEDULED" : "COMPLETED";
+
         BigDecimal interestIncome = scenario.monthlyFinancialIncome()
                 .multiply(BigDecimal.valueOf(30))
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
         BigDecimal dividendIncome = scenario.monthlyFinancialIncome().subtract(interestIncome);
 
-        List<CashFlowEvent> desired = List.of(
-                event(user, month.withDayOfMonth(5), "PENSION", "국민연금 입금", scenario.monthlyPensionIncome(), "INCOME"),
-                event(user, month.withDayOfMonth(10), "MAINTENANCE", "관리비", scenario.monthlyMaintenanceExpense(), "EXPENSE"),
-                event(user, month.withDayOfMonth(15), "INSURANCE", "보험료", scenario.monthlyInsurancePremium(), "EXPENSE"),
-                event(user, month.withDayOfMonth(20), "INTEREST", "예금 이자", interestIncome, "INCOME"),
-                event(user, month.withDayOfMonth(25), "CARD", "카드대금", scenario.monthlyCardExpense(), "EXPENSE"),
-                event(user, month.withDayOfMonth(27), "LOAN", "대출 상환", scenario.monthlyLoanRepayment(), "EXPENSE"),
-                event(user, month.withDayOfMonth(28), "DIVIDEND", "ETF 배당금", dividendIncome, "INCOME")
-        );
+        List<CashFlowEvent> events = new ArrayList<>();
+
+        if (scenario.monthlyPensionIncome().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
+                    scenario.monthlyPensionIncome(), "INCOME", status, recurring));
+        }
+        if (interestIncome.signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(20), "INTEREST", "예금 이자",
+                    interestIncome, "INCOME", status, recurring));
+        }
+        if (dividendIncome.signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(28), "DIVIDEND", "ETF 배당금",
+                    dividendIncome, "INCOME", status, recurring));
+        }
+
+        if (scenario.monthlyMaintenanceExpense().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(10), "MAINTENANCE", "아파트 관리비",
+                    scenario.monthlyMaintenanceExpense(), "EXPENSE", status, recurring));
+        }
+        if (scenario.monthlyInsurancePremium().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(15), "INSURANCE", "신한라이프 보험료",
+                    scenario.monthlyInsurancePremium(), "EXPENSE", status, recurring));
+        }
+        if (scenario.monthlyLoanRepayment().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(27), "LOAN", "신한은행 대출상환",
+                    scenario.monthlyLoanRepayment(), "EXPENSE", status, recurring));
+        }
+
+        List<MockTransactionTemplates.TransactionTemplate> templates = scenario.transactions();
+        for (int i = 0; i < templates.size(); i++) {
+            MockTransactionTemplates.TransactionTemplate t = templates.get(i);
+            int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
+                    amount, "EXPENSE", status, recurring));
+        }
+
+        return events;
+    }
+
+    private BigDecimal applyVariation(BigDecimal baseAmount, int monthNum, int templateIndex) {
+        BigDecimal factor = BigDecimal.valueOf(85 + ((monthNum * 7 + templateIndex * 3) % 31), 2);
+        return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+    }
+
+    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
         List<CashFlowEvent> existing = cashFlowEventRepository.findByUserUserId(user.getUserId()).stream()
-                .filter(cashFlowEvent -> "MYDATA_MOCK".equals(cashFlowEvent.getSource()))
+                .filter(e -> "MYDATA_MOCK".equals(e.getSource()))
                 .toList();
-        return upsertByKey(existing, desired, CashFlowEvent::getEventType,
-                (target, seed) -> target.updateMock(seed.getEventDate(), seed.getTitle(),
-                        seed.getAmount(), seed.getFlowType()),
-                cashFlowEventRepository::deleteAll, cashFlowEventRepository::saveAll);
+        cashFlowEventRepository.deleteAll(existing);
+
+        LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
+        List<CashFlowEvent> events = new ArrayList<>();
+        events.addAll(buildMonthEvents(user, currentMonth, scenario, true));
+        for (int i = 1; i <= 5; i++) {
+            events.addAll(buildMonthEvents(user, currentMonth.minusMonths(i), scenario, false));
+        }
+        return cashFlowEventRepository.saveAll(events);
     }
 
     /**
@@ -371,18 +421,8 @@ public class AssetMockService {
     }
 
     private CashFlowEvent event(User user, LocalDate date, String type, String title,
-                                BigDecimal amount, String flowType) {
-        return new CashFlowEvent(
-                user,
-                date,
-                type,
-                title,
-                amount,
-                flowType,
-                "SCHEDULED",
-                true,
-                "MYDATA_MOCK"
-        );
+                                BigDecimal amount, String flowType, String status, boolean recurring) {
+        return new CashFlowEvent(user, date, type, title, amount, flowType, status, recurring, "MYDATA_MOCK");
     }
 
     /**
@@ -445,7 +485,7 @@ public class AssetMockService {
                     ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
-                    money(250_000), money(180_000), money(1_250_000)
+                    money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT
             );
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
@@ -468,7 +508,7 @@ public class AssetMockService {
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
-                    money(200_000), money(180_000), money(1_400_000)
+                    money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT
             );
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
@@ -493,7 +533,7 @@ public class AssetMockService {
                     // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
                     // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
                     money(9_000_000), money(2_000_000), money(464_000),
-                    money(180_000), money(180_000), money(1_750_000)
+                    money(180_000), money(180_000), MockTransactionTemplates.STABLE
             );
         };
     }
@@ -538,7 +578,7 @@ public class AssetMockService {
             BigDecimal monthlyFinancialIncome,
             BigDecimal monthlyInsurancePremium,
             BigDecimal monthlyMaintenanceExpense,
-            BigDecimal monthlyCardExpense
+            List<MockTransactionTemplates.TransactionTemplate> transactions
     ) {
     }
 }
