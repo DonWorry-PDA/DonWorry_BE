@@ -9,7 +9,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 @Entity
-@Table(name = "holding")
+@Table(name = "holding", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_holding_account_product", columnNames = {"account_id", "product_id"})
+})
 @Getter
 @NoArgsConstructor
 public class Holding {
