@@ -108,7 +108,8 @@ public class AssetMockService {
                 .filter(account -> account.getAccountNumber() != null
                         && account.getAccountNumber().startsWith("MOCK-"))
                 .toList();
-        holdingRepository.deleteAll(holdingRepository.findByAccountIn(mockAccounts));
+        List<Long> mockAccountIds = mockAccounts.stream().map(Account::getAccountId).toList();
+        holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
         accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
@@ -245,7 +246,7 @@ public class AssetMockService {
                         seed.evaluationAmount(), seed.quantity()));
             }
         }
-        holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
+        holdingRepository.deleteAllByAccountIdIn(List.of(brokerage.getAccountId()));
         return holdingRepository.saveAll(desired);
     }
 
