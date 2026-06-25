@@ -1,5 +1,7 @@
 package com.sol.user.portfolio.service;
 
+import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.calculator.AlphaCoverageCalculator;
@@ -22,6 +24,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 은퇴 포트폴리오 추천 오케스트레이터 — STEP1~4(운용등급) 재사용 → 풀조회 → STEP5(배분) → STEP6(충족률) → 응답 조립.
@@ -38,6 +42,7 @@ public class PortfolioRecommendationService {
     private final OperationGradeInputAssembler inputAssembler;
     private final SurveyService surveyService;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
+    private final HoldingRepository holdingRepository;
 
     public RecommendationResponse recommend(Long userId) {
         // 설문 1회 조회 — q1/q2(STEP1~4 운용등급)는 assembler가, q3(STEP6 소진모델)는 여기서 재사용
@@ -55,11 +60,21 @@ public class PortfolioRecommendationService {
         // STEP6 — α충족률·소진모델
         CoverageResult coverage = coverageCalculator.calculate(toCoverageInput(allocation, grade, input, q3));
 
+        // 기존 보유종목 평가액 — productId별 합산 (동일 종목 여러 계좌 보유 대비)
+        Map<Long, BigDecimal> existingEvalByProductId = holdingRepository
+                .findHoldingsWithAccountTypeByUserId(userId).stream()
+                .collect(Collectors.toMap(
+                        HoldingWithProduct::getProductId,
+                        h -> h.getEvaluationAmount() == null ? BigDecimal.ZERO : h.getEvaluationAmount(),
+                        BigDecimal::add
+                ));
+
         // 화면 비교용 before 값 (현재 현금흐름 충당률 59% 등)
         CashFlowDiagnosisResponse cashFlow = cashFlowDiagnosisService.diagnose(userId);
 
         return recommendationMapper.toResponse(allocation, coverage,
-                cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost());
+                cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost(),
+                existingEvalByProductId);
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {

@@ -35,7 +35,8 @@ public class PortfolioRecommendationMapper {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
-                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost) {
+                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost,
+                                             Map<Long, BigDecimal> existingEvalByProductId) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -43,7 +44,8 @@ public class PortfolioRecommendationMapper {
         PlanType recommendedType = resolveRecommendedType(coverage.getTrack(), allocation.getPlans(), coverageByType);
 
         List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost))
+                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost,
+                        existingEvalByProductId))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
@@ -97,7 +99,8 @@ public class PortfolioRecommendationMapper {
     private PlanResponse toPlanResponse(PlanAllocation plan,
                                         Map<PlanType, PlanCoverage> coverageByType,
                                         PlanType recommendedType,
-                                        BigDecimal targetMonthlyLivingCost) {
+                                        BigDecimal targetMonthlyLivingCost,
+                                        Map<Long, BigDecimal> existingEvalByProductId) {
         PlanCoverage coverage = coverageByType.get(plan.getType());
         if (coverage == null) {
             // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
@@ -124,7 +127,7 @@ public class PortfolioRecommendationMapper {
                 .riskTarget(plan.getRiskTarget())
                 .safeTarget(plan.getSafeTarget())
                 .shortTermBucket(plan.getShortTermBucket())
-                .holdings(plan.getHoldings())
+                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
@@ -181,6 +184,26 @@ public class PortfolioRecommendationMapper {
             case BALANCED -> "균형 월급형";
             case LIQUIDITY -> "여유자금 성장형";
         };
+    }
+
+    /**
+     * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
+     * 이미 충분히 보유한 종목(net ≤ 0)은 목록에서 제거한다.
+     */
+    private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId) {
+        if (existingByProductId.isEmpty()) {
+            return holdings;
+        }
+        return holdings.stream()
+                .map(h -> {
+                    BigDecimal existing = existingByProductId.getOrDefault(h.productId(), BigDecimal.ZERO);
+                    BigDecimal net = h.amount().subtract(existing).max(BigDecimal.ZERO)
+                            .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+                    return new Holding(h.productId(), h.ticker(), h.productName(),
+                            h.role(), h.currency(), h.weight(), net);
+                })
+                .filter(h -> h.amount().compareTo(BigDecimal.ZERO) > 0)
+                .toList();
     }
 
     /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */
