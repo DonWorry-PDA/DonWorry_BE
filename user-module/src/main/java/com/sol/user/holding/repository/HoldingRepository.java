@@ -4,6 +4,7 @@ import com.sol.user.account.entity.Account;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -54,6 +55,17 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             WHERE a.user_id = :userId
             """, nativeQuery = true)
     List<EtfHolding> findAllHoldingsByUserId(@Param("userId") Long userId);
+
+    // 개별주 mock 시드용: ticker_code → product_id (product_type='STOCK'만)
+    @Query(value = """
+            SELECT s.ticker_code AS ticker,
+                   s.product_id  AS productId
+            FROM stock_detail s
+            JOIN financial_product fp ON fp.product_id = s.product_id
+            WHERE fp.product_type = 'STOCK'
+              AND s.ticker_code IN (:tickers)
+            """, nativeQuery = true)
+    List<StockTickerProductId> findStockProductIds(@Param("tickers") List<String> tickers);
 
     @Query(value = """
             SELECT h.product_id                         AS productId,
