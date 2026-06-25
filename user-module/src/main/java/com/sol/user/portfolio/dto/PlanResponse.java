@@ -34,4 +34,8 @@ public class PlanResponse {
     private BigDecimal alphaCoverageRate;          // α충족률 = 총인출 기준 (α≤0이면 null, 100캡)
     private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
     private BigDecimal inheritanceAmount;
+
+    // 화면 비교 표시 (예: "충당 59% → 84%", "부족분 90만 → 35만")
+    private BigDecimal totalCoverageRate;          // 설계안 적용 후 생활비 충당률 % (monthlyIncome / targetLivingCost)
+    private BigDecimal residualMonthlyShortfall;   // 설계안 적용 후 월 부족액 (0이면 초과 달성)
 }
