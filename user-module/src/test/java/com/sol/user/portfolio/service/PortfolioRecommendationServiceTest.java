@@ -11,6 +11,7 @@ import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.type.AllocationRole;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
@@ -40,6 +41,8 @@ class PortfolioRecommendationServiceTest {
     private final OperationGradeInputAssembler inputAssembler = mock(OperationGradeInputAssembler.class);
     private final SurveyService surveyService = mock(SurveyService.class);
     private final CashFlowDiagnosisService cashFlowDiagnosisService = mock(CashFlowDiagnosisService.class);
+    // #170 머지로 추가된 의존: 미스텁 시 빈 보유 → 차감 0(기존 동작 동일)
+    private final HoldingRepository holdingRepository = mock(HoldingRepository.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
@@ -49,7 +52,8 @@ class PortfolioRecommendationServiceTest {
             new PortfolioRecommendationMapper(),
             inputAssembler,
             surveyService,
-            cashFlowDiagnosisService
+            cashFlowDiagnosisService,
+            holdingRepository
     );
 
     @Test

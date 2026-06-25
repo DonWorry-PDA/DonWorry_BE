@@ -208,6 +208,25 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void 투자건강검진_미리보기는_상세와_같은_단일출처_largest_remainder를_쓴다() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        // 현금흐름·잠자는 돈·성장 각 1천만 = 33.33%씩 → CASHFLOW 34(상세 헤드라인과 동일 값).
+        // 독립 HALF_UP(33)을 쓰면 허브·상세가 1%p 어긋난다.
+        AssetBreakdown breakdown = new AssetBreakdown(BigDecimal.valueOf(10_000_000), BigDecimal.ZERO,
+                BigDecimal.valueOf(10_000_000), BigDecimal.ZERO, BigDecimal.valueOf(10_000_000));
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(breakdown, List.of(), List.of(), Map.of()));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().investmentCheck().cashflowAssetRatio())
+                .isEqualTo(breakdown.cashflowAssetRatio())
+                .isEqualTo(34);
+    }
+
+    @Test
     void 후속이슈_의존_메뉴는_null_또는_기본값() {
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();

@@ -1,6 +1,10 @@
 package com.sol.user.asset.dto;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 자산 집계 결과(예수금만 계약). 계좌 예수금과 보유종목 평가액을 계좌·종목 성격별로 분해해,
@@ -44,5 +48,91 @@ public record AssetBreakdown(
     /** 즉시 가용 금융자산 = 월급 재료 − 연금 제약분(예수금+종목). */
     public BigDecimal availableFinancialAsset() {
         return operatingTotal().subtract(restrictedPension()).max(BigDecimal.ZERO);
+    }
+
+    /** 잠자는 돈 = 비연금 예수금(전체 예수금 − 연금 예수금). 음수 방지. */
+    public BigDecimal idleCash() {
+        return cash.subtract(pensionCash).max(BigDecimal.ZERO);
+    }
+
+    /**
+     * 자산을 4역할(현금흐름·성장·잠자는 돈·연금)로 분해한 결과. 투자 건강검진 헤드라인·도넛, 허브 미리보기가
+     * 모두 이 한 메서드를 단일 출처로 쓴다. 금액 0인 역할은 빼고, 남은 역할의 {@code ratio} 합이 정확히 100이
+     * 되도록 largest-remainder(내림 후 소수부 큰 순서로 1씩 보정)로 맞춘다. 순자산 0이면 빈 리스트.
+     *
+     * <p>헤드라인 비율을 이 분해의 {@code CASHFLOW} ratio에서 가져오면(↔ {@link #cashflowAssetRatio()})
+     * 헤드라인 숫자와 도넛 조각이 항상 일치한다(독립 반올림 시 1%p 어긋남 방지).
+     */
+    public List<RoleSlice> roleAllocation() {
+        BigDecimal total = grossTotal();
+        if (total.signum() <= 0) {
+            return List.of();
+        }
+
+        List<Slice> slices = new ArrayList<>();
+        addSlice(slices, AssetRole.CASHFLOW, nonStockHoldingValue, total);
+        addSlice(slices, AssetRole.GROWTH, stockHoldingValue, total);
+        addSlice(slices, AssetRole.IDLE, idleCash(), total);
+        addSlice(slices, AssetRole.PENSION, restrictedPension(), total);
+
+        int leftover = 100 - slices.stream().mapToInt(s -> s.ratio).sum();
+        slices.stream()
+                .sorted(Comparator.comparing((Slice s) -> s.remainder).reversed())
+                .limit(Math.max(leftover, 0))
+                .forEach(s -> s.ratio++);
+
+        return slices.stream()
+                .map(s -> new RoleSlice(s.role, s.amount, s.ratio))
+                .toList();
+    }
+
+    /**
+     * 현금흐름(월급 만드는) 자산 비율(정수 %). {@link #roleAllocation()}의 CASHFLOW ratio와 동일하다.
+     * 순자산이 0이면 {@code null}, 자산은 있으나 현금흐름 자산이 없으면 0.
+     */
+    public Integer cashflowAssetRatio() {
+        List<RoleSlice> slices = roleAllocation();
+        if (slices.isEmpty()) {
+            return null;
+        }
+        return slices.stream()
+                .filter(s -> s.role() == AssetRole.CASHFLOW)
+                .map(RoleSlice::ratio)
+                .findFirst()
+                .orElse(0);
+    }
+
+    private static void addSlice(List<Slice> slices, AssetRole role, BigDecimal amount, BigDecimal total) {
+        if (amount.signum() <= 0) {
+            return;
+        }
+        BigDecimal pct = amount.multiply(BigDecimal.valueOf(100))
+                .divide(total, 4, RoundingMode.HALF_UP);
+        int floor = pct.setScale(0, RoundingMode.DOWN).intValue();
+        slices.add(new Slice(role, amount, floor, pct.subtract(BigDecimal.valueOf(floor))));
+    }
+
+    /** 자산 역할. 표시·집계 순서는 선언 순서 고정(현금흐름·성장·잠자는 돈·연금). */
+    public enum AssetRole {
+        CASHFLOW, GROWTH, IDLE, PENSION
+    }
+
+    /** 역할별 금액·비율(순자산 대비 %, 합 100). 금액 0 역할은 분해에서 제외돼 등장하지 않는다. */
+    public record RoleSlice(AssetRole role, BigDecimal amount, int ratio) {
+    }
+
+    /** ratio 보정용 가변 초안. */
+    private static final class Slice {
+        private final AssetRole role;
+        private final BigDecimal amount;
+        private int ratio;
+        private final BigDecimal remainder;
+
+        private Slice(AssetRole role, BigDecimal amount, int ratio, BigDecimal remainder) {
+            this.role = role;
+            this.amount = amount;
+            this.ratio = ratio;
+            this.remainder = remainder;
+        }
     }
 }
