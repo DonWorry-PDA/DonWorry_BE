@@ -66,6 +66,22 @@ class InvestmentCheckServiceTest {
     }
 
     @Test
+    void 헤드라인비율은_CASHFLOW_역할_비율과_동일하고_비정수여도_합은_100() {
+        // 현금흐름·잠자는 돈·성장 각 1천만 = 33.33%씩. 내림 33+33+33=99, 잔여 1은 소수부 동률→
+        // 선언 순서상 CASHFLOW가 먼저 +1 → CASHFLOW 34. 독립 HALF_UP(33)이면 헤드라인이 도넛과 어긋난다.
+        stubSnapshot(new AssetBreakdown(
+                won(10_000_000), BigDecimal.ZERO, won(10_000_000), BigDecimal.ZERO, won(10_000_000)),
+                Map.of("삼성전자", 10_000_000L));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        int cashflowRoleRatio = role(response, "CASHFLOW").ratio();
+        assertThat(response.cashflowAssetRatio()).isEqualTo(cashflowRoleRatio);
+        assertThat(response.cashflowAssetRatio()).isEqualTo(34);
+        assertThat(response.roles().stream().mapToInt(RoleContribution::ratio).sum()).isEqualTo(100);
+    }
+
+    @Test
     void 금액이_0인_역할은_분해에서_제외된다() {
         // 잠자는 5천 / 성장 5천만. 현금흐름·연금 0 → 두 역할만.
         stubSnapshot(new AssetBreakdown(

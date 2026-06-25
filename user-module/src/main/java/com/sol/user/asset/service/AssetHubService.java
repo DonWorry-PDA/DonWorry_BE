@@ -171,13 +171,12 @@ public class AssetHubService {
 
     /**
      * 투자 건강검진 미리보기 — 현금흐름 자산(비연금 비STOCK 보유) / 순자산 비율.
-     * 상세({@link InvestmentCheckService})와 동일하게 {@link AssetBreakdown} 기준이라 허브·상세 숫자가 일치한다.
+     * 상세({@link InvestmentCheckService})와 동일하게 {@link AssetBreakdown#cashflowAssetRatio()}를
+     * 단일 출처로 쓰므로 허브 미리보기·상세 헤드라인·도넛 조각 숫자가 항상 일치한다.
      * 자산이 없으면(순자산 0) null 로 내려간다.
      */
     private AssetHubMenus.InvestmentCheck buildInvestmentCheckPreview(AssetAggregator.AssetSnapshot snapshot) {
-        AssetBreakdown breakdown = snapshot.breakdown();
-        Integer ratio = ratePercent(breakdown.nonStockHoldingValue(), breakdown.grossTotal());
-        return new AssetHubMenus.InvestmentCheck(ratio);
+        return new AssetHubMenus.InvestmentCheck(snapshot.breakdown().cashflowAssetRatio());
     }
 
     /** numerator/denominator 를 정수 % 로. 둘 중 하나라도 null 이거나 denominator 가 0 이면 null. */
