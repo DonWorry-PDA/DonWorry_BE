@@ -3,15 +3,13 @@ package com.sol.user.asset.service;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
-import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
+import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
-import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
 import com.sol.user.stability.dto.LifeStabilityResponse;
@@ -41,31 +39,32 @@ class AssetHubServiceTest {
 
     private static final Long USER_ID = 1L;
 
-    @Mock AccountRepository accountRepository;
-    @Mock HoldingRepository holdingRepository;
-    @Mock ProductBatchClient productBatchClient;
     @Mock CashFlowEventRepository cashFlowEventRepository;
     @Mock CashFlowDiagnosisService cashFlowDiagnosisService;
     @Mock LifeStabilityService lifeStabilityService;
+    @Mock AssetAggregator assetAggregator;
 
     @InjectMocks AssetHubService assetHubService;
 
     @BeforeEach
     void stubNoHoldingsByDefault() {
         // 예수금만 계약: 대부분 테스트는 보유종목 없음. ETF/주식 분포가 필요한 테스트만 override.
-        lenient().when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
-                .thenReturn(List.of());
+        lenient().when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                                BigDecimal.ZERO, BigDecimal.ZERO),
+                        List.of(), List.of(), Map.of()));
     }
 
     @Test
     void 자산_분포는_카테고리별로_집계되고_비율_합은_100() {
         // 연금 68(IRP+연금저축) / 예금 20 / ETF 12(보유 ETF) = 총 1억
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+        List<Account> accounts = List.of(
                 account("IRP", 60_000_000),
                 account("DEPOSIT", 20_000_000),
                 account("PENSION_SAVING", 8_000_000)
-        ));
-        stubEtfHolding(1001L, 12_000_000);
+        );
+        stubSnapshot(accounts, etfHolding(1001L, 12_000_000));
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -86,9 +85,8 @@ class AssetHubServiceTest {
     @Test
     void 보유_개별주식은_주식_카테고리로_집계된다() {
         // 예금 8천 / 주식 2천 = 총 1억. productType=STOCK → 주식 버킷.
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
-                account("DEPOSIT", 80_000_000)));
-        stubHolding(2001L, 20_000_000, "STOCK");
+        List<Account> accounts = List.of(account("DEPOSIT", 80_000_000));
+        stubSnapshot(accounts, holding(2001L, 20_000_000, "STOCK"));
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -105,9 +103,8 @@ class AssetHubServiceTest {
     void 상품메타데이터_누락_보유종목은_현재계약상_기타로_집계된다() {
         // 현 계약: product 배치 응답에 없으면 fromProductType(null) → ETC(기타) 폴백.
         // (fail-closed 전환은 별도 결정 — 본 테스트는 현재 동작을 고정한다.)
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
-                account("DEPOSIT", 90_000_000)));
-        stubHoldingWithoutProduct(3001L, 10_000_000);
+        List<Account> accounts = List.of(account("DEPOSIT", 90_000_000));
+        stubSnapshotWithoutProduct(accounts, 3001L, 10_000_000);
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -122,11 +119,12 @@ class AssetHubServiceTest {
 
     @Test
     void 비율_보정으로_나누어떨어지지_않아도_합이_100() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+        List<Account> accounts = List.of(
                 account("DEPOSIT", 1_000_000),
                 account("BROKERAGE", 1_000_000),
                 account("IRP", 1_000_000)
-        ));
+        );
+        stubAccountsOnly(accounts);
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -139,7 +137,6 @@ class AssetHubServiceTest {
 
     @Test
     void 월급만들기_달성률은_현금흐름_대비_목표생활비_비율() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
         stubCashFlow(1_300_000, 2_200_000); // 130/220 -> 59%
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -153,7 +150,6 @@ class AssetHubServiceTest {
 
     @Test
     void 자산_없으면_분포는_빈리스트_총액_0() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
         stubCashFlow(0, 0); // 목표 0 -> 달성률 null
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -170,7 +166,6 @@ class AssetHubServiceTest {
 
     @Test
     void 생활안정도_미산출_사용자는_빈_미리보기() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         when(lifeStabilityService.getLatest(USER_ID))
@@ -184,7 +179,6 @@ class AssetHubServiceTest {
 
     @Test
     void 생활안정도_RESOURCE_NOT_FOUND_외_예외는_삼키지_않고_전파() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         when(lifeStabilityService.getLatest(USER_ID))
@@ -197,8 +191,24 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void 투자건강검진_미리보기는_현금흐름자산_순자산_비율() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        // 현금 2천 / 현금흐름(비STOCK 보유) 3천 / 주식 5천 = 순자산 1억 → 30%
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        new AssetBreakdown(BigDecimal.valueOf(20_000_000), BigDecimal.ZERO,
+                                BigDecimal.valueOf(30_000_000), BigDecimal.ZERO, BigDecimal.valueOf(50_000_000)),
+                        List.of(), List.of(), Map.of()));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().investmentCheck().cashflowAssetRatio()).isEqualTo(30);
+    }
+
+    @Test
     void 후속이슈_의존_메뉴는_null_또는_기본값() {
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -215,25 +225,46 @@ class AssetHubServiceTest {
         return new Account(null, accountType, "신한은행", "MOCK-ACC", BigDecimal.valueOf(balance), true);
     }
 
-    private void stubEtfHolding(long productId, long evaluationAmount) {
-        stubHolding(productId, evaluationAmount, "ETF");
+    private HoldingAndProduct etfHolding(long productId, long evaluationAmount) {
+        return holding(productId, evaluationAmount, "ETF");
     }
 
-    private void stubHolding(long productId, long evaluationAmount, String productType) {
+    private HoldingAndProduct holding(long productId, long evaluationAmount, String productType) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
-        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
-        when(productBatchClient.fetchProducts(List.of(productId)))
-                .thenReturn(Map.of(productId, new ProductBatchItem(productId, "상품" + productId, productType)));
+        return new HoldingAndProduct(holding, Map.of(productId,
+                new ProductBatchItem(productId, "상품" + productId, productType)));
     }
 
-    private void stubHoldingWithoutProduct(long productId, long evaluationAmount) {
+    private void stubSnapshot(List<Account> accounts, HoldingAndProduct holdingAndProduct) {
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), accounts,
+                        List.of(holdingAndProduct.holding()), holdingAndProduct.products()));
+    }
+
+    private void stubSnapshotWithoutProduct(List<Account> accounts, long productId, long evaluationAmount) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
-        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
-        when(productBatchClient.fetchProducts(List.of(productId))).thenReturn(Map.of());
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), accounts, List.of(holding), Map.of()));
+    }
+
+    private void stubAccountsOnly(List<Account> accounts) {
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(breakdownPlaceholder(), accounts, List.of(), Map.of()));
+    }
+
+    /** 카테고리 집계 테스트는 AssetBreakdown 값 자체를 보지 않으므로 영(zero)으로 둔다. */
+    private AssetBreakdown breakdownPlaceholder() {
+        return new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    private record HoldingAndProduct(HoldingWithProduct holding, Map<Long, ProductBatchItem> products) {
     }
 
     private void stubCashFlow(long cashFlow, long target) {
