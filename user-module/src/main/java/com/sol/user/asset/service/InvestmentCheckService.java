@@ -40,6 +40,13 @@ public class InvestmentCheckService {
     private static final int CONCENTRATION_LOW_MAX = 40;   // < 40 → 낮음
     private static final int CONCENTRATION_MID_MAX = 70;   // < 70 → 보통, 이상 → 높음
 
+    /**
+     * 성장 자산 정성 멘트 — 숫자·현재배당 단정 없이 성장→현금흐름 재배치만 유도.
+     * (종목 배당률 미적재 + 종목별 편차 큼 → "월 N원" 숫자 약속은 고배당 종목에서 오조언.)
+     */
+    private static final String GROWTH_SUGGESTION =
+            "자본차익을 노리는 성장 자산이에요. 일부를 배당 중심 자산으로 옮기면 매달 들어오는 현금흐름을 만들 수 있어요.";
+
     private final AssetAggregator assetAggregator;
     private final HoldingRepository holdingRepository;
     private final ProductBatchClient productBatchClient;
@@ -135,9 +142,7 @@ public class InvestmentCheckService {
                 .topStockName(top == null ? null : top.getKey())
                 .concentrationRatio(concentration)
                 .concentrationLevel(concentrationLevel(concentration))
-                // 개별주 dividend_yield 미적재(전 종목 NULL) → "거의 없음" 고정.
-                .dividendNote("거의 없음")
-                .potentialMonthlyDividend(monthlyDividend(stockTotal))
+                .suggestion(GROWTH_SUGGESTION)
                 .build();
     }
 

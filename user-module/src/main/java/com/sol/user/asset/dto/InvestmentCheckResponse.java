@@ -41,7 +41,12 @@ public record InvestmentCheckResponse(
 
     /**
      * 개별주 "성장에 베팅한 자산" 블록.
-     * concentration은 최대 단일종목 평가액 / 개별주 합. dividend는 종목 dividend_yield 미적재라 "거의 없음" 고정.
+     *
+     * <p>concentration(쏠림)은 실제 평가액 기반 사실값이라 그대로 노출한다. 반면 배당 관련은 <b>정성적 멘트</b>만 둔다:
+     * 종목 dividend_yield가 미적재(전 종목 NULL)인데다, 한국 종목 배당률은 편차가 커(저배당 성장주 ≈0% ~
+     * 고배당 가치주 5~7%) 대표배당률로 "월 N원 생긴다"는 숫자를 약속하면 고배당 종목 보유자에게 오히려
+     * 거꾸로 된 조언이 된다. 따라서 숫자 CTA·"배당 거의 없음" 단정을 빼고, 성장→현금흐름 재배치 유도만 한다.
+     * (종목별 실배당 적재 후에야 숫자 before/after가 정직해진다.)
      */
     @Builder
     public record GrowthAsset(
@@ -49,8 +54,7 @@ public record InvestmentCheckResponse(
             String topStockName,                     // 최대 비중 종목명
             int concentrationRatio,                  // 최대종목 / 개별주합 %
             String concentrationLevel,               // 낮음 / 보통 / 높음
-            String dividendNote,                     // "거의 없음"
-            BigDecimal potentialMonthlyDividend      // 배당형으로 옮기면 생기는 월 현금흐름(추정)
+            String suggestion                        // 정성적 재배치 유도 멘트(숫자·현재배당 단정 없음)
     ) {
     }
 }

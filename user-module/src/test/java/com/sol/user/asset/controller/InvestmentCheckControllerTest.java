@@ -58,8 +58,7 @@ class InvestmentCheckControllerTest {
                         .topStockName("삼성전자")
                         .concentrationRatio(57)
                         .concentrationLevel("보통")
-                        .dividendNote("거의 없음")
-                        .potentialMonthlyDividend(BigDecimal.valueOf(204_166))
+                        .suggestion("자본차익을 노리는 성장 자산이에요. 일부를 배당 중심 자산으로 옮기면 매달 들어오는 현금흐름을 만들 수 있어요.")
                         .build())
                 .build();
 

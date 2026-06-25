@@ -101,9 +101,8 @@ class InvestmentCheckServiceTest {
         assertThat(growth.topStockName()).isEqualTo("삼성전자");
         assertThat(growth.concentrationRatio()).isEqualTo(30);
         assertThat(growth.concentrationLevel()).isEqualTo("낮음");
-        assertThat(growth.dividendNote()).isEqualTo("거의 없음");
-        // 4천만 × 0.035 / 12 = 116,667 (반올림)
-        assertThat(growth.potentialMonthlyDividend()).isEqualByComparingTo("116667");
+        // 숫자·현재배당 단정 없이 정성 멘트만.
+        assertThat(growth.suggestion()).contains("배당 중심");
     }
 
     @Test

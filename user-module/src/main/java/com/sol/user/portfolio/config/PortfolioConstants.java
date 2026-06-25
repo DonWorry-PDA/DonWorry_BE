@@ -112,10 +112,10 @@ public final class PortfolioConstants {
     public static final int PENSION_WITHDRAWAL_MIN_AGE = 55;                       // 연금저축 인출 가능 연령
 
     /**
-     * 대표 배당률(연, 분수) — 투자 건강검진(#2)의 현금흐름 추정·CTA("배당ETF로 옮기면 월 N원")용 프록시.
-     * 앵커: 국내 배당형 ETF 평균 분배율 ≈3.5%(= SAFE_RATE 수준). 개별주 dividend_yield가 미적재(전 종목 NULL)라
-     * 종목별 실분배를 못 쓰는 v1 상태의 근사치다. 정밀화 시 종목·ETF별 실분배(holdingRepository
-     * .findDividendCalendarInputsByUserId)로 대체한다.
+     * 대표 배당률(연, 분수) — 투자 건강검진(#2)의 현금흐름 자산 월수령 추정용 프록시.
+     * 앵커: 국내 배당형 ETF 평균 분배율 ≈3.5%(= SAFE_RATE 수준). ETF별 실분배를 못 쓰는 v1 상태의 근사치다.
+     * 정밀화 시 ETF별 실분배(holdingRepository.findDividendCalendarInputsByUserId)로 대체한다.
+     * (개별주 성장블록 CTA는 종목 배당 편차가 커 숫자 약속 대신 정성 멘트로 처리 — 이 상수 미사용.)
      */
     public static final BigDecimal REPRESENTATIVE_DIVIDEND_RATE = new BigDecimal("0.035");
 
