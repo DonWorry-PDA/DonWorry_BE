@@ -5,9 +5,7 @@ import com.sol.user.asset.dto.InvestmentCheckResponse;
 import com.sol.user.asset.dto.InvestmentCheckResponse.GrowthAsset;
 import com.sol.user.asset.dto.InvestmentCheckResponse.RoleContribution;
 import com.sol.user.holding.dto.HoldingWithProduct;
-import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,7 +24,8 @@ import java.util.Map;
  *
  * <p>금액 단일 진실원천은 {@link AssetAggregator}({@link AssetBreakdown})다. 역할 4분류는 그 5개 구성을
  * 합이 grossTotal과 일치하도록 재배열한 것이라 별도 합산을 하지 않는다. 개별주의 종목별 분해(쏠림·종목명)는
- * AssetBreakdown이 제공하지 않으므로 holdings+products를 한 번 더 조회해 STOCK만 집계한다(개별주 보유 시에만).
+ * AssetBreakdown이 제공하지 않으므로 {@link AssetAggregator#aggregateSnapshot}이 함께 반환한
+ * holdings+products에서 STOCK만 집계한다(개별주 보유 시에만, DB·외부호출 중복 없음).
  */
 @Service
 @RequiredArgsConstructor
@@ -48,18 +47,17 @@ public class InvestmentCheckService {
             "자본차익을 노리는 성장 자산이에요. 일부를 배당 중심 자산으로 옮기면 매달 들어오는 현금흐름을 만들 수 있어요.";
 
     private final AssetAggregator assetAggregator;
-    private final HoldingRepository holdingRepository;
-    private final ProductBatchClient productBatchClient;
 
     public InvestmentCheckResponse check(Long userId) {
-        AssetBreakdown breakdown = assetAggregator.aggregate(userId);
+        AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
+        AssetBreakdown breakdown = snapshot.breakdown();
         BigDecimal total = breakdown.grossTotal();
 
         return InvestmentCheckResponse.builder()
                 .cashflowAssetRatio(percent(breakdown.nonStockHoldingValue(), total))
                 .totalAsset(total)
                 .roles(buildRoles(breakdown, total))
-                .growthAsset(buildGrowthAsset(userId, breakdown))
+                .growthAsset(buildGrowthAsset(snapshot, breakdown))
                 .build();
     }
 
@@ -124,13 +122,13 @@ public class InvestmentCheckService {
     }
 
     /** 개별주 성장 블록. 개별주 보유가 없으면 null. */
-    private GrowthAsset buildGrowthAsset(Long userId, AssetBreakdown breakdown) {
+    private GrowthAsset buildGrowthAsset(AssetAggregator.AssetSnapshot snapshot, AssetBreakdown breakdown) {
         BigDecimal stockTotal = breakdown.stockHoldingValue();
         if (stockTotal.signum() <= 0) {
             return null;
         }
 
-        Map<String, BigDecimal> byStock = aggregateStocks(userId);
+        Map<String, BigDecimal> byStock = aggregateStocks(snapshot);
         Map.Entry<String, BigDecimal> top = byStock.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .orElse(null);
@@ -147,13 +145,12 @@ public class InvestmentCheckService {
     }
 
     /** STOCK 보유만 종목명 기준으로 평가액 집계. (AssetBreakdown은 종목별 분해를 제공하지 않음.) */
-    private Map<String, BigDecimal> aggregateStocks(Long userId) {
-        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
+    private Map<String, BigDecimal> aggregateStocks(AssetAggregator.AssetSnapshot snapshot) {
+        List<HoldingWithProduct> holdings = snapshot.holdings();
         if (holdings.isEmpty()) {
             return Map.of();
         }
-        Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
-                holdings.stream().map(HoldingWithProduct::getProductId).toList());
+        Map<Long, ProductBatchItem> products = snapshot.products();
 
         Map<String, BigDecimal> byStock = new LinkedHashMap<>();
         for (HoldingWithProduct holding : holdings) {

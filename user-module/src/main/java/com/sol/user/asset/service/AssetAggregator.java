@@ -39,6 +39,16 @@ public class AssetAggregator {
 
     @Transactional(readOnly = true)
     public AssetBreakdown aggregate(Long userId) {
+        return aggregateSnapshot(userId).breakdown();
+    }
+
+    /**
+     * {@link #aggregate}와 동일한 계산이지만, 호출부가 이미 읽은 accounts/holdings/products를
+     * 재사용할 수 있도록 원본 데이터까지 함께 반환한다. 개별주 종목명처럼 {@link AssetBreakdown}이
+     * 제공하지 않는 분해가 필요한 소비처(투자 건강검진 등)는 이 메서드로 DB·외부호출 중복을 피한다.
+     */
+    @Transactional(readOnly = true)
+    public AssetSnapshot aggregateSnapshot(Long userId) {
         List<Account> accounts = accountRepository.findByUserUserId(userId);
         BigDecimal cash = accounts.stream()
                 .map(account -> nz(account.getDepositBalance()))
@@ -51,7 +61,9 @@ public class AssetAggregator {
         List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
-            return new AssetBreakdown(cash, pensionCash, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+            AssetBreakdown breakdown =
+                    new AssetBreakdown(cash, pensionCash, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+            return new AssetSnapshot(breakdown, accounts, holdings, Map.of());
         }
 
         Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
@@ -71,7 +83,17 @@ public class AssetAggregator {
                 nonStock = nonStock.add(eval);
             }
         }
-        return new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
+        AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
+        return new AssetSnapshot(breakdown, accounts, holdings, products);
+    }
+
+    /** {@link #aggregate} 산출의 원본 데이터(accounts/holdings/products)까지 포함한 스냅샷. */
+    public record AssetSnapshot(
+            AssetBreakdown breakdown,
+            List<Account> accounts,
+            List<HoldingWithProduct> holdings,
+            Map<Long, ProductBatchItem> products
+    ) {
     }
 
     private boolean isStock(ProductBatchItem product) {
