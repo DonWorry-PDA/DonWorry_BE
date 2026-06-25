@@ -3,6 +3,8 @@ package com.sol.user.trade.controller;
 import com.sol.common.response.ApiResponse;
 import com.sol.user.trade.dto.BuyRequest;
 import com.sol.user.trade.dto.BuyResponse;
+import com.sol.user.trade.dto.TransferRequest;
+import com.sol.user.trade.dto.TransferResponse;
 import com.sol.user.trade.service.TradeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,5 +31,13 @@ public class TradeController {
             @RequestAttribute("userId") Long userId,
             @Valid @RequestBody BuyRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(tradeService.buy(userId, request)));
+    }
+
+    @Operation(summary = "증권계좌 이체", description = "선택한 계좌들에서 본인의 BROKERAGE 계좌로 이체합니다.")
+    @PostMapping("/transfer")
+    public ResponseEntity<ApiResponse<TransferResponse>> transfer(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody TransferRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(tradeService.transfer(userId, request)));
     }
 }
