@@ -1,8 +1,8 @@
 package com.sol.user.retirement.service;
 
 import com.sol.common.exception.BaseException;
-import com.sol.user.account.entity.Account;
-import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.asset.dto.AssetBreakdown;
+import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.retirement.dto.RetirementSimParamsResponse;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
 class RetirementSimParamsServiceTest {
 
     @Mock private UserRepository userRepository;
-    @Mock private AccountRepository accountRepository;
+    @Mock private AssetAggregator assetAggregator;
     @Mock private UserGoalRepository userGoalRepository;
     @Mock private PensionRepository pensionRepository;
 
@@ -39,7 +39,12 @@ class RetirementSimParamsServiceTest {
     @BeforeEach
     void setUp() {
         service = new RetirementSimParamsService(
-                userRepository, accountRepository, userGoalRepository, pensionRepository);
+                userRepository, assetAggregator, userGoalRepository, pensionRepository);
+    }
+
+    private void stubTotalAssets(long krw) {
+        when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
+                BigDecimal.valueOf(krw), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
     }
 
     @Test
@@ -49,11 +54,10 @@ class RetirementSimParamsServiceTest {
         when(user.getAge()).thenReturn(63);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        Account acc1 = new Account(user, "BROKERAGE", "신한은행", "111-11",
-                new BigDecimal("150000000"), true);
-        Account acc2 = new Account(user, "DEPOSIT", "신한은행", "222-22",
-                new BigDecimal("100000000"), true);
-        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(acc1, acc2));
+        // 예수금 1억(예금) + 증권 종목 1.5억(비STOCK) → 전체 자산 2.5억
+        when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
+                new BigDecimal("100000000"), BigDecimal.ZERO,
+                new BigDecimal("150000000"), BigDecimal.ZERO, BigDecimal.ZERO));
 
         UserGoal goal = new UserGoal(user, new BigDecimal("2200000"),
                 new BigDecimal("500000"), LocalDateTime.now());
@@ -71,12 +75,32 @@ class RetirementSimParamsServiceTest {
     }
 
     @Test
+    @DisplayName("은퇴 총자산은 개별주식 평가액까지 포함한다(grossTotal)")
+    void getParams_includesStockHoldings() {
+        User user = mock(User.class);
+        when(user.getAge()).thenReturn(63);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        // 예수금 1억 + 비STOCK 종목 5천 + 개별주식 4천 → 전체 1.9억.
+        // 서비스가 operatingTotal(1.5억)을 쓰면 이 단언이 깨진다.
+        when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
+                new BigDecimal("100000000"), BigDecimal.ZERO,
+                new BigDecimal("50000000"), BigDecimal.ZERO, new BigDecimal("40000000")));
+        when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.empty());
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of());
+
+        RetirementSimParamsResponse result = service.getParams(1L);
+
+        assertThat(result.totalAssetsKrw()).isEqualByComparingTo(new BigDecimal("190000000"));
+    }
+
+    @Test
     @DisplayName("UserGoal이 없으면 monthlyLivingKrw는 0이다")
     void getParams_noUserGoal_livingCostIsZero() {
         User user = mock(User.class);
         when(user.getAge()).thenReturn(63);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of());
+        stubTotalAssets(0);
         when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.empty());
         when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of());
 
@@ -91,7 +115,7 @@ class RetirementSimParamsServiceTest {
         User user = mock(User.class);
         when(user.getAge()).thenReturn(63);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of());
+        stubTotalAssets(0);
         when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.empty());
 
         Pension p1 = new Pension(user, "NATIONAL", new BigDecimal("800000"), false, 65);
@@ -109,7 +133,7 @@ class RetirementSimParamsServiceTest {
         User user = mock(User.class);
         when(user.getAge()).thenReturn(50);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of());
+        stubTotalAssets(0);
         UserGoal goalWithNullCost = new UserGoal(user, null, null, LocalDateTime.now());
         when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.of(goalWithNullCost));
         when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of());

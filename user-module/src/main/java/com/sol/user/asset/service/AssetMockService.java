@@ -141,7 +141,7 @@ public class AssetMockService {
         return new MockAssetResponse(
                 mockType,
                 generatedAt,
-                createAssetSummary(scenario),
+                createAssetSummary(accounts, holdings, scenario.debtBalance()),
                 new MockGeneratedCounts(
                         connections.size(),
                         accounts.size(),
@@ -352,22 +352,41 @@ public class AssetMockService {
         );
     }
 
-    private AssetSummaryResponse createAssetSummary(Scenario scenario) {
+    /**
+     * 요약은 시나리오가 아니라 실제 저장된 계좌·보유종목 기준으로 계산한다.
+     * {@code saveHoldings}가 증권계좌 부재나 ETF 풀 조회 실패로 빈 리스트를 반환하면
+     * DB엔 종목이 없으므로, 시나리오 평가액을 더하면 응답과 실제 저장이 어긋난다.
+     */
+    private AssetSummaryResponse createAssetSummary(List<Account> accounts, List<Holding> holdings,
+                                                    BigDecimal debtBalance) {
         Map<String, BigDecimal> grouped = new LinkedHashMap<>();
-        scenario.assets().forEach(seed -> grouped.merge(seed.category(), seed.amount(), BigDecimal::add));
+        accounts.forEach(account ->
+                grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
+
+        // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
+        BigDecimal holdingsTotal = holdings.stream()
+                .map(Holding::getEvaluationAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (holdingsTotal.signum() > 0) {
+            grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
+        }
+
         List<AssetGroupSummary> groups = grouped.entrySet().stream()
                 .map(entry -> new AssetGroupSummary(entry.getKey(), entry.getValue()))
                 .toList();
 
-        BigDecimal totalAsset = scenario.assets().stream()
-                .map(AssetSeed::amount)
+        BigDecimal totalAsset = grouped.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new AssetSummaryResponse(
                 totalAsset,
-                scenario.debtBalance(),
-                totalAsset.subtract(scenario.debtBalance()),
+                debtBalance,
+                totalAsset.subtract(debtBalance),
                 groups
         );
+    }
+
+    private static BigDecimal nz(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private Scenario scenarioOf(MockType mockType) {
@@ -377,7 +396,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 6_000_000),
                             asset("DEPOSIT", "신한은행", 12_000_000),
-                            asset("BROKERAGE", "신한투자증권", 80_000_000),
+                            // 예수금만 계약: BROKERAGE 잔액=예수금(현금). 종목 가치(8천만)는 holdings가 보유 → 예수금 0(완전투자).
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 25_000_000)
                     ),
                     List.of(
@@ -393,7 +413,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 18_000_000),
                             asset("DEPOSIT", "신한은행", 45_000_000),
-                            asset("BROKERAGE", "신한투자증권", 55_000_000),
+                            // 예수금만 계약: 종목 가치(5천5백만)는 holdings 보유 → BROKERAGE 예수금 0.
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 65_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 25_000_000)
                     ),
@@ -410,7 +431,8 @@ public class AssetMockService {
                     List.of(
                             asset("CMA", "신한은행", 35_000_000),
                             asset("DEPOSIT", "신한은행", 90_000_000),
-                            asset("BROKERAGE", "신한투자증권", 130_000_000),
+                            // 예수금만 계약: 종목 가치(1억3천만)는 holdings 보유 → BROKERAGE 예수금 0.
+                            asset("BROKERAGE", "신한투자증권", 0),
                             asset("IRP", "신한투자증권", 120_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 60_000_000)
                     ),

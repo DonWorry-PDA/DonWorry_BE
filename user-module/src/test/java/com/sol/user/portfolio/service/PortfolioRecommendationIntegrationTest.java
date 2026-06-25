@@ -8,6 +8,8 @@ import com.sol.user.portfolio.config.PortfolioConstants;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.RecommendationTrack;
@@ -26,10 +28,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 
 /**
@@ -50,10 +55,20 @@ class PortfolioRecommendationIntegrationTest {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     @MockBean private EtfPoolProvider etfPoolProvider;
+    @MockBean private ProductBatchClient productBatchClient;
 
     @BeforeEach
     void stubPool() {
         given(etfPoolProvider.getPool()).willReturn(fullPool());
+        // 자산 집계가 보유종목 분류에 쓰는 product REST도 목 대체. 시드 holding은 전부 ETF(비STOCK)라 totalAsset에 포함.
+        given(productBatchClient.fetchProducts(anyList())).willAnswer(invocation -> {
+            List<Long> ids = invocation.getArgument(0);
+            Map<Long, ProductBatchItem> products = new HashMap<>();
+            for (Long id : ids) {
+                products.put(id, new ProductBatchItem(id, "SOL " + id, "ETF"));
+            }
+            return products;
+        });
     }
 
     @Test

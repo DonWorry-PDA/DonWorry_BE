@@ -2,7 +2,7 @@ package com.sol.user.retirement.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
-import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.retirement.dto.RetirementSimParamsResponse;
 import com.sol.user.user.entity.User;
@@ -22,7 +22,7 @@ import java.math.RoundingMode;
 public class RetirementSimParamsService {
 
     private final UserRepository userRepository;
-    private final AccountRepository accountRepository;
+    private final AssetAggregator assetAggregator;
     private final UserGoalRepository userGoalRepository;
     private final PensionRepository pensionRepository;
 
@@ -30,9 +30,8 @@ public class RetirementSimParamsService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
-        BigDecimal totalAssets = accountRepository.findByUserUserId(userId).stream()
-                .map(a -> a.getDepositBalance() == null ? BigDecimal.ZERO : a.getDepositBalance())
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
+        // 은퇴 시뮬은 전체 자산(예수금 + 전 보유종목, 개별주식 포함) 기준. 예수금만 계약이라 holding 합산 필수.
+        BigDecimal totalAssets = assetAggregator.aggregate(userId).grossTotal()
                 .setScale(0, RoundingMode.HALF_UP);
 
         BigDecimal monthlyLiving = userGoalRepository.findByUserUserId(userId)

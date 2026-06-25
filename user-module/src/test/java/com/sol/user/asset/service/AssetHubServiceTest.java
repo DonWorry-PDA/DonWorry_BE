@@ -7,11 +7,16 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
+import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
 import com.sol.user.stability.dto.LifeStabilityResponse;
 import com.sol.user.stability.service.LifeStabilityService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,12 +26,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,20 +42,30 @@ class AssetHubServiceTest {
     private static final Long USER_ID = 1L;
 
     @Mock AccountRepository accountRepository;
+    @Mock HoldingRepository holdingRepository;
+    @Mock ProductBatchClient productBatchClient;
     @Mock CashFlowEventRepository cashFlowEventRepository;
     @Mock CashFlowDiagnosisService cashFlowDiagnosisService;
     @Mock LifeStabilityService lifeStabilityService;
 
     @InjectMocks AssetHubService assetHubService;
 
+    @BeforeEach
+    void stubNoHoldingsByDefault() {
+        // 예수금만 계약: 대부분 테스트는 보유종목 없음. ETF/주식 분포가 필요한 테스트만 override.
+        lenient().when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
+                .thenReturn(List.of());
+    }
+
     @Test
     void 자산_분포는_카테고리별로_집계되고_비율_합은_100() {
+        // 연금 68(IRP+연금저축) / 예금 20 / ETF 12(보유 ETF) = 총 1억
         when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
                 account("IRP", 60_000_000),
                 account("DEPOSIT", 20_000_000),
-                account("BROKERAGE", 12_000_000),
                 account("PENSION_SAVING", 8_000_000)
         ));
+        stubEtfHolding(1001L, 12_000_000);
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
@@ -64,6 +81,43 @@ class AssetHubServiceTest {
                 .isEqualTo(100);
         assertThat(response.monthlyIncome()).isEqualByComparingTo("1300000");
         assertThat(response.monthlyExpense()).isEqualByComparingTo("2180000");
+    }
+
+    @Test
+    void 보유_개별주식은_주식_카테고리로_집계된다() {
+        // 예금 8천 / 주식 2천 = 총 1억. productType=STOCK → 주식 버킷.
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+                account("DEPOSIT", 80_000_000)));
+        stubHolding(2001L, 20_000_000, "STOCK");
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.allocation()).extracting(AssetAllocationItem::category)
+                .containsExactly("예금", "주식");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
+                .containsExactly(80, 20);
+    }
+
+    @Test
+    void 상품메타데이터_누락_보유종목은_현재계약상_기타로_집계된다() {
+        // 현 계약: product 배치 응답에 없으면 fromProductType(null) → ETC(기타) 폴백.
+        // (fail-closed 전환은 별도 결정 — 본 테스트는 현재 동작을 고정한다.)
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+                account("DEPOSIT", 90_000_000)));
+        stubHoldingWithoutProduct(3001L, 10_000_000);
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.allocation()).extracting(AssetAllocationItem::category)
+                .containsExactly("예금", "기타");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
+                .containsExactly(90, 10);
     }
 
     @Test
@@ -159,6 +213,27 @@ class AssetHubServiceTest {
 
     private Account account(String accountType, long balance) {
         return new Account(null, accountType, "신한은행", "MOCK-ACC", BigDecimal.valueOf(balance), true);
+    }
+
+    private void stubEtfHolding(long productId, long evaluationAmount) {
+        stubHolding(productId, evaluationAmount, "ETF");
+    }
+
+    private void stubHolding(long productId, long evaluationAmount, String productType) {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(productId);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
+        when(productBatchClient.fetchProducts(List.of(productId)))
+                .thenReturn(Map.of(productId, new ProductBatchItem(productId, "상품" + productId, productType)));
+    }
+
+    private void stubHoldingWithoutProduct(long productId, long evaluationAmount) {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(productId);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
+        when(productBatchClient.fetchProducts(List.of(productId))).thenReturn(Map.of());
     }
 
     private void stubCashFlow(long cashFlow, long target) {

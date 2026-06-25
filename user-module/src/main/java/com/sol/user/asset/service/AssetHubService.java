@@ -9,8 +9,12 @@ import com.sol.user.asset.dto.AssetHubMenus;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.asset.type.AssetCategory;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
+import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityResponse;
 import com.sol.user.stability.service.LifeStabilityService;
 import lombok.RequiredArgsConstructor;
@@ -36,13 +40,14 @@ public class AssetHubService {
     private static final String FLOW_EXPENSE = "EXPENSE";
 
     private final AccountRepository accountRepository;
+    private final HoldingRepository holdingRepository;
+    private final ProductBatchClient productBatchClient;
     private final CashFlowEventRepository cashFlowEventRepository;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final LifeStabilityService lifeStabilityService;
 
     public AssetHubResponse getHub(Long userId) {
-        Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(
-                accountRepository.findByUserUserId(userId));
+        Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(userId);
         BigDecimal totalAsset = byCategory.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -64,14 +69,34 @@ public class AssetHubService {
                 .build();
     }
 
-    private Map<AssetCategory, BigDecimal> aggregateByCategory(List<Account> accounts) {
+    /**
+     * 카테고리별 자산 집계(예수금만 계약). 계좌 잔액(예수금/현금)은 accountType으로,
+     * 보유종목 평가액은 productType으로 분류해 더한다. 종목값이 deposit_balance에 없으므로 별도 합산 필수.
+     */
+    private Map<AssetCategory, BigDecimal> aggregateByCategory(Long userId) {
         Map<AssetCategory, BigDecimal> map = new EnumMap<>(AssetCategory.class);
-        for (Account account : accounts) {
+
+        for (Account account : accountRepository.findByUserUserId(userId)) {
             BigDecimal balance = nz(account.getDepositBalance());
             if (balance.signum() == 0) {
                 continue;
             }
             map.merge(AssetCategory.fromAccountType(account.getAccountType()), balance, BigDecimal::add);
+        }
+
+        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
+        if (!holdings.isEmpty()) {
+            Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
+                    holdings.stream().map(HoldingWithProduct::getProductId).toList());
+            for (HoldingWithProduct holding : holdings) {
+                BigDecimal eval = nz(holding.getEvaluationAmount());
+                if (eval.signum() == 0) {
+                    continue;
+                }
+                ProductBatchItem product = products.get(holding.getProductId());
+                String productType = product == null ? null : product.productType();
+                map.merge(AssetCategory.fromProductType(productType), eval, BigDecimal::add);
+            }
         }
         return map;
     }
