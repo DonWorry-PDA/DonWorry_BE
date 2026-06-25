@@ -55,6 +55,7 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             WHERE e.user.userId = :userId
               AND e.flowType = 'INCOME'
               AND e.eventType IN ('INTEREST', 'DIVIDEND')
+              AND e.recurring = true
             """)
     BigDecimal sumMonthlyFinancialIncomeByUserId(@Param("userId") Long userId);
 
