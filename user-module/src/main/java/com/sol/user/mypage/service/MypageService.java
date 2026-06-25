@@ -45,13 +45,13 @@ public class MypageService {
         LocalDateTime now = LocalDateTime.now();
         user.updateProfile(request.age(), request.retiredValue(), request.nationalPensionReceivingValue(), now);
 
-        UserGoal goal = null;
+        UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId).orElse(null);
         if (monthlyTargetKrw != null) {
-            goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
-                    .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
-            goal.updateTargetLivingCost(monthlyTargetKrw, now);
-        } else {
-            goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId).orElse(null);
+            if (goal == null) {
+                goal = userGoalRepository.save(new UserGoal(user, monthlyTargetKrw, null, now));
+            } else {
+                goal.updateTargetLivingCost(monthlyTargetKrw, now);
+            }
         }
 
         return UserProfileResponse.of(user, goal);
