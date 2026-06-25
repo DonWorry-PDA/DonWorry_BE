@@ -3,17 +3,15 @@ package com.sol.user.asset.service;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
-import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetAllocationItem;
+import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubMenus;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.asset.type.AssetCategory;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
-import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityResponse;
 import com.sol.user.stability.service.LifeStabilityService;
@@ -39,15 +37,14 @@ public class AssetHubService {
     private static final String FLOW_INCOME = "INCOME";
     private static final String FLOW_EXPENSE = "EXPENSE";
 
-    private final AccountRepository accountRepository;
-    private final HoldingRepository holdingRepository;
-    private final ProductBatchClient productBatchClient;
     private final CashFlowEventRepository cashFlowEventRepository;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final LifeStabilityService lifeStabilityService;
+    private final AssetAggregator assetAggregator;
 
     public AssetHubResponse getHub(Long userId) {
-        Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(userId);
+        AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
+        Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(snapshot);
         BigDecimal totalAsset = byCategory.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -65,7 +62,7 @@ public class AssetHubService {
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end)))
                 .monthlyExpense(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
-                .menus(buildMenus(userId))
+                .menus(buildMenus(userId, snapshot))
                 .build();
     }
 
@@ -73,10 +70,10 @@ public class AssetHubService {
      * 카테고리별 자산 집계(예수금만 계약). 계좌 잔액(예수금/현금)은 accountType으로,
      * 보유종목 평가액은 productType으로 분류해 더한다. 종목값이 deposit_balance에 없으므로 별도 합산 필수.
      */
-    private Map<AssetCategory, BigDecimal> aggregateByCategory(Long userId) {
+    private Map<AssetCategory, BigDecimal> aggregateByCategory(AssetAggregator.AssetSnapshot snapshot) {
         Map<AssetCategory, BigDecimal> map = new EnumMap<>(AssetCategory.class);
 
-        for (Account account : accountRepository.findByUserUserId(userId)) {
+        for (Account account : snapshot.accounts()) {
             BigDecimal balance = nz(account.getDepositBalance());
             if (balance.signum() == 0) {
                 continue;
@@ -84,10 +81,9 @@ public class AssetHubService {
             map.merge(AssetCategory.fromAccountType(account.getAccountType()), balance, BigDecimal::add);
         }
 
-        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
+        List<HoldingWithProduct> holdings = snapshot.holdings();
         if (!holdings.isEmpty()) {
-            Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
-                    holdings.stream().map(HoldingWithProduct::getProductId).toList());
+            Map<Long, ProductBatchItem> products = snapshot.products();
             for (HoldingWithProduct holding : holdings) {
                 BigDecimal eval = nz(holding.getEvaluationAmount());
                 if (eval.signum() == 0) {
@@ -134,7 +130,7 @@ public class AssetHubService {
                 .toList();
     }
 
-    private AssetHubMenus buildMenus(Long userId) {
+    private AssetHubMenus buildMenus(Long userId, AssetAggregator.AssetSnapshot snapshot) {
         CashFlowDiagnosisResponse cashFlow = cashFlowDiagnosisService.diagnose(userId);
         Integer coverageRate = ratePercent(cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost());
 
@@ -145,8 +141,8 @@ public class AssetHubService {
                         .currentAmount(cashFlow.getMonthlyCashFlow())
                         .build())
                 .lifeStability(buildLifeStabilityPreview(userId))
-                // 후속 이슈에서 채움: 투자 건강검진(#2) / 국민연금 연기(#5) / 월간 리포트(#6)
-                .investmentCheck(new AssetHubMenus.InvestmentCheck(null))
+                .investmentCheck(buildInvestmentCheckPreview(snapshot))
+                // 후속 이슈에서 채움: 국민연금 연기(#5) / 월간 리포트(#6)
                 .pensionDefer(AssetHubMenus.PensionDefer.builder().build())
                 .retirementSim(new AssetHubMenus.RetirementSim(true))
                 .monthlyReport(AssetHubMenus.MonthlyReport.builder().build())
@@ -171,6 +167,17 @@ public class AssetHubService {
             }
             throw e;
         }
+    }
+
+    /**
+     * 투자 건강검진 미리보기 — 현금흐름 자산(비연금 비STOCK 보유) / 순자산 비율.
+     * 상세({@link InvestmentCheckService})와 동일하게 {@link AssetBreakdown} 기준이라 허브·상세 숫자가 일치한다.
+     * 자산이 없으면(순자산 0) null 로 내려간다.
+     */
+    private AssetHubMenus.InvestmentCheck buildInvestmentCheckPreview(AssetAggregator.AssetSnapshot snapshot) {
+        AssetBreakdown breakdown = snapshot.breakdown();
+        Integer ratio = ratePercent(breakdown.nonStockHoldingValue(), breakdown.grossTotal());
+        return new AssetHubMenus.InvestmentCheck(ratio);
     }
 
     /** numerator/denominator 를 정수 % 로. 둘 중 하나라도 null 이거나 denominator 가 0 이면 null. */

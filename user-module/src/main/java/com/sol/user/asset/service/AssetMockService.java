@@ -15,6 +15,7 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
@@ -127,7 +128,7 @@ public class AssetMockService {
         user.assignInvestmentPropensity(scenario.propensity());
 
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
-        List<Holding> holdings = saveHoldings(accounts, scenario.holdings());
+        List<Holding> holdings = saveHoldings(accounts, scenario.holdings(), scenario.stocks());
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
@@ -177,35 +178,67 @@ public class AssetMockService {
                 accountRepository::deleteAll, accountRepository::saveAll);
     }
 
-    private List<Holding> saveHoldings(List<Account> accounts, List<HoldingSeed> seeds) {
+    private List<Holding> saveHoldings(List<Account> accounts,
+                                       List<HoldingSeed> etfSeeds,
+                                       List<HoldingSeed> stockSeeds) {
         Account brokerage = accounts.stream()
                 .filter(a -> "BROKERAGE".equals(a.getAccountType()))
                 .findFirst().orElse(null);
-        if (brokerage == null || seeds.isEmpty()) {
+        if (brokerage == null || (etfSeeds.isEmpty() && stockSeeds.isEmpty())) {
             return List.of();
         }
-        Map<String, Long> tickerToProductId;
+
+        // ETF: 화이트리스트 풀에서 매핑(무결성 유지 — 풀에 없는 티커면 throw)
+        Map<String, Long> etfTickerToProductId;
         try {
-            tickerToProductId = etfPoolProvider.getPool().stream()
+            etfTickerToProductId = etfPoolProvider.getPool().stream()
                     .filter(info -> info.productId() != null)
                     .collect(Collectors.toMap(EtfInfo::ticker, EtfInfo::productId, (a, b) -> a));
         } catch (Exception e) {
             return List.of();
         }
-
-        boolean allMapped = seeds.stream().allMatch(s -> tickerToProductId.containsKey(s.ticker()));
-        if (!allMapped) {
+        boolean allEtfMapped = etfSeeds.stream().allMatch(s -> etfTickerToProductId.containsKey(s.ticker()));
+        if (!allEtfMapped) {
             throw new IllegalStateException("ETF 풀에 없는 티커가 HoldingSeed에 포함되어 있습니다.");
         }
 
-        List<Holding> desired = seeds.stream()
-                .map(seed -> new Holding(
-                        brokerage,
-                        tickerToProductId.get(seed.ticker()),
-                        seed.evaluationAmount(),
-                        seed.quantity()
-                ))
-                .toList();
+        // STOCK: financial_product(product_type='STOCK')에서 ticker_code로 매핑.
+        // stock_detail 카탈로그가 없는 환경(예: 단위 H2 컨텍스트)에서는 조회가 실패하므로
+        // 개별주 시드를 건너뛴다(주식은 월급 집계에서 제외되어 추천 파이프라인엔 영향 없음).
+        Map<String, Long> stockTickerToProductId = Map.of();
+        if (!stockSeeds.isEmpty()) {
+            try {
+                stockTickerToProductId = holdingRepository.findStockProductIds(
+                        stockSeeds.stream().map(HoldingSeed::ticker).toList()).stream()
+                        .collect(Collectors.toMap(
+                                StockTickerProductId::getTicker,
+                                StockTickerProductId::getProductId,
+                                (a, b) -> a));
+            } catch (Exception e) {
+                stockTickerToProductId = Map.of();
+            }
+            // 카탈로그가 존재(조회 성공·비어있지 않음)하는데 특정 티커만 없으면 시드 오타로 보고 fail-fast.
+            if (!stockTickerToProductId.isEmpty()) {
+                Map<String, Long> resolved = stockTickerToProductId;
+                boolean allStockMapped = stockSeeds.stream().allMatch(s -> resolved.containsKey(s.ticker()));
+                if (!allStockMapped) {
+                    throw new IllegalStateException("stock_detail에 없는 티커가 주식 HoldingSeed에 포함되어 있습니다.");
+                }
+            }
+        }
+
+        List<Holding> desired = new ArrayList<>();
+        for (HoldingSeed seed : etfSeeds) {
+            desired.add(new Holding(brokerage, etfTickerToProductId.get(seed.ticker()),
+                    seed.evaluationAmount(), seed.quantity()));
+        }
+        for (HoldingSeed seed : stockSeeds) {
+            Long stockProductId = stockTickerToProductId.get(seed.ticker());
+            if (stockProductId != null) {
+                desired.add(new Holding(brokerage, stockProductId,
+                        seed.evaluationAmount(), seed.quantity()));
+            }
+        }
         holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
         return holdingRepository.saveAll(desired);
     }
@@ -404,6 +437,12 @@ public class AssetMockService {
                             holding("433330", 40_000_000, 2_000),  // SOL 미국S&P500
                             holding("476030", 40_000_000, 2_500)   // SOL 미국나스닥100
                     ),
+                    // 개별주(ACTIVE 공격투자자 — 多). 월급재료엔 안 잡히고 순자산/성장블록에만 잡힘.
+                    List.of(
+                            stock("005930", 12_000_000, 180),  // 삼성전자
+                            stock("000660", 8_000_000, 40),    // SK하이닉스
+                            stock("005380", 6_000_000, 25)     // 현대차
+                    ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
                     money(250_000), money(180_000), money(1_250_000)
@@ -421,6 +460,11 @@ public class AssetMockService {
                     List.of(
                             holding("433330", 30_000_000, 1_500),  // SOL 미국S&P500
                             holding("292500", 25_000_000, 2_500)   // SOL KRX300
+                    ),
+                    // 개별주(NEUTRAL — 2종)
+                    List.of(
+                            stock("005930", 8_000_000, 120),   // 삼성전자
+                            stock("373220", 5_000_000, 12)     // LG에너지솔루션
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
@@ -440,6 +484,10 @@ public class AssetMockService {
                             holding("446720", 55_000_000, 5_000),  // SOL 미국배당다우존스
                             holding("438560", 45_000_000, 400),    // SOL 국고채3년
                             holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
+                    ),
+                    // 개별주(STABLE 안정형 — 少, 1종)
+                    List.of(
+                            stock("005930", 5_000_000, 75)     // 삼성전자
                     ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
@@ -461,6 +509,12 @@ public class AssetMockService {
         return new HoldingSeed(ticker, money(amount), BigDecimal.valueOf(quantity));
     }
 
+    // 개별주 시드. 구조는 holding과 동일하지만, 화이트리스트 ETF가 아닌
+    // financial_product(product_type='STOCK')로 매핑된다(saveHoldings 참조).
+    private static HoldingSeed stock(String ticker, long amount, long quantity) {
+        return holding(ticker, amount, quantity);
+    }
+
     private static BigDecimal money(long amount) {
         return BigDecimal.valueOf(amount);
     }
@@ -475,6 +529,7 @@ public class AssetMockService {
             InvestmentPropensity propensity,
             List<AssetSeed> assets,
             List<HoldingSeed> holdings,
+            List<HoldingSeed> stocks,
             BigDecimal debtBalance,
             BigDecimal monthlyLoanRepayment,
             BigDecimal loanInterestRate,
