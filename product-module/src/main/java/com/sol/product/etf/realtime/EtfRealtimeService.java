@@ -43,7 +43,13 @@ public class EtfRealtimeService {
         }
 
         return dailyPriceRepository.findTopByProductProductIdOrderByPriceDateDesc(productId)
-                .map(dp -> dp.getClosingPrice().longValue())
+                .map(dp -> {
+                    try {
+                        return dp.getClosingPrice().longValueExact();
+                    } catch (ArithmeticException e) {
+                        throw new BaseException(ErrorCode.PRICE_UNAVAILABLE);
+                    }
+                })
                 .orElseThrow(() -> new BaseException(ErrorCode.PRICE_UNAVAILABLE));
     }
 
