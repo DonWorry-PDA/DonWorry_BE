@@ -20,6 +20,8 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
+import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
+import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -37,6 +39,7 @@ class PortfolioRecommendationServiceTest {
     private final EtfPoolProvider etfPoolProvider = mock(EtfPoolProvider.class);
     private final OperationGradeInputAssembler inputAssembler = mock(OperationGradeInputAssembler.class);
     private final SurveyService surveyService = mock(SurveyService.class);
+    private final CashFlowDiagnosisService cashFlowDiagnosisService = mock(CashFlowDiagnosisService.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
@@ -45,7 +48,8 @@ class PortfolioRecommendationServiceTest {
             etfPoolProvider,
             new PortfolioRecommendationMapper(),
             inputAssembler,
-            surveyService
+            surveyService,
+            cashFlowDiagnosisService
     );
 
     @Test
@@ -54,6 +58,11 @@ class PortfolioRecommendationServiceTest {
         given(inputAssembler.assemble(eq(1L), any(SurveyAnswerResponse.class))).willReturn(neutralInput());
         given(surveyService.get(1L)).willReturn(
                 SurveyAnswerResponse.builder().q1(2).q2(1).q3(1).build());
+        given(cashFlowDiagnosisService.diagnose(1L)).willReturn(
+                CashFlowDiagnosisResponse.builder()
+                        .monthlyCashFlow(BigDecimal.ZERO)
+                        .targetMonthlyLivingCost(BigDecimal.ZERO)
+                        .build());
 
         RecommendationResponse response = service.recommend(1L);
 

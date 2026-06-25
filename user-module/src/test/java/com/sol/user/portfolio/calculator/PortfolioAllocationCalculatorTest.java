@@ -177,6 +177,24 @@ class PortfolioAllocationCalculatorTest {
         assertThat(gov.amount()).isEqualByComparingTo(expectedGov.setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
+    // ── productId 전파: EtfInfo.productId()가 Holding.productId()로 그대로 내려온다 ──
+
+    @Test
+    void EtfInfo의_productId가_위험_및_안전_Holding에_전파된다() {
+        AllocationResult result = calculator.calculate(activeInput(4));
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+
+        // 위험버킷: 452360 → productId=2
+        Holding riskCore = riskHoldings(stable).get(0);
+        assertThat(riskCore.ticker()).isEqualTo("452360");
+        assertThat(riskCore.productId()).isEqualTo(2L);
+
+        // 안전버킷: 438560(국고채) → productId=4
+        Holding gov = safeHoldings(stable).stream()
+                .filter(h -> h.ticker().equals("438560")).findFirst().orElseThrow();
+        assertThat(gov.productId()).isEqualTo(4L);
+    }
+
     // ── 바닥보호 불변식: 모든 안에서 안전목표 >= 바닥자산 ──────────────────────────
 
     @Test
@@ -246,18 +264,18 @@ class PortfolioAllocationCalculatorTest {
 
     private List<EtfInfo> pool() {
         return List.of(
-                new EtfInfo(null, "446720", "SOL 미국배당다우존스", 3,
+                new EtfInfo(1L, "446720", "SOL 미국배당다우존스", 3,
                         new BigDecimal("3.50"), "MONTHLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
-                new EtfInfo(null, "452360", "SOL 미국배당다우존스(H)", 2,
+                new EtfInfo(2L, "452360", "SOL 미국배당다우존스(H)", 2,
                         new BigDecimal("3.40"), "MONTHLY", BucketRole.RISK, CurrencyExposure.HEDGED),
-                new EtfInfo(null, "476030", "SOL 미국나스닥100", 2,
+                new EtfInfo(3L, "476030", "SOL 미국나스닥100", 2,
                         new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
                 // 안전버킷 구성 종목(등급≥5)
-                new EtfInfo(null, "438560", "SOL 국고채3년", 5,
+                new EtfInfo(4L, "438560", "SOL 국고채3년", 5,
                         new BigDecimal("3.00"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
-                new EtfInfo(null, "436140", "SOL 종합채권(AA-이상)액티브", 5,
+                new EtfInfo(5L, "436140", "SOL 종합채권(AA-이상)액티브", 5,
                         new BigDecimal("3.30"), "QUARTERLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED),
-                new EtfInfo(null, "497880", "SOL CD금리MMF", 5,
+                new EtfInfo(6L, "497880", "SOL CD금리MMF", 5,
                         new BigDecimal("3.20"), "MONTHLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED)
         );
     }

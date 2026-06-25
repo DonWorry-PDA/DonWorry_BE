@@ -86,7 +86,7 @@ class CalibrationHarness {
                                             allocationCalculator.calculate(toAllocationInput(grade, input, pool));
                                     CoverageResult coverage =
                                             coverageCalculator.calculate(toCoverageInput(allocation, grade, input));
-                                    RecommendationResponse resp = mapper.toResponse(allocation, coverage);
+                                    RecommendationResponse resp = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
 
                                     String trackCols = nz(resp.getTrack()) + "," + nz(resp.getBand()) + ","
                                             + nz(resp.getAlpha()) + ","
