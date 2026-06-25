@@ -77,6 +77,13 @@ public class Account {
         this.existingAccount = true;
     }
 
+    public void addBalance(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        this.depositBalance = this.depositBalance.add(amount);
+    }
+
     public void deductBalance(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
