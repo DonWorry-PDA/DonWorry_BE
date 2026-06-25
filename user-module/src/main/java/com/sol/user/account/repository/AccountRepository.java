@@ -4,6 +4,7 @@ import com.sol.user.account.entity.Account;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface AccountRepository extends JpaRepository<Account, Long> {
     void deleteByUserUserId(Long userId);
@@ -19,4 +20,6 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     boolean existsByUserUserIdAndAccountType(Long userId, String accountType);
 
     boolean existsByAccountNumber(String accountNumber);
+
+    Optional<Account> findByUserUserIdAndAccountType(Long userId, String accountType);
 }
