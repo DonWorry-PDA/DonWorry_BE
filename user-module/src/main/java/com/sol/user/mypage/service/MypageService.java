@@ -4,6 +4,8 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.mypage.dto.MypageResponse;
 import com.sol.user.mypage.dto.MypageUpdateRequest;
+import com.sol.user.mypage.dto.UserProfileResponse;
+import com.sol.user.mypage.dto.UserProfileUpdateRequest;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
@@ -21,6 +23,39 @@ public class MypageService {
 
     private final UserRepository userRepository;
     private final UserGoalRepository userGoalRepository;
+
+    @Transactional(readOnly = true)
+    public UserProfileResponse getProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+        UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId).orElse(null);
+        return UserProfileResponse.of(user, goal);
+    }
+
+    @Transactional
+    public UserProfileResponse updateProfile(Long userId, UserProfileUpdateRequest request) {
+        BigDecimal monthlyTargetKrw = request.monthlyTargetKrw();
+        if (monthlyTargetKrw != null && monthlyTargetKrw.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+
+        LocalDateTime now = LocalDateTime.now();
+        user.updateProfile(request.age(), request.retiredValue(), request.nationalPensionReceivingValue(), now);
+
+        UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId).orElse(null);
+        if (monthlyTargetKrw != null) {
+            if (goal == null) {
+                goal = userGoalRepository.save(new UserGoal(user, monthlyTargetKrw, null, now));
+            } else {
+                goal.updateTargetLivingCost(monthlyTargetKrw, now);
+            }
+        }
+
+        return UserProfileResponse.of(user, goal);
+    }
 
     @Transactional
     public MypageResponse update(Long userId, MypageUpdateRequest request) {
