@@ -84,6 +84,43 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void 보유_개별주식은_주식_카테고리로_집계된다() {
+        // 예금 8천 / 주식 2천 = 총 1억. productType=STOCK → 주식 버킷.
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+                account("DEPOSIT", 80_000_000)));
+        stubHolding(2001L, 20_000_000, "STOCK");
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.allocation()).extracting(AssetAllocationItem::category)
+                .containsExactly("예금", "주식");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
+                .containsExactly(80, 20);
+    }
+
+    @Test
+    void 상품메타데이터_누락_보유종목은_현재계약상_기타로_집계된다() {
+        // 현 계약: product 배치 응답에 없으면 fromProductType(null) → ETC(기타) 폴백.
+        // (fail-closed 전환은 별도 결정 — 본 테스트는 현재 동작을 고정한다.)
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
+                account("DEPOSIT", 90_000_000)));
+        stubHoldingWithoutProduct(3001L, 10_000_000);
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.allocation()).extracting(AssetAllocationItem::category)
+                .containsExactly("예금", "기타");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
+                .containsExactly(90, 10);
+    }
+
+    @Test
     void 비율_보정으로_나누어떨어지지_않아도_합이_100() {
         when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(
                 account("DEPOSIT", 1_000_000),
@@ -179,12 +216,24 @@ class AssetHubServiceTest {
     }
 
     private void stubEtfHolding(long productId, long evaluationAmount) {
+        stubHolding(productId, evaluationAmount, "ETF");
+    }
+
+    private void stubHolding(long productId, long evaluationAmount, String productType) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
         when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
         when(productBatchClient.fetchProducts(List.of(productId)))
-                .thenReturn(Map.of(productId, new ProductBatchItem(productId, "SOL ETF", "ETF")));
+                .thenReturn(Map.of(productId, new ProductBatchItem(productId, "상품" + productId, productType)));
+    }
+
+    private void stubHoldingWithoutProduct(long productId, long evaluationAmount) {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(productId);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID)).thenReturn(List.of(holding));
+        when(productBatchClient.fetchProducts(List.of(productId))).thenReturn(Map.of());
     }
 
     private void stubCashFlow(long cashFlow, long target) {

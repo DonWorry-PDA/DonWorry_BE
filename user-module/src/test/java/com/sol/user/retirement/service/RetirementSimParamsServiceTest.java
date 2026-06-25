@@ -44,7 +44,7 @@ class RetirementSimParamsServiceTest {
 
     private void stubTotalAssets(long krw) {
         when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
-                BigDecimal.valueOf(krw), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+                BigDecimal.valueOf(krw), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
     }
 
     @Test
@@ -57,7 +57,7 @@ class RetirementSimParamsServiceTest {
         // 예수금 1억(예금) + 증권 종목 1.5억(비STOCK) → 전체 자산 2.5억
         when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
                 new BigDecimal("100000000"), BigDecimal.ZERO,
-                new BigDecimal("150000000"), BigDecimal.ZERO));
+                new BigDecimal("150000000"), BigDecimal.ZERO, BigDecimal.ZERO));
 
         UserGoal goal = new UserGoal(user, new BigDecimal("2200000"),
                 new BigDecimal("500000"), LocalDateTime.now());
@@ -72,6 +72,26 @@ class RetirementSimParamsServiceTest {
         assertThat(result.totalAssetsKrw()).isEqualByComparingTo(new BigDecimal("250000000"));
         assertThat(result.monthlyLivingKrw()).isEqualByComparingTo(new BigDecimal("2200000"));
         assertThat(result.monthlyPensionKrw()).isEqualByComparingTo(new BigDecimal("1200000"));
+    }
+
+    @Test
+    @DisplayName("은퇴 총자산은 개별주식 평가액까지 포함한다(grossTotal)")
+    void getParams_includesStockHoldings() {
+        User user = mock(User.class);
+        when(user.getAge()).thenReturn(63);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        // 예수금 1억 + 비STOCK 종목 5천 + 개별주식 4천 → 전체 1.9억.
+        // 서비스가 operatingTotal(1.5억)을 쓰면 이 단언이 깨진다.
+        when(assetAggregator.aggregate(1L)).thenReturn(new AssetBreakdown(
+                new BigDecimal("100000000"), BigDecimal.ZERO,
+                new BigDecimal("50000000"), BigDecimal.ZERO, new BigDecimal("40000000")));
+        when(userGoalRepository.findByUserUserId(1L)).thenReturn(Optional.empty());
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of());
+
+        RetirementSimParamsResponse result = service.getParams(1L);
+
+        assertThat(result.totalAssetsKrw()).isEqualByComparingTo(new BigDecimal("190000000"));
     }
 
     @Test

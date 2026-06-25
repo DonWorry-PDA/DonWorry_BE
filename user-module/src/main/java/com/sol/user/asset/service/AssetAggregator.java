@@ -43,7 +43,7 @@ public class AssetAggregator {
         BigDecimal cash = accounts.stream()
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal pensionSaving = accounts.stream()
+        BigDecimal pensionCash = accounts.stream()
                 .filter(account -> PENSION_ACCOUNT_TYPES.contains(account.getAccountType()))
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -51,23 +51,27 @@ public class AssetAggregator {
         List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
-            return new AssetBreakdown(cash, pensionSaving, BigDecimal.ZERO, BigDecimal.ZERO);
+            return new AssetBreakdown(cash, pensionCash, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         }
 
         Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
                 holdings.stream().map(HoldingWithProduct::getProductId).toList());
 
         BigDecimal nonStock = BigDecimal.ZERO;
+        BigDecimal pensionHolding = BigDecimal.ZERO;
         BigDecimal stock = BigDecimal.ZERO;
         for (HoldingWithProduct holding : holdings) {
             BigDecimal eval = nz(holding.getEvaluationAmount());
             if (isStock(products.get(holding.getProductId()))) {
                 stock = stock.add(eval);
+            } else if (PENSION_ACCOUNT_TYPES.contains(holding.getAccountType())) {
+                // 연금계좌(IRP·연금저축)의 비STOCK 종목 — 55세 제약이라 즉시가용에서 빠지도록 별도 집계.
+                pensionHolding = pensionHolding.add(eval);
             } else {
                 nonStock = nonStock.add(eval);
             }
         }
-        return new AssetBreakdown(cash, pensionSaving, nonStock, stock);
+        return new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
     }
 
     private boolean isStock(ProductBatchItem product) {

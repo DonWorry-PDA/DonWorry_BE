@@ -141,7 +141,7 @@ public class AssetMockService {
         return new MockAssetResponse(
                 mockType,
                 generatedAt,
-                createAssetSummary(scenario),
+                createAssetSummary(accounts, holdings, scenario.debtBalance()),
                 new MockGeneratedCounts(
                         connections.size(),
                         accounts.size(),
@@ -352,13 +352,20 @@ public class AssetMockService {
         );
     }
 
-    private AssetSummaryResponse createAssetSummary(Scenario scenario) {
+    /**
+     * 요약은 시나리오가 아니라 실제 저장된 계좌·보유종목 기준으로 계산한다.
+     * {@code saveHoldings}가 증권계좌 부재나 ETF 풀 조회 실패로 빈 리스트를 반환하면
+     * DB엔 종목이 없으므로, 시나리오 평가액을 더하면 응답과 실제 저장이 어긋난다.
+     */
+    private AssetSummaryResponse createAssetSummary(List<Account> accounts, List<Holding> holdings,
+                                                    BigDecimal debtBalance) {
         Map<String, BigDecimal> grouped = new LinkedHashMap<>();
-        scenario.assets().forEach(seed -> grouped.merge(seed.category(), seed.amount(), BigDecimal::add));
+        accounts.forEach(account ->
+                grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
 
         // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
-        BigDecimal holdingsTotal = scenario.holdings().stream()
-                .map(HoldingSeed::evaluationAmount)
+        BigDecimal holdingsTotal = holdings.stream()
+                .map(Holding::getEvaluationAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (holdingsTotal.signum() > 0) {
             grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
@@ -368,16 +375,18 @@ public class AssetMockService {
                 .map(entry -> new AssetGroupSummary(entry.getKey(), entry.getValue()))
                 .toList();
 
-        BigDecimal totalAsset = scenario.assets().stream()
-                .map(AssetSeed::amount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .add(holdingsTotal);
+        BigDecimal totalAsset = grouped.values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new AssetSummaryResponse(
                 totalAsset,
-                scenario.debtBalance(),
-                totalAsset.subtract(scenario.debtBalance()),
+                debtBalance,
+                totalAsset.subtract(debtBalance),
                 groups
         );
+    }
+
+    private static BigDecimal nz(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private Scenario scenarioOf(MockType mockType) {
