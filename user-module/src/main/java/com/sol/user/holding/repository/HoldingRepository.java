@@ -4,10 +4,12 @@ import com.sol.user.account.entity.Account;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,6 +19,10 @@ import java.util.Optional;
 public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     List<Holding> findByAccountIn(List<Account> accounts);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Holding h WHERE h.account.accountId IN :accountIds")
+    void deleteByAccountIdsInBatch(@Param("accountIds") List<Long> accountIds);
 
     Optional<Holding> findByAccountAccountIdAndProductId(Long accountId, Long productId);
 
@@ -102,4 +108,22 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
     List<HoldingDividendCalendarProjection> findDividendCalendarInputsByUserId(
             @Param("userId") Long userId
     );
+
+    // 투자 건강검진 성장블록용: 보유 개별주(STOCK)의 종목별 평가액 합 + 시가배당률
+    @Query(value = """
+            SELECT fp.product_id          AS productId,
+                   fp.product_name        AS productName,
+                   SUM(h.evaluation_amount) AS evaluationAmount,
+                   s.dividend_yield       AS dividendYield,
+                   s.sector               AS sector
+            FROM holding h
+            JOIN account a ON h.account_id = a.account_id
+            JOIN financial_product fp ON fp.product_id = h.product_id
+            JOIN stock_detail s ON s.product_id = h.product_id
+            WHERE a.user_id = :userId
+              AND fp.product_type = 'STOCK'
+            GROUP BY fp.product_id, fp.product_name, s.dividend_yield, s.sector
+            ORDER BY SUM(h.evaluation_amount) DESC
+            """, nativeQuery = true)
+    List<StockDividendProjection> findStockDividendsByUserId(@Param("userId") Long userId);
 }

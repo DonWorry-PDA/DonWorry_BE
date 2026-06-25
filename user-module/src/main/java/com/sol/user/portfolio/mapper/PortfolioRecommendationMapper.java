@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -35,7 +36,8 @@ public class PortfolioRecommendationMapper {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
-                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost) {
+                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost,
+                                             Map<Long, BigDecimal> existingEvalByProductId) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -43,7 +45,8 @@ public class PortfolioRecommendationMapper {
         PlanType recommendedType = resolveRecommendedType(coverage.getTrack(), allocation.getPlans(), coverageByType);
 
         List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost))
+                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost,
+                        existingEvalByProductId))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
@@ -97,7 +100,8 @@ public class PortfolioRecommendationMapper {
     private PlanResponse toPlanResponse(PlanAllocation plan,
                                         Map<PlanType, PlanCoverage> coverageByType,
                                         PlanType recommendedType,
-                                        BigDecimal targetMonthlyLivingCost) {
+                                        BigDecimal targetMonthlyLivingCost,
+                                        Map<Long, BigDecimal> existingEvalByProductId) {
         PlanCoverage coverage = coverageByType.get(plan.getType());
         if (coverage == null) {
             // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
@@ -124,7 +128,7 @@ public class PortfolioRecommendationMapper {
                 .riskTarget(plan.getRiskTarget())
                 .safeTarget(plan.getSafeTarget())
                 .shortTermBucket(plan.getShortTermBucket())
-                .holdings(plan.getHoldings())
+                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
@@ -181,6 +185,30 @@ public class PortfolioRecommendationMapper {
             case BALANCED -> "균형 월급형";
             case LIQUIDITY -> "여유자금 성장형";
         };
+    }
+
+    /**
+     * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
+     * 동일 productId가 SAFE/SHORT_TERM 버킷에 중복 등장(예: SOL CD금리MMF)하는 경우
+     * remaining을 순차 차감해 이중 공제를 방지한다. net ≤ 0인 항목은 제거.
+     */
+    private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId) {
+        if (existingByProductId.isEmpty()) {
+            return holdings;
+        }
+        Map<Long, BigDecimal> remaining = new HashMap<>(existingByProductId);
+        List<Holding> result = new ArrayList<>();
+        for (Holding h : holdings) {
+            BigDecimal rem = remaining.getOrDefault(h.productId(), BigDecimal.ZERO);
+            BigDecimal net = h.amount().subtract(rem).max(BigDecimal.ZERO)
+                    .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+            remaining.put(h.productId(), rem.subtract(h.amount().min(rem)));
+            if (net.compareTo(BigDecimal.ZERO) > 0) {
+                result.add(new Holding(h.productId(), h.ticker(), h.productName(),
+                        h.role(), h.currency(), h.weight(), net));
+            }
+        }
+        return result;
     }
 
     /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */

@@ -245,7 +245,7 @@ public class AssetMockService {
                         seed.evaluationAmount(), seed.quantity()));
             }
         }
-        holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
+        holdingRepository.deleteByAccountIdsInBatch(List.of(brokerage.getAccountId()));
         return holdingRepository.saveAll(desired);
     }
 
