@@ -8,6 +8,7 @@ import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +17,10 @@ import java.util.List;
 public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     List<Holding> findByAccountIn(List<Account> accounts);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Holding h WHERE h.account.accountId IN :accountIds")
+    void deleteByAccountIdsInBatch(@Param("accountIds") List<Long> accountIds);
 
     @EntityGraph(attributePaths = "account")
     List<Holding> findByAccountUserUserIdOrderByHoldingIdAsc(Long userId);
