@@ -81,9 +81,17 @@ public class PortfolioRecommendationService {
                 .map(a -> a.getDepositBalance() != null ? a.getDepositBalance() : BigDecimal.ZERO)
                 .orElse(BigDecimal.ZERO);
 
+        // 실제 순매수 가능 한도: 추천 목록에 없는 기존 BROKERAGE ETF도 자산에 포함되어 있어
+        // netHoldings가 해당 평가액을 차감하지 못하면 총 매수액이 가용 현금을 초과한다.
+        BigDecimal existingBrokerageEtfTotal = existingEvalByProductId.values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal maxBuyTotal = input.totalAsset().subtract(input.pensionSaving())
+                .subtract(existingBrokerageEtfTotal)
+                .max(BigDecimal.ZERO);
+
         return recommendationMapper.toResponse(allocation, coverage,
                 cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost(),
-                existingEvalByProductId, brokerageBalance);
+                existingEvalByProductId, brokerageBalance, maxBuyTotal);
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {
