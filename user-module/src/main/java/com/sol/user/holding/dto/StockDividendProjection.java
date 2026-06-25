@@ -17,4 +17,7 @@ public interface StockDividendProjection {
 
     /** stock_detail.dividend_yield — 시가배당률(%), 무배당은 0. 미적재면 NULL. */
     BigDecimal getDividendYield();
+
+    /** stock_detail.sector — 산업 분류(섹터 쏠림 진단용). 미적재면 NULL. */
+    String getSector();
 }

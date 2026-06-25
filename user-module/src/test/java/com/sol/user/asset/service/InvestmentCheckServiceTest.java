@@ -143,6 +143,26 @@ class InvestmentCheckServiceTest {
     }
 
     @Test
+    void 섹터쏠림은_단일종목쏠림이_낮아도_높게_잡힐_수_있다() {
+        // 삼성전자 1.2천(전기·전자)/SK하이닉스 1천(전기·전자)/현대차 0.9천(운송장비)/LG엔솔 0.9천(전기·전자) = 4천
+        // 단일종목 최대 30%(낮음)지만 전기·전자 섹터 합 3.1천 = 78%(높음)
+        stubBreakdown(stockOnlyBreakdown(40_000_000));
+        when(holdingRepository.findStockDividendsByUserId(USER_ID)).thenReturn(List.of(
+                stock(1L, "삼성전자", 12_000_000, "0", "전기·전자"),
+                stock(2L, "SK하이닉스", 10_000_000, "0", "전기·전자"),
+                stock(3L, "현대차", 9_000_000, "0", "운송장비"),
+                stock(4L, "LG에너지솔루션", 9_000_000, "0", "전기·전자")));
+
+        GrowthAsset growth = service.check(USER_ID).growthAsset();
+
+        assertThat(growth.concentrationRatio()).isEqualTo(30);
+        assertThat(growth.concentrationLevel()).isEqualTo("낮음");
+        assertThat(growth.topSector()).isEqualTo("전기·전자");
+        assertThat(growth.sectorConcentrationRatio()).isEqualTo(78);
+        assertThat(growth.sectorConcentrationLevel()).isEqualTo("높음");
+    }
+
+    @Test
     void 단일종목만_보유하면_쏠림_높음() {
         stubBreakdown(stockOnlyBreakdown(30_000_000));
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
@@ -203,11 +223,16 @@ class InvestmentCheckServiceTest {
     }
 
     private StockDividendProjection stock(long productId, String name, long eval, String yield) {
+        return stock(productId, name, eval, yield, "기타");
+    }
+
+    private StockDividendProjection stock(long productId, String name, long eval, String yield, String sector) {
         return new StockDividendProjection() {
             public Long getProductId() { return productId; }
             public String getProductName() { return name; }
             public BigDecimal getEvaluationAmount() { return BigDecimal.valueOf(eval); }
             public BigDecimal getDividendYield() { return new BigDecimal(yield); }
+            public String getSector() { return sector; }
         };
     }
 

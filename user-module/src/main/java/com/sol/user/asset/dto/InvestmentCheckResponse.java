@@ -55,6 +55,9 @@ public record InvestmentCheckResponse(
             String topStockName,                     // 최대 비중 종목명
             int concentrationRatio,                  // 최대종목 / 개별주합 %
             String concentrationLevel,               // 낮음 / 보통 / 높음
+            String topSector,                        // 최대 비중 섹터명
+            int sectorConcentrationRatio,            // 최대섹터 / 개별주합 % (단일종목 쏠림이 낮아도 섹터는 높을 수 있음)
+            String sectorConcentrationLevel,         // 낮음 / 보통 / 높음
             BigDecimal currentMonthlyDividend,       // 현재 개별주에서 나오는 월 배당(Σ eval×yield/12)
             BigDecimal convertedMonthlyDividend,     // 전액 배당ETF로 옮겼을 때 월 배당(amount×대표배당률/12)
             BigDecimal deltaMonthlyDividend,         // converted − current. 음수면 옮기면 손해

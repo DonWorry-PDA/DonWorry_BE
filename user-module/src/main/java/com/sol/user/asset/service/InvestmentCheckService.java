@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 투자 건강검진(#2) 상세 산출. 자산을 4역할(현금흐름·성장·잠자는 돈·연금)로 분해하고, 개별주 성장 블록을 만든다.
@@ -129,6 +131,10 @@ public class InvestmentCheckService {
                 .orElse(null);
         int concentration = top == null ? 0 : percent(top.getEvaluationAmount(), stockTotal);
 
+        // 섹터 쏠림 — 단일종목 쏠림이 낮아도(예: 삼성전자·SK하이닉스·삼성SDI 분산) 같은 섹터면 위험은 집중.
+        Map.Entry<String, BigDecimal> topSector = topSectorByValue(stocks);
+        int sectorConcentration = topSector == null ? 0 : percent(topSector.getValue(), stockTotal);
+
         // 전액 배당형 ETF로 옮겼을 때의 월 배당(대표배당률) vs 현재 종목 실배당.
         BigDecimal converted = monthlyByRate(stockTotal, PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE);
         BigDecimal delta = converted.subtract(stockMonthly);
@@ -138,6 +144,9 @@ public class InvestmentCheckService {
                 .topStockName(top == null ? null : top.getProductName())
                 .concentrationRatio(concentration)
                 .concentrationLevel(concentrationLevel(concentration))
+                .topSector(topSector == null ? null : topSector.getKey())
+                .sectorConcentrationRatio(sectorConcentration)
+                .sectorConcentrationLevel(concentrationLevel(sectorConcentration))
                 .currentMonthlyDividend(stockMonthly)
                 .convertedMonthlyDividend(converted)
                 .deltaMonthlyDividend(delta)
@@ -167,6 +176,21 @@ public class InvestmentCheckService {
         }
         return nz(p.getQuantity()).multiply(nz(p.getAmountPerUnit()))
                 .divide(BigDecimal.valueOf(interval), 0, RoundingMode.HALF_UP);
+    }
+
+    /** 섹터별 평가액 합 중 최대 항목. 섹터 미적재(NULL/공백) 종목은 제외. 없으면 null. */
+    private Map.Entry<String, BigDecimal> topSectorByValue(List<StockDividendProjection> stocks) {
+        Map<String, BigDecimal> bySector = new HashMap<>();
+        for (StockDividendProjection s : stocks) {
+            String sector = s.getSector();
+            if (sector == null || sector.isBlank()) {
+                continue;
+            }
+            bySector.merge(sector, nz(s.getEvaluationAmount()), BigDecimal::add);
+        }
+        return bySector.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElse(null);
     }
 
     /** 성장 역할의 월 배당 = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합. */

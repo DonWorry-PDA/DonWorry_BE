@@ -109,14 +109,15 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             SELECT fp.product_id          AS productId,
                    fp.product_name        AS productName,
                    SUM(h.evaluation_amount) AS evaluationAmount,
-                   s.dividend_yield       AS dividendYield
+                   s.dividend_yield       AS dividendYield,
+                   s.sector               AS sector
             FROM holding h
             JOIN account a ON h.account_id = a.account_id
             JOIN financial_product fp ON fp.product_id = h.product_id
             JOIN stock_detail s ON s.product_id = h.product_id
             WHERE a.user_id = :userId
               AND fp.product_type = 'STOCK'
-            GROUP BY fp.product_id, fp.product_name, s.dividend_yield
+            GROUP BY fp.product_id, fp.product_name, s.dividend_yield, s.sector
             ORDER BY SUM(h.evaluation_amount) DESC
             """, nativeQuery = true)
     List<StockDividendProjection> findStockDividendsByUserId(@Param("userId") Long userId);
