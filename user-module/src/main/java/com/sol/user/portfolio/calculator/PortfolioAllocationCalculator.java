@@ -149,6 +149,7 @@ public class PortfolioAllocationCalculator {
                 continue;
             }
             holdings.add(new Holding(
+                    etf.productId(),
                     etf.ticker(),
                     etf.productName(),
                     BucketRole.RISK,
@@ -205,6 +206,7 @@ public class PortfolioAllocationCalculator {
             }
             BigDecimal weight = entry.getValue().divide(bucketTotal, RATE_SCALE, RoundingMode.HALF_UP);
             holdings.add(new Holding(
+                    etf.productId(),
                     etf.ticker(),
                     etf.productName(),
                     role,
