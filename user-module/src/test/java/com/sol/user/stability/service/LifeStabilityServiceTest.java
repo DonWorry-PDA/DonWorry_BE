@@ -137,6 +137,60 @@ class LifeStabilityServiceTest {
         verify(stabilityScoreRepository).save(any(StabilityScore.class));
     }
 
+    @Test
+    void scopesCashflowAggregationToLatestMonthIgnoringPastMonths() {
+        // #169 회귀 방지: 6개월치(현재월 + 과거월)가 저장돼 있어도 월정액 지표는 최근 1개월만 집계해야 한다.
+        // 과거월을 합산하면 financialIncome·essentialExpense가 부풀려져 충당률이 59.00을 넘는다.
+        User user = mock(User.class);
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), money(350_000), LocalDateTime.now())));
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Account(user, "CMA", "신한은행", "MOCK-1", money(18_000_000), true)
+        ));
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Pension(user, "NATIONAL", money(1_150_000), false, 65)
+        ));
+        when(debtRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Debt(user, "신한은행", "CREDIT_LOAN", money(30_000_000), money(300_000),
+                        new BigDecimal("4.10"), LocalDate.now().plusYears(10))
+        ));
+        when(insurancePolicyRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new InsurancePolicy(user, "신한라이프", "INDEMNITY", money(70_000), true, money(1_400_000)),
+                new InsurancePolicy(user, "신한라이프", "CANCER", money(70_000), true, money(1_400_000)),
+                new InsurancePolicy(user, "신한라이프", "NURSING", money(60_000), true, money(1_400_000))
+        ));
+        LocalDate thisMonth = LocalDate.now();
+        LocalDate lastMonth = LocalDate.now().minusMonths(1);
+        when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
+                dated(user, "INTEREST", "INCOME", 48_000, thisMonth),
+                dated(user, "DIVIDEND", "INCOME", 100_000, thisMonth),
+                dated(user, "MAINTENANCE", "EXPENSE", 180_000, thisMonth),
+                dated(user, "INSURANCE", "EXPENSE", 200_000, thisMonth),
+                dated(user, "CARD", "EXPENSE", 1_400_000, thisMonth),
+                // 과거월(동일 값) — 집계에서 제외되어야 한다
+                dated(user, "INTEREST", "INCOME", 48_000, lastMonth),
+                dated(user, "DIVIDEND", "INCOME", 100_000, lastMonth),
+                dated(user, "MAINTENANCE", "EXPENSE", 180_000, lastMonth),
+                dated(user, "INSURANCE", "EXPENSE", 200_000, lastMonth),
+                dated(user, "CARD", "EXPENSE", 1_400_000, lastMonth)
+        ));
+        when(stabilityScoreRepository.save(any(StabilityScore.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LifeStabilityResponse response = service.recalculateFromUserData(1L);
+
+        // 단일월 기준 기대치와 동일해야 한다(과거월을 합산하면 59.00을 초과).
+        assertThat(response.metrics().cashflowCoverageRate()).isEqualByComparingTo("59.00");
+        assertThat(response.grade()).isEqualTo("NEED_COMPLEMENT");
+    }
+
+    private CashFlowEvent dated(User user, String eventType, String flowType, long amount, LocalDate date) {
+        return new CashFlowEvent(
+                user, date, eventType, eventType, money(amount), flowType,
+                "SCHEDULED", true, "MYDATA_MOCK"
+        );
+    }
+
     private CashFlowEvent event(User user, String eventType, String flowType, long amount) {
         return new CashFlowEvent(
                 user, LocalDate.now(), eventType, eventType, money(amount), flowType,
