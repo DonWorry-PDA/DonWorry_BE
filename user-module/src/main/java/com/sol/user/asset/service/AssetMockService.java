@@ -358,17 +358,17 @@ public class AssetMockService {
         for (int i = 0; i < templates.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = templates.get(i);
             int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
-            long amount = applyVariation(t.baseAmount(), monthStart.getMonthValue(), i);
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
             events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
-                    BigDecimal.valueOf(amount), "EXPENSE", status, recurring));
+                    amount, "EXPENSE", status, recurring));
         }
 
         return events;
     }
 
-    private long applyVariation(long baseAmount, int monthNum, int templateIndex) {
-        double factor = 0.85 + ((monthNum * 7 + templateIndex * 3) % 31) / 100.0;
-        return Math.round(baseAmount * factor);
+    private BigDecimal applyVariation(BigDecimal baseAmount, int monthNum, int templateIndex) {
+        BigDecimal factor = BigDecimal.valueOf(85 + ((monthNum * 7 + templateIndex * 3) % 31), 2);
+        return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
     }
 
     private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {

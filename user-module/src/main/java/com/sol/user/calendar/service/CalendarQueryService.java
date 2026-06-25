@@ -28,7 +28,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -39,9 +38,6 @@ public class CalendarQueryService {
     private final DebtRepository debtRepository;
     private final HoldingRepository holdingRepository;
     private final CalendarEventMapper calendarEventMapper;
-
-    private static final Set<String> TRANSACTION_EVENT_TYPES =
-            Set.of("CARD", "TRANSPORT", "UTILITY", "PHONE", "MEDICAL");
 
     public CalendarMonthResponse getMonth(Long userId, int year, int month) {
         YearMonth targetMonth = toYearMonth(year, month);
@@ -103,7 +99,7 @@ public class CalendarQueryService {
             }
 
             CalendarEventCategory category = calendarEventMapper.toCategory(event.getEventType());
-            boolean transactional = TRANSACTION_EVENT_TYPES.contains(event.getEventType());
+            boolean transactional = category == CalendarEventCategory.TRANSACTION;
             items.add(new CalendarItem(
                     "cashflow-" + event.getEventId() + "-" + date,
                     date,
