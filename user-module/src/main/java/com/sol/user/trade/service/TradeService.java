@@ -29,21 +29,17 @@ public class TradeService {
 
     @Transactional
     public BuyResponse buy(Long userId, BuyRequest request) {
-        Account account = accountRepository.findByUserUserIdAndAccountType(userId, "BROKERAGE")
+        Account account = accountRepository.findByUserUserIdAndAccountTypeForUpdate(userId, "BROKERAGE")
                 .orElseThrow(() -> new BaseException(ErrorCode.BROKERAGE_ACCOUNT_NOT_FOUND));
 
         long rawPrice = etfPriceClient.getCurrentPrice(request.productId());
         BigDecimal currentPrice = BigDecimal.valueOf(rawPrice);
         BigDecimal totalAmount = request.quantity().multiply(currentPrice).setScale(0, RoundingMode.HALF_UP);
 
-        if (account.getDepositBalance().compareTo(totalAmount) < 0) {
-            throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE);
-        }
+        account.deductBalance(totalAmount);
 
         TradeHistory trade = TradeHistory.ofBuy(account, request.productId(), request.quantity(), currentPrice);
         tradeHistoryRepository.save(trade);
-
-        account.deductBalance(totalAmount);
 
         holdingRepository.findByAccountAccountIdAndProductId(account.getAccountId(), request.productId())
                 .ifPresentOrElse(
