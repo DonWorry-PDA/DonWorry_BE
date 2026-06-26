@@ -14,11 +14,11 @@ public record InstitutionResponse(
         String brandColor,
         String labelColor,
         boolean connected,
-        List<String> connectedProducts,
+        List<String> accountNumbers,
         Long totalAmountKrw
 ) {
     public static InstitutionResponse of(InstitutionCode code, boolean connected,
-                                         List<String> connectedProducts, Long totalAmountKrw) {
+                                         List<String> accountNumbers, Long totalAmountKrw) {
         return new InstitutionResponse(
                 code.getId(),
                 code.getName(),
@@ -27,7 +27,7 @@ public record InstitutionResponse(
                 code.getBrandColor(),
                 code.getLabelColor(),
                 connected,
-                connected ? connectedProducts : null,
+                connected ? accountNumbers : null,
                 connected ? totalAmountKrw : null
         );
     }

@@ -29,18 +29,11 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class InstitutionService {
 
-    private static final Map<String, String> ACCOUNT_TYPE_LABEL = Map.of(
-            "CMA", "CMA",
-            "DEPOSIT", "예금",
-            "BROKERAGE", "ETF",
-            "IRP", "IRP",
-            "PENSION_SAVING", "연금저축"
-    );
-
     private final AccountRepository accountRepository;
     private final AssetConnectionRepository assetConnectionRepository;
     private final UserRepository userRepository;
 
+    @Transactional
     public List<InstitutionResponse> getInstitutions(Long userId) {
         Set<String> connectedDbNames = assetConnectionRepository.findByUserUserId(userId).stream()
                 .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
@@ -52,14 +45,18 @@ public class InstitutionService {
                 .toList();
 
         existingAccounts.stream()
+                .filter(a -> a.getDisplayNumber() == null)
+                .forEach(a -> a.updateDisplayNumber(generateDisplayNumber()));
+
+        existingAccounts.stream()
                 .map(Account::getInstitutionName)
                 .forEach(connectedDbNames::add);
 
-        Map<String, List<String>> productsByDbName = existingAccounts.stream()
-                .filter(a -> ACCOUNT_TYPE_LABEL.containsKey(a.getAccountType()))
+        Map<String, List<String>> displayNumbersByDbName = existingAccounts.stream()
+                .filter(a -> a.getDisplayNumber() != null)
                 .collect(Collectors.groupingBy(
                         Account::getInstitutionName,
-                        Collectors.mapping(a -> ACCOUNT_TYPE_LABEL.get(a.getAccountType()), Collectors.toList())
+                        Collectors.mapping(Account::getDisplayNumber, Collectors.toList())
                 ));
 
         Map<String, Long> totalByDbName = existingAccounts.stream()
@@ -72,10 +69,9 @@ public class InstitutionService {
         return InstitutionCode.all().stream()
                 .map(code -> {
                     boolean connected = code.getDbNames().stream().anyMatch(connectedDbNames::contains);
-                    List<String> products = connected
+                    List<String> accountNumbers = connected
                             ? code.getDbNames().stream()
-                                    .flatMap(dbName -> productsByDbName.getOrDefault(dbName, List.of()).stream())
-                                    .distinct()
+                                    .flatMap(dbName -> displayNumbersByDbName.getOrDefault(dbName, List.of()).stream())
                                     .toList()
                             : null;
                     Long totalAmountKrw = connected
@@ -83,7 +79,7 @@ public class InstitutionService {
                                     .mapToLong(dbName -> totalByDbName.getOrDefault(dbName, 0L))
                                     .sum()
                             : null;
-                    return InstitutionResponse.of(code, connected, products, totalAmountKrw);
+                    return InstitutionResponse.of(code, connected, accountNumbers, totalAmountKrw);
                 })
                 .toList();
     }
@@ -102,10 +98,11 @@ public class InstitutionService {
         Map<String, AssetConnection> existingByDbName = assetConnectionRepository.findByUserUserId(userId).stream()
                 .collect(Collectors.toMap(AssetConnection::getInstitutionName, c -> c, (a, b) -> a));
 
-        Set<String> existingAccountInstitutions = accountRepository.findByUserUserId(userId).stream()
+        Map<String, List<Account>> accountsByInstitution = accountRepository.findByUserUserId(userId).stream()
                 .filter(a -> Boolean.TRUE.equals(a.getExistingAccount()))
-                .map(Account::getInstitutionName)
-                .collect(Collectors.toSet());
+                .collect(Collectors.groupingBy(Account::getInstitutionName));
+
+        Set<String> existingAccountInstitutions = accountsByInstitution.keySet();
 
         LocalDateTime now = LocalDateTime.now();
         List<AssetConnection> connectionsToSave = new ArrayList<>();
@@ -118,12 +115,15 @@ public class InstitutionService {
                 if (existing != null) {
                     existing.updateMock(dbName, now);
                     connectionsToSave.add(existing);
+                    accountsByInstitution.getOrDefault(dbName, List.of()).stream()
+                            .filter(a -> a.getDisplayNumber() == null)
+                            .forEach(a -> a.updateDisplayNumber(generateDisplayNumber()));
                 } else {
                     connectionsToSave.add(new AssetConnection(user, dbName, category, "CONNECTED", now));
                     if (!existingAccountInstitutions.contains(dbName)) {
                         String accountType = dbName.endsWith("증권") ? "BROKERAGE" : "DEPOSIT";
-                        accountsToSave.add(new Account(user, accountType, dbName,
-                                generateUniqueAccountNumber(), generateRandomBalance(), true));
+                        accountsToSave.add(Account.createMockExternal(user, accountType, dbName,
+                                generateDisplayNumber(), generateRandomBalance()));
                     }
                 }
             }
@@ -139,15 +139,11 @@ public class InstitutionService {
         return BigDecimal.valueOf(amount);
     }
 
-    private String generateUniqueAccountNumber() {
+    private String generateDisplayNumber() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        String accountNumber;
-        do {
-            accountNumber = String.format("%03d-%04d-%06d",
-                    random.nextInt(100, 1000),
-                    random.nextInt(1000, 10000),
-                    random.nextInt(100000, 1000000));
-        } while (accountRepository.existsByAccountNumber(accountNumber));
-        return accountNumber;
+        return String.format("%03d-%04d-%06d",
+                random.nextInt(100, 1000),
+                random.nextInt(1000, 10000),
+                random.nextInt(100000, 1000000));
     }
 }
