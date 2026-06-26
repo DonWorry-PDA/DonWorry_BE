@@ -45,6 +45,7 @@ public class TradeHistory {
     @Column(name = "product_id")
     private Long productId;
 
+
     public static TradeHistory ofBuy(Account account, Long productId,
                                      BigDecimal quantity, BigDecimal executedPrice) {
         TradeHistory t = new TradeHistory();
