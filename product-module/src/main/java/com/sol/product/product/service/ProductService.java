@@ -58,9 +58,7 @@ public class ProductService {
     }
 
     public List<Long> getAllDepositProductIds() {
-        return depositDetailRepository.findAll().stream()
-                .map(d -> d.getProduct().getProductId())
-                .toList();
+        return depositDetailRepository.findAllProductIds();
     }
 
     public ProductDetailResponse getProductDetail(Long productId) {

@@ -7,8 +7,10 @@ import com.sol.product.product.dto.ProductDetailResponse;
 import com.sol.product.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/product/products")
 @RequiredArgsConstructor
+@Validated
 public class ProductController {
 
     private final ProductService productService;
@@ -41,7 +44,7 @@ public class ProductController {
     @Operation(summary = "예금 상품 상세 배치 조회")
     @GetMapping("/deposit-details")
     public ResponseEntity<ApiResponse<List<DepositDetailBatchItem>>> getDepositDetails(
-            @RequestParam List<Long> productIds) {
+            @RequestParam @Size(max = 200) List<Long> productIds) {
         return ResponseEntity.ok(ApiResponse.ok(productService.getDepositDetailsByProductIds(productIds)));
     }
 
