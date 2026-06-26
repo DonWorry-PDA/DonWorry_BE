@@ -54,11 +54,11 @@ public class InstitutionService {
                         Collectors.mapping(Account::getDisplayNumber, Collectors.toList())
                 ));
 
-        Map<String, Long> totalByDbName = existingAccounts.stream()
+        Map<String, BigDecimal> totalByDbName = existingAccounts.stream()
                 .filter(a -> a.getDepositBalance() != null)
                 .collect(Collectors.groupingBy(
                         Account::getInstitutionName,
-                        Collectors.summingLong(a -> a.getDepositBalance().longValue())
+                        Collectors.reducing(BigDecimal.ZERO, Account::getDepositBalance, BigDecimal::add)
                 ));
 
         return InstitutionCode.all().stream()
@@ -71,8 +71,9 @@ public class InstitutionService {
                             : null;
                     Long totalAmountKrw = connected
                             ? code.getDbNames().stream()
-                                    .mapToLong(dbName -> totalByDbName.getOrDefault(dbName, 0L))
-                                    .sum()
+                                    .map(dbName -> totalByDbName.getOrDefault(dbName, BigDecimal.ZERO))
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                    .longValue()
                             : null;
                     return InstitutionResponse.of(code, connected, accountNumbers, totalAmountKrw);
                 })
