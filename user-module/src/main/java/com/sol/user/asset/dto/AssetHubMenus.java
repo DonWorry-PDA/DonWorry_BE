@@ -19,9 +19,13 @@ public record AssetHubMenus(
         MonthlyReport monthlyReport
 ) {
 
-    /** 월급 만들기: 목표 생활비 대비 현재 현금흐름 달성률. */
+    /**
+     * 월급 만들기: 목표 생활비 대비 현재 현금흐름 달성률.
+     * {@code hasActivePlan} — 확정 plan 보유(기이용자) 여부. true면 FE가 '현재 운용 현황'으로 분기.
+     */
     @Builder
-    public record SalaryMaking(Integer achievementRate, BigDecimal targetAmount, BigDecimal currentAmount) {
+    public record SalaryMaking(Integer achievementRate, BigDecimal targetAmount, BigDecimal currentAmount,
+                               boolean hasActivePlan) {
     }
 
     /** 생활 안정도: 최근 산출된 등급과 생활비 충당률. */

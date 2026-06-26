@@ -9,6 +9,8 @@ import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.entity.SalaryPlan;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
@@ -32,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +46,7 @@ class AssetHubServiceTest {
     @Mock CashFlowDiagnosisService cashFlowDiagnosisService;
     @Mock LifeStabilityService lifeStabilityService;
     @Mock AssetAggregator assetAggregator;
+    @Mock SalaryPlanRepository salaryPlanRepository;
 
     @InjectMocks AssetHubService assetHubService;
 
@@ -224,6 +228,33 @@ class AssetHubServiceTest {
         assertThat(response.menus().investmentCheck().cashflowAssetRatio())
                 .isEqualTo(breakdown.cashflowAssetRatio())
                 .isEqualTo(34);
+    }
+
+    @Test
+    void 확정plan_있으면_월급만들기_hasActivePlan_true이고_ACTIVE로_조회한다() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        when(salaryPlanRepository.existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(true);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().salaryMaking().hasActivePlan()).isTrue();
+        verify(salaryPlanRepository).existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE);
+    }
+
+    @Test
+    void 확정plan_없으면_월급만들기_hasActivePlan_false() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        when(salaryPlanRepository.existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(false);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().salaryMaking().hasActivePlan()).isFalse();
     }
 
     @Test

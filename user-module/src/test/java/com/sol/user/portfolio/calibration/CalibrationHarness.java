@@ -88,7 +88,9 @@ class CalibrationHarness {
                                     CoverageResult coverage =
                                             coverageCalculator.calculate(toCoverageInput(allocation, grade, input));
                                     RecommendationResponse resp = mapper.toResponse(allocation, coverage,
-                                            input.monthlyNationalPension(), input.targetMonthlyLivingCost(), Map.of());
+                                            input.monthlyNationalPension(), input.targetMonthlyLivingCost(),
+                                            Map.of(), java.math.BigDecimal.ZERO,
+                                            input.totalAsset().subtract(input.pensionSaving()));
 
                                     String trackCols = nz(resp.getTrack()) + "," + nz(resp.getBand()) + ","
                                             + nz(resp.getAlpha()) + ","
