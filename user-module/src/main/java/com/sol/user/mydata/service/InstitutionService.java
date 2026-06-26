@@ -111,13 +111,20 @@ public class InstitutionService {
                 if (existing != null) {
                     existing.updateMock(dbName, now);
                     connectionsToSave.add(existing);
-                    accountsByInstitution.getOrDefault(dbName, List.of()).stream()
-                            .filter(a -> a.getDisplayNumber() == null)
-                            .forEach(a -> a.updateDisplayNumber(generateDisplayNumber()));
+                    List<Account> dbAccounts = accountsByInstitution.getOrDefault(dbName, List.of());
+                    if (dbAccounts.isEmpty()) {
+                        String accountType = "securities".equals(code.getType()) ? "BROKERAGE" : "DEPOSIT";
+                        accountsToSave.add(Account.createMockExternal(user, accountType, dbName,
+                                generateDisplayNumber(), generateRandomBalance()));
+                    } else {
+                        dbAccounts.stream()
+                                .filter(a -> a.getDisplayNumber() == null)
+                                .forEach(a -> a.updateDisplayNumber(generateDisplayNumber()));
+                    }
                 } else {
                     connectionsToSave.add(new AssetConnection(user, dbName, category, "CONNECTED", now));
                     if (!existingAccountInstitutions.contains(dbName)) {
-                        String accountType = dbName.endsWith("증권") ? "BROKERAGE" : "DEPOSIT";
+                        String accountType = "securities".equals(code.getType()) ? "BROKERAGE" : "DEPOSIT";
                         accountsToSave.add(Account.createMockExternal(user, accountType, dbName,
                                 generateDisplayNumber(), generateRandomBalance()));
                     }
