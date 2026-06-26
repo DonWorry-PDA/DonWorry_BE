@@ -38,7 +38,8 @@ public class PortfolioRecommendationMapper {
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
                                              BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost,
                                              Map<Long, BigDecimal> existingEvalByProductId,
-                                             BigDecimal brokerageBalance, BigDecimal maxBuyTotal) {
+                                             BigDecimal brokerageBalance, BigDecimal maxBuyTotal,
+                                             Map<Long, BigDecimal> priceByProductId) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -47,7 +48,7 @@ public class PortfolioRecommendationMapper {
 
         List<PlanResponse> plans = allocation.getPlans().stream()
                 .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost,
-                        existingEvalByProductId, maxBuyTotal))
+                        existingEvalByProductId, maxBuyTotal, priceByProductId))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
@@ -104,7 +105,8 @@ public class PortfolioRecommendationMapper {
                                         PlanType recommendedType,
                                         BigDecimal targetMonthlyLivingCost,
                                         Map<Long, BigDecimal> existingEvalByProductId,
-                                        BigDecimal maxBuyTotal) {
+                                        BigDecimal maxBuyTotal,
+                                        Map<Long, BigDecimal> priceByProductId) {
         PlanCoverage coverage = coverageByType.get(plan.getType());
         if (coverage == null) {
             // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
@@ -131,12 +133,13 @@ public class PortfolioRecommendationMapper {
                 .riskTarget(plan.getRiskTarget())
                 .safeTarget(plan.getSafeTarget())
                 .shortTermBucket(plan.getShortTermBucket())
-                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId, maxBuyTotal))
+                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId, maxBuyTotal, priceByProductId))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
                 .sustainableCoverageRate(coverage.getSustainableCoverageRate())
                 .inheritanceAmount(coverage.getInheritanceAmount())
+                .shortTermLumpSum(coverage.getShortTermLumpSum())
                 .totalCoverageRate(totalCoverageRate)
                 .residualMonthlyShortfall(residualShortfall)
                 .build();
@@ -184,7 +187,8 @@ public class PortfolioRecommendationMapper {
         return switch (type) {
             case STABLE -> "안정 월급형";
             case BALANCED -> "균형 월급형";
-            case LIQUIDITY -> "여유자금 성장형";
+            // "단기 목돈 확보"가 핵심이라 '성장형'은 더 많이 번다는 오해를 부른다 → 유동성 관점으로 명명.
+            case LIQUIDITY -> "유동성 확보형";
         };
     }
 
@@ -193,9 +197,13 @@ public class PortfolioRecommendationMapper {
      * 추천 목록에 없는 기존 BROKERAGE ETF는 per-product 차감이 불가하므로
      * maxBuyTotal(= 가용현금)로 전체 합계를 상한한다.
      * 스케일링 시 FLOOR로 내림해 합계가 maxBuyTotal을 초과하지 않도록 보장한다.
+     *
+     * <p>순 매수 금액이 1주 값(현재가)보다 작으면 매수 목록에서 제외한다. 이미 충분히 보유한 종목의
+     * 잔액(목표−보유)이 1주 미만이면 화면이 0주로 내림해 매수가 실패하므로(#186), 0주 주문 자체를 막는다.
+     * 가격을 못 구한 종목은 fail-open(유지)해 추천 자체가 막히지 않도록 한다.
      */
     private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId,
-                                      BigDecimal maxBuyTotal) {
+                                      BigDecimal maxBuyTotal, Map<Long, BigDecimal> priceByProductId) {
         if (maxBuyTotal.compareTo(BigDecimal.ZERO) <= 0) {
             return List.of();
         }
@@ -206,7 +214,7 @@ public class PortfolioRecommendationMapper {
             BigDecimal net = h.amount().subtract(rem).max(BigDecimal.ZERO)
                     .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
             remaining.put(h.productId(), rem.subtract(h.amount().min(rem)));
-            if (net.compareTo(BigDecimal.ZERO) > 0) {
+            if (isBuyable(net, sharePrice(priceByProductId, h.productId()))) {
                 result.add(new Holding(h.productId(), h.ticker(), h.productName(),
                         h.role(), h.currency(), h.weight(), net));
             }
@@ -218,7 +226,8 @@ public class PortfolioRecommendationMapper {
             List<Holding> scaled = new ArrayList<>();
             for (Holding h : result) {
                 BigDecimal s = h.amount().multiply(scale).setScale(RATIO_SCALE, RoundingMode.FLOOR);
-                if (s.compareTo(BigDecimal.ZERO) > 0) {
+                // 스케일 다운으로 1주 미만이 된 종목도 동일 기준으로 제외(0주 주문 방지)
+                if (isBuyable(s, sharePrice(priceByProductId, h.productId()))) {
                     scaled.add(new Holding(h.productId(), h.ticker(), h.productName(),
                             h.role(), h.currency(), h.weight(), s));
                 }
@@ -226,6 +235,19 @@ public class PortfolioRecommendationMapper {
             return scaled;
         }
         return result;
+    }
+
+    /** 현재가 조회(null 키 안전). priceByProductId가 null 키를 막는 불변맵일 수 있어 productId null이면 null 반환. */
+    private BigDecimal sharePrice(Map<Long, BigDecimal> priceByProductId, Long productId) {
+        return productId == null ? null : priceByProductId.get(productId);
+    }
+
+    /** 순 매수 금액으로 최소 1주를 살 수 있는지. 금액>0 이고 (현재가 미상이거나 금액≥1주 값)이면 매수 대상. */
+    private boolean isBuyable(BigDecimal netAmount, BigDecimal sharePrice) {
+        if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return sharePrice == null || sharePrice.signum() <= 0 || netAmount.compareTo(sharePrice) >= 0;
     }
 
     /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */

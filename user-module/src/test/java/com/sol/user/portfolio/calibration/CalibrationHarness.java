@@ -90,7 +90,7 @@ class CalibrationHarness {
                                     RecommendationResponse resp = mapper.toResponse(allocation, coverage,
                                             input.monthlyNationalPension(), input.targetMonthlyLivingCost(),
                                             Map.of(), java.math.BigDecimal.ZERO,
-                                            input.totalAsset().subtract(input.pensionSaving()));
+                                            input.totalAsset().subtract(input.pensionSaving()), Map.of());
 
                                     String trackCols = nz(resp.getTrack()) + "," + nz(resp.getBand()) + ","
                                             + nz(resp.getAlpha()) + ","
