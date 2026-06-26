@@ -159,8 +159,9 @@ class LifeStabilityServiceTest {
                 new InsurancePolicy(user, "신한라이프", "CANCER", money(70_000), true, money(1_400_000)),
                 new InsurancePolicy(user, "신한라이프", "NURSING", money(60_000), true, money(1_400_000))
         ));
-        LocalDate thisMonth = LocalDate.now();
-        LocalDate lastMonth = LocalDate.now().minusMonths(1);
+        LocalDate base = LocalDate.now();
+        LocalDate thisMonth = base;
+        LocalDate lastMonth = base.minusMonths(1);
         when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
                 dated(user, "INTEREST", "INCOME", 48_000, thisMonth),
                 dated(user, "DIVIDEND", "INCOME", 100_000, thisMonth),
@@ -182,6 +183,36 @@ class LifeStabilityServiceTest {
         // 단일월 기준 기대치와 동일해야 한다(과거월을 합산하면 59.00을 초과).
         assertThat(response.metrics().cashflowCoverageRate()).isEqualByComparingTo("59.00");
         assertThat(response.grade()).isEqualTo("NEED_COMPLEMENT");
+    }
+
+    @Test
+    void includesEventsWithoutEventDateInAggregation() {
+        // #169 리뷰 반영: eventDate가 null인 행은 월 스코핑에서 조용히 제외되지 않고 집계에 포함돼야 한다.
+        User user = mock(User.class);
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), money(350_000), LocalDateTime.now())));
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Account(user, "CMA", "신한은행", "MOCK-1", money(18_000_000), true)
+        ));
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Pension(user, "NATIONAL", money(1_150_000), false, 65)
+        ));
+        when(debtRepository.findByUserUserId(1L)).thenReturn(List.of());
+        when(insurancePolicyRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new InsurancePolicy(user, "신한라이프", "INDEMNITY", money(70_000), true, money(1_400_000))
+        ));
+        when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
+                dated(user, "INTEREST", "INCOME", 48_000, LocalDate.now()),
+                dated(user, "DIVIDEND", "INCOME", 100_000, null)   // 날짜 미상 — 집계에 포함돼야 함
+        ));
+        when(stabilityScoreRepository.save(any(StabilityScore.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LifeStabilityResponse response = service.recalculateFromUserData(1L);
+
+        // financialIncome = 48,000 + 100,000(null 포함) → securedCashflow 1,298,000 / 2,200,000 = 59.00.
+        // null 행을 제외하면 54.45로 떨어진다.
+        assertThat(response.metrics().cashflowCoverageRate()).isEqualByComparingTo("59.00");
     }
 
     private CashFlowEvent dated(User user, String eventType, String flowType, long amount, LocalDate date) {

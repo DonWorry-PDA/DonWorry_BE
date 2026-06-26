@@ -125,9 +125,11 @@ public class LifeStabilityService {
                 .map(YearMonth::from)
                 .max(Comparator.naturalOrder())
                 .orElse(YearMonth.now());
+        // eventDate가 null인 행(날짜 미상)은 월 귀속이 불가하므로, 변경 전 동작을 유지하기 위해
+        // 조용히 제외하지 않고 항상 포함한다. 날짜가 있는 행만 최신 월로 스코핑해 6개월 누적 과다집계를 막는다.
         List<CashFlowEvent> events = allEvents.stream()
-                .filter(event -> event.getEventDate() != null
-                        && YearMonth.from(event.getEventDate()).equals(latestMonth))
+                .filter(event -> event.getEventDate() == null
+                        || YearMonth.from(event.getEventDate()).equals(latestMonth))
                 .toList();
 
         BigDecimal pensionIncome = pensionRepository.findByUserUserId(userId).stream()
