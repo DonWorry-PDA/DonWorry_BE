@@ -7,6 +7,7 @@ public enum CalendarEventCategory {
     PENSION("pension", "연금"),
     PAYMENT("payment", "납입"),
     TRANSACTION("transaction", "소비"),
+    INVESTMENT("investment", "투자"),
     MATURITY("maturity", "만기"),
     INTEREST("interest", "예금이자"),
     ETC("etc", "기타");

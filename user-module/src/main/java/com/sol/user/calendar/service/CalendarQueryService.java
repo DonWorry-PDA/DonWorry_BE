@@ -67,6 +67,7 @@ public class CalendarQueryService {
                         .add(new CalendarTransactionResponse(
                                 item.id(),
                                 date,
+                                item.category().value(),
                                 item.title(),
                                 item.amountKrw()
                         ));
@@ -99,7 +100,8 @@ public class CalendarQueryService {
             }
 
             CalendarEventCategory category = calendarEventMapper.toCategory(event.getEventType());
-            boolean transactional = category == CalendarEventCategory.TRANSACTION;
+            boolean transactional = category == CalendarEventCategory.TRANSACTION
+                    || category == CalendarEventCategory.INVESTMENT;
             items.add(new CalendarItem(
                     "cashflow-" + event.getEventId() + "-" + date,
                     date,
