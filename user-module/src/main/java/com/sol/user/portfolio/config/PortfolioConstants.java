@@ -119,6 +119,22 @@ public final class PortfolioConstants {
      */
     public static final BigDecimal REPRESENTATIVE_DIVIDEND_RATE = new BigDecimal("0.035");
 
+    // ── net 세액 (실수령 반영) — 인출 단계 과세만. 매도 자본차익세·납입 세액공제·계좌배치는 별도 에픽(범위 밖) ──
+    /** 이자·배당·금융 자본차익 원천징수율(소득세 14% + 지방소득세 1.4%). 연 2000만 초과 종합과세는 단순화상 미반영. */
+    public static final BigDecimal WITHHOLDING_FINANCIAL = new BigDecimal("0.154");
+    /**
+     * 국민연금(노령연금) 실효세율 근사 = 0(면세). 연금소득공제로 과세대상 연 770만원까지 결정세액이 0이고,
+     * 평균 수령액이 대체로 그 안에 들어 실효세율이 0에 수렴한다. 종합과세 정밀화는 별도 에픽.
+     */
+    public static final BigDecimal NATIONAL_PENSION_TAX_RATE = BigDecimal.ZERO;
+    /**
+     * 사적연금(연금저축·IRP) 연금소득 원천징수율 — 연령별(지방세 포함). 납입 시 세액공제로 과세이연돼
+     * 인출액 전액(원금+수익)이 과세 대상이다(일반 금융자산이 수익분만 과세인 것과 다름).
+     */
+    public static final BigDecimal PRIVATE_PENSION_TAX_UNDER_70 = new BigDecimal("0.055"); // 55~69세
+    public static final BigDecimal PRIVATE_PENSION_TAX_70S = new BigDecimal("0.044");       // 70~79세
+    public static final BigDecimal PRIVATE_PENSION_TAX_80_PLUS = new BigDecimal("0.033");   // 80세~
+
     // ── STEP1~4(운용등급) 정책 기본값 — 유저 데이터 소스 없음, 정책으로 고정 ──────────────
     /**
      * 필수비율 — 목표생활비를 필수/재량으로 가르는 비율(STEP1 바닥자산·STEP2 buffer).
@@ -232,6 +248,13 @@ public final class PortfolioConstants {
                     "수익률 가정 역전: SAFE_RATE(" + SAFE_RATE + ") ≤ PENSION_SAVING_RATE("
                             + PENSION_SAVING_RATE + ") ≤ EXPECTED_TOTAL_RETURN(" + EXPECTED_TOTAL_RETURN + ") 이어야 함");
         }
+        // 5) 세율은 모두 [0, 1) — 음수·100% 이상이면 net 곱셈이 부호반전/0 되어 월수령이 망가짐
+        for (BigDecimal rate : List.of(WITHHOLDING_FINANCIAL, NATIONAL_PENSION_TAX_RATE,
+                PRIVATE_PENSION_TAX_UNDER_70, PRIVATE_PENSION_TAX_70S, PRIVATE_PENSION_TAX_80_PLUS)) {
+            if (rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) >= 0) {
+                throw new IllegalStateException("세율은 [0,1) 범위여야 함: " + rate);
+            }
+        }
     }
 
     private static void validateSafeComposition(String name, List<SafeSlotWeight> composition, int suitableMinGrade) {
@@ -283,6 +306,17 @@ public final class PortfolioConstants {
             throw new IllegalArgumentException("유효하지 않은 q3 값: " + q3 + " (0,1,2 만 허용)");
         }
         return ratio;
+    }
+
+    /** 나이별 사적연금(연금저축·IRP) 연금소득세율. 소진모델은 현재 나이 기준 단일 적용(구간 횡단은 단순화). */
+    public static BigDecimal privatePensionTaxRate(int age) {
+        if (age >= 80) {
+            return PRIVATE_PENSION_TAX_80_PLUS;
+        }
+        if (age >= 70) {
+            return PRIVATE_PENSION_TAX_70S;
+        }
+        return PRIVATE_PENSION_TAX_UNDER_70;
     }
 
     public static String resolveTicker(PropensityTier tier, CoreSlot slot) {

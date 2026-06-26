@@ -6,7 +6,9 @@ import com.sol.user.monthlysalary.dto.AssetItemDto;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import org.springframework.stereotype.Component;
 
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class SalaryAssetMapper {
@@ -46,6 +48,33 @@ public class SalaryAssetMapper {
 
     public String createHoldingAssetKey(Long holdingId) {
         return HOLDING_ASSET_KEY_PREFIX + holdingId;
+    }
+
+    /** 제외목록(assetKey)에서 계좌 ID만 추출. 월급 집계 필터({@code AssetAggregator})가 키 포맷을 모르게 ID로 넘기기 위함. */
+    public Set<Long> extractAccountIds(Set<String> assetKeys) {
+        return extractIds(assetKeys, ACCOUNT_ASSET_KEY_PREFIX);
+    }
+
+    /** 제외목록(assetKey)에서 보유종목 ID만 추출. */
+    public Set<Long> extractHoldingIds(Set<String> assetKeys) {
+        return extractIds(assetKeys, HOLDING_ASSET_KEY_PREFIX);
+    }
+
+    private Set<Long> extractIds(Set<String> assetKeys, String prefix) {
+        if (assetKeys == null || assetKeys.isEmpty()) {
+            return Set.of();
+        }
+        return assetKeys.stream()
+                .filter(key -> key != null && key.startsWith(prefix))
+                .map(key -> {
+                    try {
+                        return Long.parseLong(key.substring(prefix.length()));
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     public String resolveAccountTypeLabel(String accountType) {

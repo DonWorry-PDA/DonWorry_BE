@@ -210,6 +210,62 @@ class AlphaCoverageCalculatorTest {
         assertThat(pc.getInheritanceAmount()).isEqualByComparingTo(expected);
     }
 
+    // ── net 세액(실수령) 반영 ─────────────────────────────────────────────────
+
+    @Test
+    void 바닥자산_이자수입은_금융소득세_15_4퍼센트_차감후_실수령으로_계산된다() {
+        // 바닥자산만 남기고(보존·이자만) 나머지 0 → 월수령 = 바닥 이자의 net 단일 흐름.
+        PlanAllocation onlyFloor = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.ZERO)
+                .surplusSafeAmount(BigDecimal.ZERO)
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("3.0000"))
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .monthlyNationalPension(BigDecimal.ZERO)
+                .pensionSaving(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.valueOf(120_000_000))
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL).plans(List.of(onlyFloor)).build())
+                .build();
+
+        PlanCoverage pc = calculator.calculate(input).getPlanCoverages().get(0);
+
+        // 월 이자 = 1.2억 × 3.5%(SAFE_RATE) / 12 = 350,000(gross) → × (1−0.154) = 296,100(net)
+        assertThat(pc.getMonthlyIncome()).isEqualByComparingTo("296100");
+    }
+
+    @Test
+    void 사적연금_월수령은_연령별_연금소득세가_적용돼_고령일수록_실수령이_크다() {
+        // 연금저축만 남기고 나머지 0 → 월수령 = 연금 흐름의 net 단일. 65세(5.5%) vs 80세(3.3%) 세율만 차이.
+        BigDecimal income65 = pensionOnlyMonthlyIncome(65);
+        BigDecimal income80 = pensionOnlyMonthlyIncome(80);
+
+        assertThat(income80).isGreaterThan(income65);
+    }
+
+    private BigDecimal pensionOnlyMonthlyIncome(int age) {
+        PlanAllocation onlyPension = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.ZERO)
+                .surplusSafeAmount(BigDecimal.ZERO)
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("3.0000"))
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .age(age)
+                .monthlyNationalPension(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.ZERO)
+                .pensionSaving(BigDecimal.valueOf(100_000_000))
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL).plans(List.of(onlyPension)).build())
+                .build();
+        return calculator.calculate(input).getPlanCoverages().get(0).getMonthlyIncome();
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private CoverageInput.CoverageInputBuilder baseBuilder() {

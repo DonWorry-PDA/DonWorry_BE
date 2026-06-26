@@ -7,6 +7,8 @@ import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
+import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
+import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
 import com.sol.user.portfolio.dto.OperationGradeInput;
@@ -45,6 +47,8 @@ public class OperationGradeInputAssembler {
 
     private final UserRepository userRepository;
     private final AssetAggregator assetAggregator;
+    private final SalaryAssetExclusionRepository salaryAssetExclusionRepository;
+    private final SalaryAssetMapper salaryAssetMapper;
     private final PensionRepository pensionRepository;
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
@@ -67,7 +71,11 @@ public class OperationGradeInputAssembler {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
 
-        AssetBreakdown assets = assetAggregator.aggregate(userId);
+        // 월급 만들기에서 사용자가 제외한 계좌·보유종목은 집계에서 뺀다(선택UI #115의 死선 해소).
+        Set<String> excludedKeys = salaryAssetExclusionRepository.findAssetKeysByUserId(userId);
+        AssetBreakdown assets = assetAggregator.aggregate(userId,
+                salaryAssetMapper.extractAccountIds(excludedKeys),
+                salaryAssetMapper.extractHoldingIds(excludedKeys));
         BigDecimal totalAsset = assets.operatingTotal();
         // 55세 제약분 = 연금 예수금 + 연금 보유종목. 계산기(OperationGradeCalculator)가
         // availableAsset = totalAsset − pensionSaving 으로 재계산하므로 연금 종목까지 포함해 넘긴다.
