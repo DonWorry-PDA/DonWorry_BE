@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -43,4 +44,19 @@ public class TradeHistory {
 
     @Column(name = "product_id")
     private Long productId;
+
+
+    public static TradeHistory ofBuy(Account account, Long productId,
+                                     BigDecimal quantity, BigDecimal executedPrice) {
+        TradeHistory t = new TradeHistory();
+        t.account = account;
+        t.productId = productId;
+        t.tradeType = "BUY";
+        t.tradedAt = LocalDateTime.now();
+        t.quantity = quantity;
+        t.avgPrice = executedPrice;
+        t.tradeAmount = quantity.multiply(executedPrice).setScale(0, RoundingMode.HALF_UP);
+        t.fee = BigDecimal.ZERO;
+        return t;
+    }
 }

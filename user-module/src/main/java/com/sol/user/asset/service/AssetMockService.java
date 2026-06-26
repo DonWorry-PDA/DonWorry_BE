@@ -15,6 +15,7 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.insurance.entity.InsurancePolicy;
@@ -72,6 +73,17 @@ public class AssetMockService {
     );
     private static final MockType DEFAULT_SCENARIO = MockType.NEED_COMPLEMENT;
 
+    // Days 1-28 excluding fixed-event days (5=pension, 10=maintenance, 15=insurance, 20=interest, 27=loan, 28=dividend)
+    private static final int[] TEMPLATE_DAYS = {
+            1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14,
+            16, 17, 18, 19, 21, 22, 23, 24, 25, 26
+    };
+
+    // Stock trade days — weekday-representative days spread evenly, avoiding fixed-event days
+    private static final int[] STOCK_TRADE_DAYS = {
+            2, 3, 4, 7, 8, 9, 11, 13, 16, 18, 21, 23, 25, 26
+    };
+
     /**
      * 사용자용 마이데이터 연결/재동기화. userId에 배정된 시나리오를 업서트한다.
      * 시나리오가 userId마다 고정이므로 재호출해도 같은 상태로 수렴하며 이전 데이터가 남지 않는다.
@@ -101,7 +113,10 @@ public class AssetMockService {
                 .filter(account -> account.getAccountNumber() != null
                         && account.getAccountNumber().startsWith("MOCK-"))
                 .toList();
-        holdingRepository.deleteAll(holdingRepository.findByAccountIn(mockAccounts));
+        List<Long> mockAccountIds = mockAccounts.stream().map(Account::getAccountId).toList();
+        if (!mockAccountIds.isEmpty()) {
+            holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
+        }
         accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
@@ -127,7 +142,7 @@ public class AssetMockService {
         user.assignInvestmentPropensity(scenario.propensity());
 
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
-        List<Holding> holdings = saveHoldings(accounts, scenario.holdings());
+        List<Holding> holdings = saveHoldings(accounts, scenario.holdings(), scenario.stocks());
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
@@ -177,36 +192,68 @@ public class AssetMockService {
                 accountRepository::deleteAll, accountRepository::saveAll);
     }
 
-    private List<Holding> saveHoldings(List<Account> accounts, List<HoldingSeed> seeds) {
+    private List<Holding> saveHoldings(List<Account> accounts,
+                                       List<HoldingSeed> etfSeeds,
+                                       List<HoldingSeed> stockSeeds) {
         Account brokerage = accounts.stream()
                 .filter(a -> "BROKERAGE".equals(a.getAccountType()))
                 .findFirst().orElse(null);
-        if (brokerage == null || seeds.isEmpty()) {
+        if (brokerage == null || (etfSeeds.isEmpty() && stockSeeds.isEmpty())) {
             return List.of();
         }
-        Map<String, Long> tickerToProductId;
+
+        // ETF: 화이트리스트 풀에서 매핑(무결성 유지 — 풀에 없는 티커면 throw)
+        Map<String, Long> etfTickerToProductId;
         try {
-            tickerToProductId = etfPoolProvider.getPool().stream()
+            etfTickerToProductId = etfPoolProvider.getPool().stream()
                     .filter(info -> info.productId() != null)
                     .collect(Collectors.toMap(EtfInfo::ticker, EtfInfo::productId, (a, b) -> a));
         } catch (Exception e) {
             return List.of();
         }
-
-        boolean allMapped = seeds.stream().allMatch(s -> tickerToProductId.containsKey(s.ticker()));
-        if (!allMapped) {
+        boolean allEtfMapped = etfSeeds.stream().allMatch(s -> etfTickerToProductId.containsKey(s.ticker()));
+        if (!allEtfMapped) {
             throw new IllegalStateException("ETF 풀에 없는 티커가 HoldingSeed에 포함되어 있습니다.");
         }
 
-        List<Holding> desired = seeds.stream()
-                .map(seed -> new Holding(
-                        brokerage,
-                        tickerToProductId.get(seed.ticker()),
-                        seed.evaluationAmount(),
-                        seed.quantity()
-                ))
-                .toList();
-        holdingRepository.deleteAll(holdingRepository.findByAccountIn(List.of(brokerage)));
+        // STOCK: financial_product(product_type='STOCK')에서 ticker_code로 매핑.
+        // stock_detail 카탈로그가 없는 환경(예: 단위 H2 컨텍스트)에서는 조회가 실패하므로
+        // 개별주 시드를 건너뛴다(주식은 월급 집계에서 제외되어 추천 파이프라인엔 영향 없음).
+        Map<String, Long> stockTickerToProductId = Map.of();
+        if (!stockSeeds.isEmpty()) {
+            try {
+                stockTickerToProductId = holdingRepository.findStockProductIds(
+                        stockSeeds.stream().map(HoldingSeed::ticker).toList()).stream()
+                        .collect(Collectors.toMap(
+                                StockTickerProductId::getTicker,
+                                StockTickerProductId::getProductId,
+                                (a, b) -> a));
+            } catch (Exception e) {
+                stockTickerToProductId = Map.of();
+            }
+            // 카탈로그가 존재(조회 성공·비어있지 않음)하는데 특정 티커만 없으면 시드 오타로 보고 fail-fast.
+            if (!stockTickerToProductId.isEmpty()) {
+                Map<String, Long> resolved = stockTickerToProductId;
+                boolean allStockMapped = stockSeeds.stream().allMatch(s -> resolved.containsKey(s.ticker()));
+                if (!allStockMapped) {
+                    throw new IllegalStateException("stock_detail에 없는 티커가 주식 HoldingSeed에 포함되어 있습니다.");
+                }
+            }
+        }
+
+        List<Holding> desired = new ArrayList<>();
+        for (HoldingSeed seed : etfSeeds) {
+            desired.add(new Holding(brokerage, etfTickerToProductId.get(seed.ticker()),
+                    seed.evaluationAmount(), seed.quantity()));
+        }
+        for (HoldingSeed seed : stockSeeds) {
+            Long stockProductId = stockTickerToProductId.get(seed.ticker());
+            if (stockProductId != null) {
+                desired.add(new Holding(brokerage, stockProductId,
+                        seed.evaluationAmount(), seed.quantity()));
+            }
+        }
+        holdingRepository.deleteAllByAccountIdIn(List.of(brokerage.getAccountId()));
         return holdingRepository.saveAll(desired);
     }
 
@@ -278,29 +325,94 @@ public class AssetMockService {
                 assetConnectionRepository::deleteAll, assetConnectionRepository::saveAll);
     }
 
-    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
-        LocalDate month = LocalDate.now().withDayOfMonth(1);
+    private List<CashFlowEvent> buildMonthEvents(User user, LocalDate monthStart,
+                                                  Scenario scenario, boolean recurring) {
+        String status = recurring ? "SCHEDULED" : "COMPLETED";
+
         BigDecimal interestIncome = scenario.monthlyFinancialIncome()
                 .multiply(BigDecimal.valueOf(30))
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
         BigDecimal dividendIncome = scenario.monthlyFinancialIncome().subtract(interestIncome);
 
-        List<CashFlowEvent> desired = List.of(
-                event(user, month.withDayOfMonth(5), "PENSION", "국민연금 입금", scenario.monthlyPensionIncome(), "INCOME"),
-                event(user, month.withDayOfMonth(10), "MAINTENANCE", "관리비", scenario.monthlyMaintenanceExpense(), "EXPENSE"),
-                event(user, month.withDayOfMonth(15), "INSURANCE", "보험료", scenario.monthlyInsurancePremium(), "EXPENSE"),
-                event(user, month.withDayOfMonth(20), "INTEREST", "예금 이자", interestIncome, "INCOME"),
-                event(user, month.withDayOfMonth(25), "CARD", "카드대금", scenario.monthlyCardExpense(), "EXPENSE"),
-                event(user, month.withDayOfMonth(27), "LOAN", "대출 상환", scenario.monthlyLoanRepayment(), "EXPENSE"),
-                event(user, month.withDayOfMonth(28), "DIVIDEND", "ETF 배당금", dividendIncome, "INCOME")
-        );
+        List<CashFlowEvent> events = new ArrayList<>();
+
+        if (scenario.monthlyPensionIncome().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
+                    scenario.monthlyPensionIncome(), "INCOME", status, recurring));
+        }
+        if (interestIncome.signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(20), "INTEREST", "예금 이자",
+                    interestIncome, "INCOME", status, recurring));
+        }
+        if (dividendIncome.signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(28), "DIVIDEND", "ETF 배당금",
+                    dividendIncome, "INCOME", status, recurring));
+        }
+
+        if (scenario.monthlyMaintenanceExpense().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(10), "MAINTENANCE", "아파트 관리비",
+                    scenario.monthlyMaintenanceExpense(), "EXPENSE", status, recurring));
+        }
+        if (scenario.monthlyInsurancePremium().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(15), "INSURANCE", "신한라이프 보험료",
+                    scenario.monthlyInsurancePremium(), "EXPENSE", status, recurring));
+        }
+        if (scenario.monthlyLoanRepayment().signum() > 0) {
+            events.add(event(user, monthStart.withDayOfMonth(27), "LOAN", "신한은행 대출상환",
+                    scenario.monthlyLoanRepayment(), "EXPENSE", status, recurring));
+        }
+
+        // 소비 거래는 일회성 내역이므로 항상 비반복(COMPLETED)으로 시드한다.
+        // 현재월 호출(recurring=true) 때 소비까지 recurring=true가 되면, 캘린더가 recurring 이벤트를
+        // 이후 모든 달로 투영해 7·8·9월…에 같은 소비가 반복 표시된다(#177). 정기 수입/고정비만
+        // recurring을 유지하고, 소비는 제 달에만 보이도록 한다.
+        List<MockTransactionTemplates.TransactionTemplate> templates = scenario.transactions();
+        for (int i = 0; i < templates.size(); i++) {
+            MockTransactionTemplates.TransactionTemplate t = templates.get(i);
+            int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
+                    amount, "EXPENSE", "COMPLETED", false));
+        }
+
+        return events;
+    }
+
+    private List<CashFlowEvent> buildMonthStockEvents(User user, LocalDate monthStart, Scenario scenario) {
+        List<MockTransactionTemplates.TransactionTemplate> trades = scenario.stockTrades();
+        List<CashFlowEvent> events = new ArrayList<>();
+        for (int i = 0; i < trades.size(); i++) {
+            MockTransactionTemplates.TransactionTemplate t = trades.get(i);
+            int day = STOCK_TRADE_DAYS[i % STOCK_TRADE_DAYS.length];
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            String flowType = "STOCK_BUY".equals(t.eventType()) ? "EXPENSE" : "INCOME";
+            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
+                    amount, flowType, "COMPLETED", false));
+        }
+        return events;
+    }
+
+    private BigDecimal applyVariation(BigDecimal baseAmount, int monthNum, int templateIndex) {
+        BigDecimal factor = BigDecimal.valueOf(85 + ((monthNum * 7 + templateIndex * 3) % 31), 2);
+        return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+    }
+
+    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
         List<CashFlowEvent> existing = cashFlowEventRepository.findByUserUserId(user.getUserId()).stream()
-                .filter(cashFlowEvent -> "MYDATA_MOCK".equals(cashFlowEvent.getSource()))
+                .filter(e -> "MYDATA_MOCK".equals(e.getSource()))
                 .toList();
-        return upsertByKey(existing, desired, CashFlowEvent::getEventType,
-                (target, seed) -> target.updateMock(seed.getEventDate(), seed.getTitle(),
-                        seed.getAmount(), seed.getFlowType()),
-                cashFlowEventRepository::deleteAll, cashFlowEventRepository::saveAll);
+        cashFlowEventRepository.deleteAll(existing);
+
+        LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
+        List<CashFlowEvent> events = new ArrayList<>();
+        events.addAll(buildMonthEvents(user, currentMonth, scenario, true));
+        events.addAll(buildMonthStockEvents(user, currentMonth, scenario));
+        for (int i = 1; i <= 5; i++) {
+            LocalDate pastMonth = currentMonth.minusMonths(i);
+            events.addAll(buildMonthEvents(user, pastMonth, scenario, false));
+            events.addAll(buildMonthStockEvents(user, pastMonth, scenario));
+        }
+        return cashFlowEventRepository.saveAll(events);
     }
 
     /**
@@ -338,18 +450,8 @@ public class AssetMockService {
     }
 
     private CashFlowEvent event(User user, LocalDate date, String type, String title,
-                                BigDecimal amount, String flowType) {
-        return new CashFlowEvent(
-                user,
-                date,
-                type,
-                title,
-                amount,
-                flowType,
-                "SCHEDULED",
-                true,
-                "MYDATA_MOCK"
-        );
+                                BigDecimal amount, String flowType, String status, boolean recurring) {
+        return new CashFlowEvent(user, date, type, title, amount, flowType, status, recurring, "MYDATA_MOCK");
     }
 
     /**
@@ -404,9 +506,16 @@ public class AssetMockService {
                             holding("433330", 40_000_000, 2_000),  // SOL 미국S&P500
                             holding("476030", 40_000_000, 2_500)   // SOL 미국나스닥100
                     ),
+                    // 개별주(ACTIVE 공격투자자 — 多). 월급재료엔 안 잡히고 순자산/성장블록에만 잡힘.
+                    List.of(
+                            stock("005930", 12_000_000, 180),  // 삼성전자
+                            stock("000660", 8_000_000, 40),    // SK하이닉스
+                            stock("005380", 6_000_000, 25)     // 현대차
+                    ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
-                    money(250_000), money(180_000), money(1_250_000)
+                    money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS
             );
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
@@ -422,9 +531,15 @@ public class AssetMockService {
                             holding("433330", 30_000_000, 1_500),  // SOL 미국S&P500
                             holding("292500", 25_000_000, 2_500)   // SOL KRX300
                     ),
+                    // 개별주(NEUTRAL — 2종)
+                    List.of(
+                            stock("005930", 8_000_000, 120),   // 삼성전자
+                            stock("373220", 5_000_000, 12)     // LG에너지솔루션
+                    ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
-                    money(200_000), money(180_000), money(1_400_000)
+                    money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    MockTransactionTemplates.NEED_COMPLEMENT_STOCKS
             );
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
@@ -441,11 +556,16 @@ public class AssetMockService {
                             holding("438560", 45_000_000, 400),    // SOL 국고채3년
                             holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
                     ),
+                    // 개별주(STABLE 안정형 — 少, 1종)
+                    List.of(
+                            stock("005930", 5_000_000, 75)     // 삼성전자
+                    ),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
                     // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
                     money(9_000_000), money(2_000_000), money(464_000),
-                    money(180_000), money(180_000), money(1_750_000)
+                    money(180_000), money(180_000), MockTransactionTemplates.STABLE,
+                    MockTransactionTemplates.STABLE_STOCKS
             );
         };
     }
@@ -459,6 +579,12 @@ public class AssetMockService {
             throw new IllegalArgumentException("Holding 수량은 0보다 커야 합니다.");
         }
         return new HoldingSeed(ticker, money(amount), BigDecimal.valueOf(quantity));
+    }
+
+    // 개별주 시드. 구조는 holding과 동일하지만, 화이트리스트 ETF가 아닌
+    // financial_product(product_type='STOCK')로 매핑된다(saveHoldings 참조).
+    private static HoldingSeed stock(String ticker, long amount, long quantity) {
+        return holding(ticker, amount, quantity);
     }
 
     private static BigDecimal money(long amount) {
@@ -475,6 +601,7 @@ public class AssetMockService {
             InvestmentPropensity propensity,
             List<AssetSeed> assets,
             List<HoldingSeed> holdings,
+            List<HoldingSeed> stocks,
             BigDecimal debtBalance,
             BigDecimal monthlyLoanRepayment,
             BigDecimal loanInterestRate,
@@ -483,7 +610,8 @@ public class AssetMockService {
             BigDecimal monthlyFinancialIncome,
             BigDecimal monthlyInsurancePremium,
             BigDecimal monthlyMaintenanceExpense,
-            BigDecimal monthlyCardExpense
+            List<MockTransactionTemplates.TransactionTemplate> transactions,
+            List<MockTransactionTemplates.TransactionTemplate> stockTrades
     ) {
     }
 }

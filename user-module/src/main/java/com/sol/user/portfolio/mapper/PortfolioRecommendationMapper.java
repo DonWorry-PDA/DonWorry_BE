@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -35,7 +36,9 @@ public class PortfolioRecommendationMapper {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
-                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost) {
+                                             BigDecimal currentMonthlyCashFlow, BigDecimal targetMonthlyLivingCost,
+                                             Map<Long, BigDecimal> existingEvalByProductId,
+                                             BigDecimal brokerageBalance, BigDecimal maxBuyTotal) {
         Map<PlanType, PlanCoverage> coverageByType = coverage.getPlanCoverages().stream()
                 .collect(Collectors.toMap(PlanCoverage::getType, Function.identity()));
 
@@ -43,7 +46,8 @@ public class PortfolioRecommendationMapper {
         PlanType recommendedType = resolveRecommendedType(coverage.getTrack(), allocation.getPlans(), coverageByType);
 
         List<PlanResponse> plans = allocation.getPlans().stream()
-                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost))
+                .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost,
+                        existingEvalByProductId, maxBuyTotal))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
@@ -63,6 +67,7 @@ public class PortfolioRecommendationMapper {
                 .currentMonthlyShortfall(currentShortfall)
                 .q3ReferenceLabel(q3Label)
                 .q3Scenarios(coverage.getQ3Scenarios())
+                .brokerageBalance(brokerageBalance)
                 .build();
     }
 
@@ -97,7 +102,9 @@ public class PortfolioRecommendationMapper {
     private PlanResponse toPlanResponse(PlanAllocation plan,
                                         Map<PlanType, PlanCoverage> coverageByType,
                                         PlanType recommendedType,
-                                        BigDecimal targetMonthlyLivingCost) {
+                                        BigDecimal targetMonthlyLivingCost,
+                                        Map<Long, BigDecimal> existingEvalByProductId,
+                                        BigDecimal maxBuyTotal) {
         PlanCoverage coverage = coverageByType.get(plan.getType());
         if (coverage == null) {
             // 배분안과 커버리지는 1:1 매핑 — 누락은 내부 불변식 위반
@@ -124,7 +131,7 @@ public class PortfolioRecommendationMapper {
                 .riskTarget(plan.getRiskTarget())
                 .safeTarget(plan.getSafeTarget())
                 .shortTermBucket(plan.getShortTermBucket())
-                .holdings(plan.getHoldings())
+                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId, maxBuyTotal))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
@@ -136,9 +143,7 @@ public class PortfolioRecommendationMapper {
     }
 
     /**
-     * 화면 배분 항목. holdings는 이제 위험·안전·단기버킷 개별 종목을 모두 포함하므로(STEP5 분해),
-     * 각 holding의 버킷 role을 그대로 표시 role로 매핑한다(집계 항목 없음 → 이중계상 불가).
-     * 비중 분모 = riskTarget+safeTarget+shortTermBucket (= 운용자산, 연금저축 제외).
+     * 화면 배분 항목. 비중 분모 = riskTarget+safeTarget+shortTermBucket (= 운용자산, 연금저축 제외).
      */
     private List<AllocationView> buildAllocations(PlanAllocation plan) {
         BigDecimal total = plan.getRiskTarget()
@@ -181,6 +186,46 @@ public class PortfolioRecommendationMapper {
             case BALANCED -> "균형 월급형";
             case LIQUIDITY -> "여유자금 성장형";
         };
+    }
+
+    /**
+     * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
+     * 추천 목록에 없는 기존 BROKERAGE ETF는 per-product 차감이 불가하므로
+     * maxBuyTotal(= 가용현금)로 전체 합계를 상한한다.
+     * 스케일링 시 FLOOR로 내림해 합계가 maxBuyTotal을 초과하지 않도록 보장한다.
+     */
+    private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId,
+                                      BigDecimal maxBuyTotal) {
+        if (maxBuyTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return List.of();
+        }
+        Map<Long, BigDecimal> remaining = new HashMap<>(existingByProductId);
+        List<Holding> result = new ArrayList<>();
+        for (Holding h : holdings) {
+            BigDecimal rem = remaining.getOrDefault(h.productId(), BigDecimal.ZERO);
+            BigDecimal net = h.amount().subtract(rem).max(BigDecimal.ZERO)
+                    .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+            remaining.put(h.productId(), rem.subtract(h.amount().min(rem)));
+            if (net.compareTo(BigDecimal.ZERO) > 0) {
+                result.add(new Holding(h.productId(), h.ticker(), h.productName(),
+                        h.role(), h.currency(), h.weight(), net));
+            }
+        }
+        BigDecimal netTotal = result.stream().map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (netTotal.compareTo(maxBuyTotal) > 0) {
+            // FLOOR로 내림해 독립 반올림 누적이 maxBuyTotal을 초과하지 않도록 보장
+            BigDecimal scale = maxBuyTotal.divide(netTotal, 10, RoundingMode.HALF_UP);
+            List<Holding> scaled = new ArrayList<>();
+            for (Holding h : result) {
+                BigDecimal s = h.amount().multiply(scale).setScale(RATIO_SCALE, RoundingMode.FLOOR);
+                if (s.compareTo(BigDecimal.ZERO) > 0) {
+                    scaled.add(new Holding(h.productId(), h.ticker(), h.productName(),
+                            h.role(), h.currency(), h.weight(), s));
+                }
+            }
+            return scaled;
+        }
+        return result;
     }
 
     /** 월수령 / 목표생활비 × 100 (%). 어느 한쪽이 null이거나 목표생활비가 0이면 0 반환. */

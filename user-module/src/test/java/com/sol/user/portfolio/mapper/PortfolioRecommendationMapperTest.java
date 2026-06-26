@@ -19,12 +19,17 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PortfolioRecommendationMapperTest {
 
     private final PortfolioRecommendationMapper mapper = new PortfolioRecommendationMapper();
+
+    // 화면 비교용 before 현금흐름 — 이 테스트는 안 추천/배분 매핑만 검증하므로 고정값 사용
+    private static final BigDecimal CURRENT_CASH_FLOW = won(2_000_000);
+    private static final BigDecimal TARGET_LIVING_COST = won(3_000_000);
 
     @Test
     void 최고충족률_안이_추천되고_동점이면_리스트순서와_무관하게_STABLE이_우선된다() {
@@ -35,7 +40,7 @@ class PortfolioRecommendationMapperTest {
                 planCoverage(PlanType.BALANCED, new BigDecimal("90.00")),
                 planCoverage(PlanType.STABLE, new BigDecimal("90.00"))));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of());
 
         assertThat(statusOf(response, PlanType.STABLE)).isEqualTo(PlanStatus.RECOMMENDED);
         assertThat(statusOf(response, PlanType.BALANCED)).isEqualTo(PlanStatus.AVAILABLE);
@@ -51,7 +56,7 @@ class PortfolioRecommendationMapperTest {
                 planCoverage(PlanType.STABLE, null),
                 planCoverage(PlanType.LIQUIDITY, null)));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of());
 
         assertThat(response.getPlans()).extracting(PlanResponse::getStatus)
                 .containsOnly(PlanStatus.AVAILABLE);
@@ -62,7 +67,7 @@ class PortfolioRecommendationMapperTest {
         AllocationResult allocation = allocation(RecommendationTrack.STRUCTURAL_SHORTAGE, List.of());
         CoverageResult coverage = coverage(RecommendationTrack.STRUCTURAL_SHORTAGE, null, List.of());
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of());
 
         assertThat(response.getPlans()).isEmpty();
         assertThat(response.getQ3ReferenceLabel()).isNull();
@@ -90,7 +95,7 @@ class PortfolioRecommendationMapperTest {
         CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
                 planCoverage(PlanType.LIQUIDITY, new BigDecimal("80.00"))));
 
-        List<AllocationView> views = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO)
+        List<AllocationView> views = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of())
                 .getPlans().get(0).getAllocations();
 
         assertThat(views).extracting(AllocationView::role)
@@ -111,7 +116,7 @@ class PortfolioRecommendationMapperTest {
         CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
                 planCoverage(PlanType.STABLE, new BigDecimal("80.00"))));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of());
 
         assertThat(response.getPlans().get(0).getDisplayName()).isEqualTo("안정 월급형");
     }

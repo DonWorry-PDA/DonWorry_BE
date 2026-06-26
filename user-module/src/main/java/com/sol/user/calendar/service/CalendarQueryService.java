@@ -52,6 +52,7 @@ public class CalendarQueryService {
 
         Map<String, List<CalendarEventResponse>> events = new LinkedHashMap<>();
         Map<String, List<CalendarScheduleResponse>> schedules = new LinkedHashMap<>();
+        Map<String, List<CalendarTransactionResponse>> transactions = new LinkedHashMap<>();
         for (CalendarItem item : items) {
             String date = item.date().toString();
             events.computeIfAbsent(date, ignored -> new ArrayList<>())
@@ -61,17 +62,27 @@ public class CalendarQueryService {
                             item.amountKrw(),
                             item.estimated()
                     ));
-            schedules.computeIfAbsent(date, ignored -> new ArrayList<>())
-                    .add(new CalendarScheduleResponse(
-                            item.id(),
-                            item.category(),
-                            item.title(),
-                            item.amountKrw(),
-                            item.estimated()
-                    ));
+            if (item.transactional()) {
+                transactions.computeIfAbsent(date, ignored -> new ArrayList<>())
+                        .add(new CalendarTransactionResponse(
+                                item.id(),
+                                date,
+                                item.category().value(),
+                                item.title(),
+                                item.amountKrw()
+                        ));
+            } else {
+                schedules.computeIfAbsent(date, ignored -> new ArrayList<>())
+                        .add(new CalendarScheduleResponse(
+                                item.id(),
+                                item.category(),
+                                item.title(),
+                                item.amountKrw(),
+                                item.estimated()
+                        ));
+            }
         }
 
-        Map<String, List<CalendarTransactionResponse>> transactions = Map.of();
         return new CalendarMonthResponse(events, schedules, transactions);
     }
 
@@ -89,13 +100,16 @@ public class CalendarQueryService {
             }
 
             CalendarEventCategory category = calendarEventMapper.toCategory(event.getEventType());
+            boolean transactional = category == CalendarEventCategory.TRANSACTION
+                    || category == CalendarEventCategory.INVESTMENT;
             items.add(new CalendarItem(
                     "cashflow-" + event.getEventId() + "-" + date,
                     date,
                     category,
                     defaultTitle(event.getTitle(), category.shortLabel()),
                     calendarEventMapper.toSignedAmount(event.getAmount(), event.getFlowType()),
-                    false
+                    false,
+                    transactional
             ));
         }
     }
@@ -136,6 +150,7 @@ public class CalendarQueryService {
                     CalendarEventCategory.MATURITY,
                     title,
                     null,
+                    false,
                     false
             ));
         }
@@ -170,7 +185,8 @@ public class CalendarQueryService {
                         CalendarEventCategory.DIVIDEND,
                         productName + " 예상 분배금",
                         expectedAmount,
-                        true
+                        true,
+                        false
                 ));
                 projectedDate = projectedDate.plusMonths(interval);
             }
@@ -208,7 +224,8 @@ public class CalendarQueryService {
             CalendarEventCategory category,
             String title,
             BigDecimal amountKrw,
-            boolean estimated
+            boolean estimated,
+            boolean transactional
     ) {
     }
 }

@@ -1,6 +1,7 @@
 package com.sol.product.etf.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.product.etf.dto.EtfDocumentResponse;
 import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
@@ -61,6 +62,12 @@ public class EtfController {
         return ResponseEntity.ok(ApiResponse.ok(etfService.getMonthlyDividends(productIds)));
     }
 
+    @Operation(summary = "ETF 문서 URL 조회 (투자설명서·간이투자설명서·집합투자규약)")
+    @GetMapping("/ticker/{tickerCode}/documents")
+    public ResponseEntity<ApiResponse<EtfDocumentResponse>> getEtfDocuments(@PathVariable String tickerCode) {
+        return ResponseEntity.ok(ApiResponse.ok(etfService.getEtfDocuments(tickerCode)));
+    }
+
     @Operation(summary = "ETF 실시간 시세 전체 조회 (화이트리스트 26종)")
     @GetMapping("/realtime")
     public ResponseEntity<ApiResponse<List<EtfRealtimeResponse>>> getAllRealtime() {
@@ -71,5 +78,11 @@ public class EtfController {
     @GetMapping("/realtime/{ticker}")
     public ResponseEntity<ApiResponse<EtfRealtimeResponse>> getRealtime(@PathVariable String ticker) {
         return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getRealtime(ticker)));
+    }
+
+    @Operation(summary = "ETF 현재가 단건 조회 (Redis → 일봉 종가 fallback)")
+    @GetMapping("/{productId}/price")
+    public ResponseEntity<ApiResponse<Long>> getCurrentPrice(@PathVariable Long productId) {
+        return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getCurrentPriceByProductId(productId)));
     }
 }

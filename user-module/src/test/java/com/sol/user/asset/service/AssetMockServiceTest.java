@@ -5,8 +5,10 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.type.MockType;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
@@ -17,19 +19,23 @@ import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,7 +66,8 @@ class AssetMockServiceTest {
     @MethodSource("scenarios")
     void createsScenarioWithSpecifiedSummary(MockType mockType, long totalAsset,
                                              long totalDebt, long netAsset, int holdingCount,
-                                             InvestmentPropensity expectedPropensity) {
+                                             InvestmentPropensity expectedPropensity,
+                                             int expectedCashflowCount) {
         User user = mock(User.class);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         returnArgumentsFromSaveAll();
@@ -71,7 +78,7 @@ class AssetMockServiceTest {
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo(BigDecimal.valueOf(totalDebt));
         assertThat(response.assetSummary().netAsset()).isEqualByComparingTo(BigDecimal.valueOf(netAsset));
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
-        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(7);
+        assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(expectedCashflowCount);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
         // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력
         verify(user).assignInvestmentPropensity(expectedPropensity);
@@ -93,8 +100,13 @@ class AssetMockServiceTest {
         assertThat(holdings)
                 .extracting(Holding::getProductId, Holding::getEvaluationAmount, Holding::getQuantity)
                 .containsExactly(
+                        // ETF(화이트리스트) 먼저
                         tuple(1001L, new BigDecimal("40000000"), new BigDecimal("2000")),
-                        tuple(1002L, new BigDecimal("40000000"), new BigDecimal("2500"))
+                        tuple(1002L, new BigDecimal("40000000"), new BigDecimal("2500")),
+                        // 개별주
+                        tuple(2001L, new BigDecimal("12000000"), new BigDecimal("180")),
+                        tuple(2002L, new BigDecimal("8000000"), new BigDecimal("40")),
+                        tuple(2003L, new BigDecimal("6000000"), new BigDecimal("25"))
                 );
     }
 
@@ -113,7 +125,7 @@ class AssetMockServiceTest {
         MockAssetResponse response = assetMockService.create(1L, MockType.STABLE);
 
         assertThat(checking.getDepositBalance()).isEqualByComparingTo("35000000");
-        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("435000000");
+        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("440000000");
     }
 
     @Test
@@ -124,8 +136,8 @@ class AssetMockServiceTest {
 
         MockAssetResponse response = assetMockService.sync(3L);
 
-        // userId 3 → STABLE (총자산 4억 3,500만, 무부채)
-        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("435000000");
+        // userId 3 → STABLE (총자산 4억 4,000만 = 기존 4억 3,500만 + 개별주 500만, 무부채)
+        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("440000000");
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo("0");
     }
 
@@ -158,6 +170,40 @@ class AssetMockServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void currentMonthRegularEventsRecurringButConsumptionAndPastAreNot() {
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        YearMonth currentMonth = YearMonth.now();
+        List<CashFlowEvent> thisMonth = saved.stream()
+                .filter(e -> YearMonth.from(e.getEventDate()).equals(currentMonth))
+                .toList();
+        List<CashFlowEvent> pastMonths = saved.stream()
+                .filter(e -> YearMonth.from(e.getEventDate()).isBefore(currentMonth))
+                .toList();
+
+        // 현재월: 정기 수입·고정비는 recurring=true, 일회성 소비는 recurring=false (#177 — 캘린더 미래 투영 방지)
+        Set<String> recurringTypes = Set.of("PENSION", "INTEREST", "DIVIDEND", "MAINTENANCE", "INSURANCE", "LOAN");
+        assertThat(thisMonth).isNotEmpty();
+        assertThat(thisMonth).filteredOn(e -> recurringTypes.contains(e.getEventType()))
+                .isNotEmpty()
+                .allSatisfy(e -> assertThat(e.getRecurring()).isTrue());
+        assertThat(thisMonth).filteredOn(e -> !recurringTypes.contains(e.getEventType()))
+                .isNotEmpty()
+                .allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
+        assertThat(pastMonths).isNotEmpty();
+        assertThat(pastMonths).allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
+    }
+
+    @Test
     void recalculatesLifeStabilityAfterSync() {
         User user = mock(User.class);
         when(userRepository.findById(3L)).thenReturn(Optional.of(user));
@@ -170,7 +216,19 @@ class AssetMockServiceTest {
 
     private void returnArgumentsFromSaveAll() {
         lenient().when(etfPoolProvider.getPool()).thenReturn(etfPool());
-        lenient().when(accountRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
+        lenient().when(holdingRepository.findStockProductIds(any())).thenReturn(stockPool());
+        // 운영은 IDENTITY로 accountId가 채워진다. saveHoldings가 brokerage.getAccountId()를 쓰므로
+        // mock에서도 저장 시 ID를 부여해야 List.of(null) NPE가 나지 않는다(테스트 인프라 보정).
+        lenient().when(accountRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Account> accounts = toList(invocation.getArgument(0));
+            long nextId = 1L;
+            for (Account account : accounts) {
+                if (account.getAccountId() == null) {
+                    ReflectionTestUtils.setField(account, "accountId", nextId++);
+                }
+            }
+            return accounts;
+        });
         lenient().when(holdingRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(pensionRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(debtRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
@@ -188,13 +246,19 @@ class AssetMockServiceTest {
     }
 
     private static Stream<Arguments> scenarios() {
+        // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
+        //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
+        // cashflowEvents = 6개월치 buildMonthEvents 합산:
+        //  NEED_IMPROVEMENT: (6 고정 + 19 템플릿) × 6개월 = 150
+        //  NEED_COMPLEMENT:  (6 고정 + 20 템플릿) × 6개월 = 156
+        //  STABLE:           (5 고정 + 21 템플릿) × 6개월 = 156  (대출 없음 → 고정 5개)
         return Stream.of(
-                Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 2,
-                        InvestmentPropensity.ACTIVE),
-                Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 2,
-                        InvestmentPropensity.NEUTRAL),
-                Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 3,
-                        InvestmentPropensity.STABLE)
+                Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
+                        InvestmentPropensity.ACTIVE, 150),
+                Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
+                        InvestmentPropensity.NEUTRAL, 156),
+                Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
+                        InvestmentPropensity.STABLE, 156)
         );
     }
 
@@ -206,6 +270,29 @@ class AssetMockServiceTest {
                 etf(1004L, "446720"),
                 etf(1005L, "438560")
         );
+    }
+
+    private static List<StockTickerProductId> stockPool() {
+        return List.of(
+                stockRow("005930", 2001L),  // 삼성전자
+                stockRow("000660", 2002L),  // SK하이닉스
+                stockRow("005380", 2003L),  // 현대차
+                stockRow("373220", 2004L)   // LG에너지솔루션
+        );
+    }
+
+    private static StockTickerProductId stockRow(String ticker, Long productId) {
+        return new StockTickerProductId() {
+            @Override
+            public String getTicker() {
+                return ticker;
+            }
+
+            @Override
+            public Long getProductId() {
+                return productId;
+            }
+        };
     }
 
     private static EtfInfo etf(Long productId, String ticker) {

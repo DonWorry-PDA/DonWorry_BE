@@ -24,6 +24,7 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 캘리브레이션 입력 스윕 하니스 (계수 고정, 입력 그리드 대량 실행 → CSV 덤프).
@@ -86,7 +87,8 @@ class CalibrationHarness {
                                             allocationCalculator.calculate(toAllocationInput(grade, input, pool));
                                     CoverageResult coverage =
                                             coverageCalculator.calculate(toCoverageInput(allocation, grade, input));
-                                    RecommendationResponse resp = mapper.toResponse(allocation, coverage, BigDecimal.ZERO, BigDecimal.ZERO);
+                                    RecommendationResponse resp = mapper.toResponse(allocation, coverage,
+                                            input.monthlyNationalPension(), input.targetMonthlyLivingCost(), Map.of());
 
                                     String trackCols = nz(resp.getTrack()) + "," + nz(resp.getBand()) + ","
                                             + nz(resp.getAlpha()) + ","

@@ -1,5 +1,7 @@
 package com.sol.user.portfolio.service;
 
+import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.calculator.AlphaCoverageCalculator;
 import com.sol.user.portfolio.calculator.OperationGradeCalculator;
 import com.sol.user.portfolio.calculator.PortfolioAllocationCalculator;
@@ -9,6 +11,7 @@ import com.sol.user.portfolio.dto.PlanResponse;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.type.AllocationRole;
 import com.sol.user.portfolio.type.BucketRole;
 import com.sol.user.portfolio.type.CurrencyExposure;
@@ -20,8 +23,6 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
-import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
-import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -40,6 +41,8 @@ class PortfolioRecommendationServiceTest {
     private final OperationGradeInputAssembler inputAssembler = mock(OperationGradeInputAssembler.class);
     private final SurveyService surveyService = mock(SurveyService.class);
     private final CashFlowDiagnosisService cashFlowDiagnosisService = mock(CashFlowDiagnosisService.class);
+    // #170 머지로 추가된 의존: 미스텁 시 빈 보유 → 차감 0(기존 동작 동일)
+    private final HoldingRepository holdingRepository = mock(HoldingRepository.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
@@ -49,7 +52,8 @@ class PortfolioRecommendationServiceTest {
             new PortfolioRecommendationMapper(),
             inputAssembler,
             surveyService,
-            cashFlowDiagnosisService
+            cashFlowDiagnosisService,
+            holdingRepository
     );
 
     @Test
@@ -58,10 +62,11 @@ class PortfolioRecommendationServiceTest {
         given(inputAssembler.assemble(eq(1L), any(SurveyAnswerResponse.class))).willReturn(neutralInput());
         given(surveyService.get(1L)).willReturn(
                 SurveyAnswerResponse.builder().q1(2).q2(1).q3(1).build());
+        // 화면 비교용 before 현금흐름 — toResponse가 충당률/부족액 계산에 사용
         given(cashFlowDiagnosisService.diagnose(1L)).willReturn(
                 CashFlowDiagnosisResponse.builder()
-                        .monthlyCashFlow(BigDecimal.ZERO)
-                        .targetMonthlyLivingCost(BigDecimal.ZERO)
+                        .monthlyCashFlow(BigDecimal.valueOf(1_000_000))
+                        .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
                         .build());
 
         RecommendationResponse response = service.recommend(1L);
