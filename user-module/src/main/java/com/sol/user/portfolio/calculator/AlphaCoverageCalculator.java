@@ -34,8 +34,9 @@ public class AlphaCoverageCalculator {
     public CoverageResult calculate(CoverageInput input) {
         validate(input);
 
+        // α는 "투자로 메워야 할 월 부족분" — 국민연금은 실수령(net) 기준으로 빼야 income·충족률과 일관.
         BigDecimal alpha = input.targetLivingCost()
-                .subtract(input.monthlyNationalPension())
+                .subtract(netNationalPension(input.monthlyNationalPension()))
                 .subtract(input.otherRegularIncome());
 
         // ── 트랙 확정 — 구조적부족 우선(순서로 방어), 그 다음 α≤0(연금초과), 아니면 NORMAL ──
@@ -82,8 +83,10 @@ public class AlphaCoverageCalculator {
         BigDecimal alphaCoverageRate = null;
         BigDecimal sustainableCoverageRate = null;
         if (alpha.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal totalOp = c.totalIncome().subtract(input.monthlyNationalPension());
-            BigDecimal sustainableOp = c.sustainableIncome().subtract(input.monthlyNationalPension());
+            // totalIncome/sustainableIncome은 net 국민연금을 포함하므로, 운용분만 떼낼 때도 net으로 빼야 일관.
+            BigDecimal netNationalPension = netNationalPension(input.monthlyNationalPension());
+            BigDecimal totalOp = c.totalIncome().subtract(netNationalPension);
+            BigDecimal sustainableOp = c.sustainableIncome().subtract(netNationalPension);
             alphaCoverageRate = totalOp.multiply(HUNDRED)
                     .divide(alpha, RATE_SCALE, RoundingMode.HALF_UP)
                     .min(HUNDRED);
@@ -148,28 +151,31 @@ public class AlphaCoverageCalculator {
         BigDecimal safePreserved = surplusSafe.subtract(safeDeplete);
         BigDecimal pensionPreserved = pensionSaving.subtract(pensionDeplete); // 인출 불가 시 전액 보존
 
-        // 지속가능 월수령(원금 전액 보존 가정: 이자·배당만 — 소진/자본차익 제외)
-        BigDecimal sustainable = input.monthlyNationalPension()
-                .add(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
-                .add(monthlyYield(surplusSafe, PortfolioConstants.SAFE_RATE))
-                .add(monthlyYield(surplusRisk, dividendFrac));
+        // 지속가능 월수령(원금 전액 보존 가정: 이자·배당만 — 소진/자본차익 제외). 전부 net 실수령.
+        BigDecimal sustainable = netNationalPension(input.monthlyNationalPension())
+                .add(netFinancial(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE)))
+                .add(netFinancial(monthlyYield(surplusSafe, PortfolioConstants.SAFE_RATE)))
+                .add(netFinancial(monthlyYield(surplusRisk, dividendFrac)));
         if (canWithdrawPension) {
-            sustainable = sustainable.add(monthlyYield(pensionSaving, PortfolioConstants.PENSION_SAVING_RATE));
+            sustainable = sustainable.add(
+                    netPrivatePension(monthlyYield(pensionSaving, PortfolioConstants.PENSION_SAVING_RATE), input.age()));
         }
 
         // 총인출 월수령(소진 시나리오): 바닥·보존분은 이자/배당, 소진분은 연금지급식(PMT).
         //   위험 소진분은 총수익률(r=배당+자본차익)로 연금화 → 자본차익이 소진분 annuity에 내재된다.
         //   보존분 자본차익은 미실현(상속으로 귀속) → 기존 "전액 surplusRisk capgain" 이중계상 제거.
-        BigDecimal total = input.monthlyNationalPension()
-                .add(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
-                .add(monthlyYield(safePreserved, PortfolioConstants.SAFE_RATE))
-                .add(monthlyAnnuity(safeDeplete, PortfolioConstants.SAFE_RATE, years))
-                .add(monthlyYield(riskPreserved, dividendFrac))
-                .add(monthlyAnnuity(riskDeplete, PortfolioConstants.EXPECTED_TOTAL_RETURN, years));
+        // 전부 net 실수령. yield(이자·배당)는 전액 과세, 소진 annuity는 원금회수분 비과세·수익분만 과세,
+        // 연금저축은 과세이연이라 yield·annuity 전액 연금소득세.
+        BigDecimal total = netNationalPension(input.monthlyNationalPension())
+                .add(netFinancial(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE)))
+                .add(netFinancial(monthlyYield(safePreserved, PortfolioConstants.SAFE_RATE)))
+                .add(netAnnuityFinancial(safeDeplete, PortfolioConstants.SAFE_RATE, years))
+                .add(netFinancial(monthlyYield(riskPreserved, dividendFrac)))
+                .add(netAnnuityFinancial(riskDeplete, PortfolioConstants.EXPECTED_TOTAL_RETURN, years));
         if (canWithdrawPension) {
             total = total
-                    .add(monthlyYield(pensionPreserved, PortfolioConstants.PENSION_SAVING_RATE))
-                    .add(monthlyAnnuity(pensionDeplete, PortfolioConstants.PENSION_SAVING_RATE, years));
+                    .add(netPrivatePension(monthlyYield(pensionPreserved, PortfolioConstants.PENSION_SAVING_RATE), input.age()))
+                    .add(netPrivatePension(monthlyAnnuity(pensionDeplete, PortfolioConstants.PENSION_SAVING_RATE, years), input.age()));
         }
 
         // 상속분 = 미소진 여유위험(실질 자본상승 복리) + 미소진 여유안전 + 미소진 연금저축.
@@ -194,6 +200,35 @@ public class AlphaCoverageCalculator {
         }
         int n = years.intValueExact();
         return principal.multiply(BigDecimal.ONE.add(annualRate).pow(n));
+    }
+
+    /** 이자·배당소득 원천징수(15.4%) 차감 후 실수령. yield(이자·배당)는 전액 과세대상. */
+    private BigDecimal netFinancial(BigDecimal income) {
+        return income.multiply(BigDecimal.ONE.subtract(PortfolioConstants.WITHHOLDING_FINANCIAL));
+    }
+
+    /** 국민연금 실수령 — 연금소득공제로 면세 근사(현재 0%). */
+    private BigDecimal netNationalPension(BigDecimal income) {
+        return income.multiply(BigDecimal.ONE.subtract(PortfolioConstants.NATIONAL_PENSION_TAX_RATE));
+    }
+
+    /** 사적연금(연금저축·IRP) 실수령 — 연령별 연금소득세. 과세이연이라 인출액 전액(원금+수익) 과세. */
+    private BigDecimal netPrivatePension(BigDecimal income, int age) {
+        return income.multiply(BigDecimal.ONE.subtract(PortfolioConstants.privatePensionTaxRate(age)));
+    }
+
+    /**
+     * 소진분 annuity 실수령 — 원금회수분은 비과세(세후 원금이므로), 수익분(이자·자본차익)만 금융소득세.
+     * 통째 과세하면 원금회수에도 세금이 붙어 "원금소진+상속+바닥=총자산" 보존 불변식이 깨진다.
+     */
+    private BigDecimal netAnnuityFinancial(BigDecimal principal, BigDecimal annualRate, BigDecimal years) {
+        if (principal.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal gross = monthlyAnnuity(principal, annualRate, years);
+        BigDecimal principalBack = monthlyDepletion(principal, years);          // 비과세 원금회수분
+        BigDecimal gain = gross.subtract(principalBack).max(BigDecimal.ZERO);   // 과세 수익분
+        return principalBack.add(netFinancial(gain));
     }
 
     /** 연 수익(원금 × 연이율)을 월로. rate는 분수(0.035). */
