@@ -28,8 +28,8 @@ public enum AssetCategory {
         }
         return switch (accountType) {
             case "IRP", "PENSION_SAVING" -> PENSION;
-            // BROKERAGE 잔액은 예수금(현금)이라 예금성으로 본다. 종목 가치는 fromProductType이 따로 집계.
-            case "CMA", "DEPOSIT", "BROKERAGE" -> DEPOSIT;
+            case "CMA", "DEPOSIT" -> DEPOSIT;
+            case "BROKERAGE" -> ETF;
             default -> ETC;
         };
     }
