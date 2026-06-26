@@ -33,12 +33,14 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             @Param("to") LocalDate to
     );
 
-    /** 특정 기간(보통 당월) 내 flowType(INCOME/EXPENSE) 금액 합계. 없으면 0. */
+    /** 특정 기간(보통 당월) 내 flowType(INCOME/EXPENSE) 금액 합계. 없으면 0.
+     *  주식 매수·매도(STOCK_BUY/STOCK_SELL)는 투자 거래로 홈 수입·지출 집계에서 제외한다. */
     @Query("""
             SELECT COALESCE(SUM(e.amount), 0)
             FROM CashFlowEvent e
             WHERE e.user.userId = :userId
               AND e.flowType = :flowType
+              AND e.eventType NOT IN ('STOCK_BUY', 'STOCK_SELL')
               AND e.eventDate BETWEEN :start AND :end
             """)
     BigDecimal sumAmountByFlowTypeInPeriod(
