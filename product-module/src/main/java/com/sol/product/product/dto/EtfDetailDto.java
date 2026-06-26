@@ -28,4 +28,8 @@ public class EtfDetailDto {
     private BigDecimal changeRate;
     private BigDecimal nav;
     private BigDecimal netAssetTotal;
+
+    private String prospectusUrl;
+    private String simplifiedUrl;
+    private String fundRulesUrl;
 }
