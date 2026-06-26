@@ -23,6 +23,14 @@ import java.util.Set;
  * 총액이냐 예수금이냐"가 모듈마다 어긋났다. 마이데이터 계약은 {@code deposit_balance = 예수금(현금)만},
  * 종목값은 holding.evaluationAmount에만 존재하므로 모든 합산은 더하기다. 분류 기준은 선택 UI(#115)와
  * 동일하게 STOCK만 제외(ETF·FUND·BOND는 월급 재료에 포함).
+ *
+ * <p><b>화이트리스트 필터를 일부러 안 거는 이유(#141 정합):</b> #141 확정표는 "화이트리스트 ETF 26종만
+ * 재료, off-whitelist ETF(타사 TIGER·KODEX 등)는 운용대상 외"였다. 그러나 현재 보유 ETF는 시드가 SOL
+ * (화이트리스트) 풀로만 구성돼({@code AssetMockService.saveHoldings}가 풀 밖 티커를 throw) off-whitelist
+ * ETF가 데이터상 존재하지 않으므로 "STOCK만 제외" ≡ "화이트리스트 26종"이라 결과가 동일하다. 즉 여기
+ * 화이트리스트 ticker 대조를 추가해도 현 데이터에선 no-op다 — 실 마이데이터로 타사 ETF가 유입되는 시점에
+ * 풀 확대 정책과 함께 후속으로 다룬다(섣불리 걸면 타사 ETF 보유자의 월급 재료가 사라짐). 이 STOCK-only를
+ * "버그"로 보고 화이트리스트 필터를 도로 걸지 말 것.
  */
 @Component
 @RequiredArgsConstructor
