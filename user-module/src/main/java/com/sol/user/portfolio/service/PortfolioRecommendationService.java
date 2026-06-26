@@ -18,12 +18,15 @@ import com.sol.user.portfolio.dto.OperationGradeResult;
 import com.sol.user.portfolio.dto.RecommendationResponse;
 import com.sol.user.portfolio.mapper.PortfolioRecommendationMapper;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.portfolio.dto.Holding;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
+import com.sol.user.trade.infra.rest.EtfPriceClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,6 +48,7 @@ public class PortfolioRecommendationService {
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final HoldingRepository holdingRepository;
     private final AccountRepository accountRepository;
+    private final EtfPriceClient etfPriceClient;
 
     public RecommendationResponse recommend(Long userId) {
         // 설문 1회 조회 — q1/q2(STEP1~4 운용등급)는 assembler가, q3(STEP6 소진모델)는 여기서 재사용
@@ -89,9 +93,33 @@ public class PortfolioRecommendationService {
                 .subtract(existingBrokerageEtfTotal)
                 .max(BigDecimal.ZERO);
 
+        // 추천 종목별 현재가 — netHoldings가 1주 미만 순매수(0주 주문)를 거르는 데 사용(#186).
+        Map<Long, BigDecimal> priceByProductId = priceByProductId(allocation);
+
         return recommendationMapper.toResponse(allocation, coverage,
                 cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost(),
-                existingEvalByProductId, brokerageBalance, maxBuyTotal);
+                existingEvalByProductId, brokerageBalance, maxBuyTotal, priceByProductId);
+    }
+
+    /**
+     * 추천 안에 등장하는 distinct productId의 현재가 맵. 개별 조회 실패는 건너뛰어(fail-open)
+     * 가격을 못 구한 종목은 netHoldings에서 그대로 유지되도록 한다 — 가격 장애로 추천 전체가 막히지 않게.
+     */
+    private Map<Long, BigDecimal> priceByProductId(AllocationResult allocation) {
+        List<Long> productIds = allocation.getPlans().stream()
+                .flatMap(plan -> plan.getHoldings().stream())
+                .map(Holding::productId)
+                .distinct()
+                .toList();
+        Map<Long, BigDecimal> prices = new HashMap<>();
+        for (Long productId : productIds) {
+            try {
+                prices.put(productId, BigDecimal.valueOf(etfPriceClient.getCurrentPrice(productId)));
+            } catch (RuntimeException e) {
+                // 가격 미상 → 맵에 넣지 않음(=fail-open). netHoldings가 해당 종목을 거르지 않는다.
+            }
+        }
+        return prices;
     }
 
     private AllocationInput toAllocationInput(OperationGradeResult grade, OperationGradeInput input, List<EtfInfo> pool) {

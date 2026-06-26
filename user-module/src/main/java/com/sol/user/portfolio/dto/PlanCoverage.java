@@ -18,4 +18,5 @@ public class PlanCoverage {
     private BigDecimal alphaCoverageRate;          // α충족률 = 총인출 기준 (α≤0이면 null, 100캡)
     private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
     private BigDecimal inheritanceAmount;          // 상속분
+    private BigDecimal shortTermLumpSum;           // 단기 목돈 (유동성안이 따로 확보한 일회성 인출분, 원금 그대로)
 }

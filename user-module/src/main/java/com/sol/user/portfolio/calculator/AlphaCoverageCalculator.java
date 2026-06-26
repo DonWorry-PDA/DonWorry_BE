@@ -97,6 +97,9 @@ public class AlphaCoverageCalculator {
                 .alphaCoverageRate(alphaCoverageRate)
                 .sustainableCoverageRate(sustainableCoverageRate)
                 .inheritanceAmount(money(c.inheritance()))
+                // 단기버킷은 "곧 빼 쓸 일회성 목돈" — 월수령 흐름도 상속도 아니라 별도 항으로 그대로 통과시킨다.
+                // 인출 시점이 정해지지 않아 보유 중 이자는 과대표시 위험이 있으므로 원금만 노출(이자 무시).
+                .shortTermLumpSum(money(shortTermLumpSum(plan)))
                 .build();
     }
 
@@ -243,6 +246,11 @@ public class AlphaCoverageCalculator {
                 .map(PlanCoverage::getAlphaCoverageRate)
                 .filter(r -> r != null)
                 .reduce(BigDecimal.ZERO, BigDecimal::max);
+    }
+
+    /** 단기 목돈 = 단기버킷 원금 그대로. 미설정(null)이면 0. */
+    private BigDecimal shortTermLumpSum(PlanAllocation plan) {
+        return plan.getShortTermBucket() == null ? BigDecimal.ZERO : plan.getShortTermBucket();
     }
 
     private BigDecimal money(BigDecimal value) {

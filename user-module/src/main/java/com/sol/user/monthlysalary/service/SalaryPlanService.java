@@ -166,7 +166,7 @@ public class SalaryPlanService {
         return switch (planType) {
             case "STABLE" -> "안정 월급형";
             case "BALANCED" -> "균형 월급형";
-            case "LIQUIDITY" -> "여유자금 성장형";
+            case "LIQUIDITY" -> "유동성 확보형";
             default -> planType;
         };
     }

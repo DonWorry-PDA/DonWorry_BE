@@ -43,7 +43,7 @@ class PortfolioRecommendationMapperTest {
                 planCoverage(PlanType.BALANCED, new BigDecimal("90.00")),
                 planCoverage(PlanType.STABLE, new BigDecimal("90.00"))));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of());
 
         assertThat(statusOf(response, PlanType.STABLE)).isEqualTo(PlanStatus.RECOMMENDED);
         assertThat(statusOf(response, PlanType.BALANCED)).isEqualTo(PlanStatus.AVAILABLE);
@@ -59,7 +59,7 @@ class PortfolioRecommendationMapperTest {
                 planCoverage(PlanType.STABLE, null),
                 planCoverage(PlanType.LIQUIDITY, null)));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of());
 
         assertThat(response.getPlans()).extracting(PlanResponse::getStatus)
                 .containsOnly(PlanStatus.AVAILABLE);
@@ -70,7 +70,7 @@ class PortfolioRecommendationMapperTest {
         AllocationResult allocation = allocation(RecommendationTrack.STRUCTURAL_SHORTAGE, List.of());
         CoverageResult coverage = coverage(RecommendationTrack.STRUCTURAL_SHORTAGE, null, List.of());
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of());
 
         assertThat(response.getPlans()).isEmpty();
         assertThat(response.getQ3ReferenceLabel()).isNull();
@@ -99,7 +99,7 @@ class PortfolioRecommendationMapperTest {
                 planCoverage(PlanType.LIQUIDITY, new BigDecimal("80.00"))));
 
         List<AllocationView> views = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST,
-                        Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY)
+                        Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of())
                 .getPlans().get(0).getAllocations();
 
         assertThat(views).extracting(AllocationView::role)
@@ -120,9 +120,39 @@ class PortfolioRecommendationMapperTest {
         CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
                 planCoverage(PlanType.STABLE, new BigDecimal("80.00"))));
 
-        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY);
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW, TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of());
 
         assertThat(response.getPlans().get(0).getDisplayName()).isEqualTo("안정 월급형");
+    }
+
+    @Test
+    void 순매수액이_1주_값보다_작은_종목은_매수목록에서_제외된다() {
+        // ETF-A: 순매수 300만 ≥ 1주 5만 → 유지 / ETF-B: 순매수 3만 < 1주 50,130 → 0주라 제외(#186)
+        Holding buyable = new Holding(1L, "433330", "ETF-A", BucketRole.RISK,
+                CurrencyExposure.UNHEDGED, new BigDecimal("1.0"), won(3_000_000));
+        Holding tooSmall = new Holding(2L, "497880", "CD금리MMF", BucketRole.SHORT_TERM,
+                CurrencyExposure.UNHEDGED, new BigDecimal("1.0"), won(30_000));
+        PlanAllocation plan = PlanAllocation.builder()
+                .type(PlanType.LIQUIDITY)
+                .riskTarget(won(3_000_000))
+                .safeTarget(won(0))
+                .surplusRiskAmount(won(3_000_000))
+                .surplusSafeAmount(won(0))
+                .shortTermBucket(won(30_000))
+                .planDividendRate(new BigDecimal("3.00"))
+                .holdings(List.of(buyable, tooSmall))
+                .build();
+        AllocationResult allocation = allocation(RecommendationTrack.NORMAL, List.of(plan));
+        CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
+                planCoverage(PlanType.LIQUIDITY, new BigDecimal("80.00"))));
+        Map<Long, BigDecimal> prices = Map.of(1L, won(50_000), 2L, won(50_130));
+
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW,
+                TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, prices);
+
+        assertThat(response.getPlans().get(0).getHoldings())
+                .extracting(Holding::productId)
+                .containsExactly(1L); // ETF-B(2L)는 0주라 제외
     }
 
     // ── helpers ──
