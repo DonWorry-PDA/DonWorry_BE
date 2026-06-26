@@ -70,7 +70,8 @@ public class CashFlowDiagnosisService {
 
     private BigDecimal calcMonthlyDividendIncome(Long userId) {
         // 월급 만들기에서 제외한 보유종목은 분배금 산출에서도 뺀다(선택UI #115 死선 해소).
-        // 국민연금은 제외 대상 자산이 아니므로 계좌 제외는 무관, 종목(HOLDING_*) 제외만 적용.
+        // 계좌(ACCOUNT_*) 제외는 예수금(cash)만 빼는데 분배금은 보유종목에서만 나오므로 무관 —
+        // AssetAggregator와 동일하게 계좌·종목 제외는 독립이라 종목(HOLDING_*) 제외만 적용한다.
         Set<Long> excludedHoldingIds = salaryAssetMapper.extractHoldingIds(
                 salaryAssetExclusionRepository.findAssetKeysByUserId(userId));
         List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId).stream()
