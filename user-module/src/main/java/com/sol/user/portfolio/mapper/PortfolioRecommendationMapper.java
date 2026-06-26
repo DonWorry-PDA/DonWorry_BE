@@ -137,6 +137,7 @@ public class PortfolioRecommendationMapper {
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
                 .sustainableCoverageRate(coverage.getSustainableCoverageRate())
                 .inheritanceAmount(coverage.getInheritanceAmount())
+                .shortTermLumpSum(coverage.getShortTermLumpSum())
                 .totalCoverageRate(totalCoverageRate)
                 .residualMonthlyShortfall(residualShortfall)
                 .build();

@@ -131,6 +131,48 @@ class AlphaCoverageCalculatorTest {
         assertThat(conserved).isEqualByComparingTo(totalAsset);
     }
 
+    @Test
+    void 단기버킷이_있으면_보존식은_월수입_단기목돈_상속_바닥의_4항으로_맞아떨어진다() {
+        // 유동성안: 단기버킷 5천만은 소진(월수입)도 상속도 아닌 별도 '단기 목돈' 항으로 잡혀야
+        //   총자산 = Σ원금소진 + 단기목돈 + 상속 + 바닥 이 한 푼도 안 새고 성립한다.
+        // 총자산 = 여유위험1억 + 여유안전2억 + 연금저축5천 + 바닥5천 + 단기5천 = 4.5억
+        // type은 STABLE로 둔다 — Q3표가 대표안(STABLE)을 요구하고, compute()는 type 무관하게
+        //   surplusRisk/surplusSafe/shortTermBucket만 쓰므로 단기버킷 보존식 검증에 영향 없다.
+        BigDecimal shortTermBucket = BigDecimal.valueOf(50_000_000);
+        PlanAllocation liquidity = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.valueOf(100_000_000))
+                .surplusSafeAmount(BigDecimal.valueOf(200_000_000))
+                .shortTermBucket(shortTermBucket)
+                .planDividendRate(new BigDecimal("3.0000")) // 실질자본성장 0(상속=보존원금) → 보존식 단순합 성립
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .q3(1)
+                .age(65)
+                .floorAsset(BigDecimal.valueOf(50_000_000))
+                .pensionSaving(BigDecimal.valueOf(50_000_000))
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL)
+                        .plans(List.of(liquidity))
+                        .build())
+                .build();
+        BigDecimal floorAsset = BigDecimal.valueOf(50_000_000);
+        BigDecimal totalAsset = BigDecimal.valueOf(450_000_000);
+        BigDecimal depletable = BigDecimal.valueOf(350_000_000);    // 단기버킷·바닥은 소진 대상 아님
+        BigDecimal principalDepleted = depletable.multiply(new BigDecimal("0.65"));
+
+        PlanCoverage pc = calculator.calculate(input).getPlanCoverages().get(0);
+
+        // 단기 목돈은 원금 그대로(이자 무시) 노출된다
+        assertThat(pc.getShortTermLumpSum()).isEqualByComparingTo(shortTermBucket);
+        BigDecimal conserved = pc.getInheritanceAmount()
+                .add(principalDepleted)
+                .add(floorAsset)
+                .add(pc.getShortTermLumpSum());
+        assertThat(conserved).isEqualByComparingTo(totalAsset);
+    }
+
     // ── 저배당: 보존 위험자산이 실질 자본성장으로 상속에 복리 반영 (compound() 성장경로) ──
 
     @Test
