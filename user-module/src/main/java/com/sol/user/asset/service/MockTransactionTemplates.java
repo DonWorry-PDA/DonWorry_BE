@@ -75,5 +75,44 @@ class MockTransactionTemplates {
             new TransactionTemplate("MEDICAL",   "약국",               15_000)
     );
 
+    // ── 주식 거래 템플릿 ─────────────────────────────────────────────────────────
+    // eventType: STOCK_BUY(매수·EXPENSE) / STOCK_SELL(매도·INCOME)
+    // baseAmount: 단가 × 수량 기준 실거래 대금
+
+    // ACTIVE 투자자 — 5종목(삼성전자·SK하이닉스·현대차·카카오·NAVER) 활발한 매매, 월 14건
+    static final List<TransactionTemplate> NEED_IMPROVEMENT_STOCKS = List.of(
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         750_000),
+            new TransactionTemplate("STOCK_BUY",  "SK하이닉스 매수",       510_000),
+            new TransactionTemplate("STOCK_BUY",  "카카오 매수",           450_000),
+            new TransactionTemplate("STOCK_SELL", "삼성전자 매도",         600_000),
+            new TransactionTemplate("STOCK_BUY",  "NAVER 매수",            600_000),
+            new TransactionTemplate("STOCK_BUY",  "현대차 매수",           460_000),
+            new TransactionTemplate("STOCK_SELL", "SK하이닉스 매도",       360_000),
+            new TransactionTemplate("STOCK_SELL", "카카오 매도",           450_000),
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         900_000),
+            new TransactionTemplate("STOCK_SELL", "현대차 매도",           460_000),
+            new TransactionTemplate("STOCK_BUY",  "SK하이닉스 매수",       720_000),
+            new TransactionTemplate("STOCK_SELL", "NAVER 매도",            400_000),
+            new TransactionTemplate("STOCK_SELL", "삼성전자 매도",         375_000),
+            new TransactionTemplate("STOCK_BUY",  "현대차 매수",           690_000)
+    );
+
+    // NEUTRAL 투자자 — 4종목(삼성전자·LG에너지솔루션·NAVER·셀트리온) 분산매수 중심, 월 6건
+    static final List<TransactionTemplate> NEED_COMPLEMENT_STOCKS = List.of(
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         600_000),
+            new TransactionTemplate("STOCK_BUY",  "LG에너지솔루션 매수",   760_000),
+            new TransactionTemplate("STOCK_BUY",  "NAVER 매수",            600_000),
+            new TransactionTemplate("STOCK_SELL", "삼성전자 매도",         375_000),
+            new TransactionTemplate("STOCK_BUY",  "셀트리온 매수",         540_000),
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         750_000)
+    );
+
+    // STABLE 투자자 — 2종목(삼성전자·KB금융) 적립식 매수 위주, 월 3건
+    static final List<TransactionTemplate> STABLE_STOCKS = List.of(
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         375_000),
+            new TransactionTemplate("STOCK_BUY",  "KB금융 매수",           340_000),
+            new TransactionTemplate("STOCK_BUY",  "삼성전자 매수",         225_000)
+    );
+
     private MockTransactionTemplates() {}
 }

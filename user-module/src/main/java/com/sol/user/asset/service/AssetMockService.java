@@ -79,6 +79,11 @@ public class AssetMockService {
             16, 17, 18, 19, 21, 22, 23, 24, 25, 26
     };
 
+    // Stock trade days — weekday-representative days spread evenly, avoiding fixed-event days
+    private static final int[] STOCK_TRADE_DAYS = {
+            2, 3, 4, 7, 8, 9, 11, 13, 16, 18, 21, 23, 25, 26
+    };
+
     /**
      * 사용자용 마이데이터 연결/재동기화. userId에 배정된 시나리오를 업서트한다.
      * 시나리오가 userId마다 고정이므로 재호출해도 같은 상태로 수렴하며 이전 데이터가 남지 않는다.
@@ -366,6 +371,20 @@ public class AssetMockService {
         return events;
     }
 
+    private List<CashFlowEvent> buildMonthStockEvents(User user, LocalDate monthStart, Scenario scenario) {
+        List<MockTransactionTemplates.TransactionTemplate> trades = scenario.stockTrades();
+        List<CashFlowEvent> events = new ArrayList<>();
+        for (int i = 0; i < trades.size(); i++) {
+            MockTransactionTemplates.TransactionTemplate t = trades.get(i);
+            int day = STOCK_TRADE_DAYS[i % STOCK_TRADE_DAYS.length];
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            String flowType = "STOCK_BUY".equals(t.eventType()) ? "EXPENSE" : "INCOME";
+            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
+                    amount, flowType, "COMPLETED", false));
+        }
+        return events;
+    }
+
     private BigDecimal applyVariation(BigDecimal baseAmount, int monthNum, int templateIndex) {
         BigDecimal factor = BigDecimal.valueOf(85 + ((monthNum * 7 + templateIndex * 3) % 31), 2);
         return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
@@ -380,8 +399,11 @@ public class AssetMockService {
         LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
         List<CashFlowEvent> events = new ArrayList<>();
         events.addAll(buildMonthEvents(user, currentMonth, scenario, true));
+        events.addAll(buildMonthStockEvents(user, currentMonth, scenario));
         for (int i = 1; i <= 5; i++) {
-            events.addAll(buildMonthEvents(user, currentMonth.minusMonths(i), scenario, false));
+            LocalDate pastMonth = currentMonth.minusMonths(i);
+            events.addAll(buildMonthEvents(user, pastMonth, scenario, false));
+            events.addAll(buildMonthStockEvents(user, pastMonth, scenario));
         }
         return cashFlowEventRepository.saveAll(events);
     }
@@ -485,7 +507,8 @@ public class AssetMockService {
                     ),
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
-                    money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT
+                    money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS
             );
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
@@ -508,7 +531,8 @@ public class AssetMockService {
                     ),
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
-                    money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT
+                    money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    MockTransactionTemplates.NEED_COMPLEMENT_STOCKS
             );
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
@@ -533,7 +557,8 @@ public class AssetMockService {
                     // medicalReserve 9,000,000 → 의료대비 25.7개월(>=24)로 STABLE 등급(80점) 충족.
                     // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
                     money(9_000_000), money(2_000_000), money(464_000),
-                    money(180_000), money(180_000), MockTransactionTemplates.STABLE
+                    money(180_000), money(180_000), MockTransactionTemplates.STABLE,
+                    MockTransactionTemplates.STABLE_STOCKS
             );
         };
     }
@@ -578,7 +603,8 @@ public class AssetMockService {
             BigDecimal monthlyFinancialIncome,
             BigDecimal monthlyInsurancePremium,
             BigDecimal monthlyMaintenanceExpense,
-            List<MockTransactionTemplates.TransactionTemplate> transactions
+            List<MockTransactionTemplates.TransactionTemplate> transactions,
+            List<MockTransactionTemplates.TransactionTemplate> stockTrades
     ) {
     }
 }
