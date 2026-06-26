@@ -15,7 +15,6 @@ import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,7 +24,6 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AssetCompositionService {
 
     private final AssetAggregator assetAggregator;

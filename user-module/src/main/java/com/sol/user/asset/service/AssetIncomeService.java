@@ -12,7 +12,6 @@ import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -23,7 +22,6 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AssetIncomeService {
 
     private static final Set<String> PENSION_ACCOUNT_TYPES = Set.of("IRP", "PENSION_SAVING");
@@ -38,20 +36,14 @@ public class AssetIncomeService {
         List<HoldingWithQuantityAndType> allHoldings =
                 holdingRepository.findHoldingsWithQuantityAndTypeByUserId(userId);
         List<Account> accounts = accountRepository.findByUserUserId(userId);
-        BigDecimal nationalPension = calcNationalPension(userId);
-        BigDecimal etfDividend = calcEtfDividend(allHoldings);
-        BigDecimal depositInterest = calcDepositInterest(accounts);
-        BigDecimal pensionDividend = calcPensionDividend(allHoldings);
+        BigDecimal nationalPension = calcNationalPension(userId).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal etfDividend = calcEtfDividend(allHoldings).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal depositInterest = calcDepositInterest(accounts).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal pensionDividend = calcPensionDividend(allHoldings).setScale(0, RoundingMode.HALF_UP);
         BigDecimal unrealizedGainLoss = holdingRepository.sumUnrealizedGainLossByUserId(userId);
 
-        BigDecimal accessibleIncome = nationalPension
-                .add(etfDividend)
-                .add(depositInterest)
-                .setScale(0, RoundingMode.HALF_UP);
-
-        BigDecimal lockedIncome = pensionDividend
-                .setScale(0, RoundingMode.HALF_UP);
-
+        BigDecimal accessibleIncome = nationalPension.add(etfDividend).add(depositInterest);
+        BigDecimal lockedIncome = pensionDividend;
         BigDecimal totalMonthlyIncome = accessibleIncome.add(lockedIncome);
 
         List<IncomeSource> sources = buildSources(
@@ -154,40 +146,35 @@ public class AssetIncomeService {
 
         List<IncomeSource> sources = new ArrayList<>();
 
-        BigDecimal roundedNationalPension = nationalPension.setScale(0, RoundingMode.HALF_UP);
-        BigDecimal roundedEtfDividend = etfDividend.setScale(0, RoundingMode.HALF_UP);
-        BigDecimal roundedDepositInterest = depositInterest.setScale(0, RoundingMode.HALF_UP);
-        BigDecimal roundedPensionDividend = pensionDividend.setScale(0, RoundingMode.HALF_UP);
-
-        if (roundedNationalPension.signum() > 0) {
+        if (nationalPension.signum() > 0) {
             sources.add(IncomeSource.builder()
                     .type("NATIONAL_PENSION")
                     .label("국민연금")
-                    .amount(roundedNationalPension)
+                    .amount(nationalPension)
                     .locked(false)
                     .build());
         }
-        if (roundedEtfDividend.signum() > 0) {
+        if (etfDividend.signum() > 0) {
             sources.add(IncomeSource.builder()
                     .type("ETF_DIVIDEND")
                     .label("ETF 배당")
-                    .amount(roundedEtfDividend)
+                    .amount(etfDividend)
                     .locked(false)
                     .build());
         }
-        if (roundedDepositInterest.signum() > 0) {
+        if (depositInterest.signum() > 0) {
             sources.add(IncomeSource.builder()
                     .type("DEPOSIT_INTEREST")
                     .label("예금 이자")
-                    .amount(roundedDepositInterest)
+                    .amount(depositInterest)
                     .locked(false)
                     .build());
         }
-        if (roundedPensionDividend.signum() > 0) {
+        if (pensionDividend.signum() > 0) {
             sources.add(IncomeSource.builder()
                     .type("PENSION_DIVIDEND")
                     .label("연금 계좌 ETF 배당")
-                    .amount(roundedPensionDividend)
+                    .amount(pensionDividend)
                     .locked(true)
                     .build());
         }

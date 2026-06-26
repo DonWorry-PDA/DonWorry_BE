@@ -12,7 +12,6 @@ import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
 import com.sol.user.holding.repository.HoldingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,7 +25,6 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AssetScheduleService {
 
     private final HoldingRepository holdingRepository;
