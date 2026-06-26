@@ -48,6 +48,9 @@ public class Account {
     @Column(name = "opened_at")
     private LocalDate openedAt;
 
+    @Column(name = "product_id")
+    private Long productId;
+
     public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
         Account account = new Account();
         account.user = user;
@@ -92,5 +95,9 @@ public class Account {
             throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE);
         }
         this.depositBalance = this.depositBalance.subtract(amount);
+    }
+
+    public void linkDepositProduct(Long productId) {
+        this.productId = productId;
     }
 }
