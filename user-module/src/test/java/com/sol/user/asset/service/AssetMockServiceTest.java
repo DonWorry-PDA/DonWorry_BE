@@ -16,6 +16,7 @@ import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
+import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
@@ -59,6 +60,7 @@ class AssetMockServiceTest {
     @Mock HoldingRepository holdingRepository;
     @Mock EtfPoolProvider etfPoolProvider;
     @Mock LifeStabilityService lifeStabilityService;
+    @Mock DepositDetailClient depositDetailClient;
 
     @InjectMocks AssetMockService assetMockService;
 
@@ -248,17 +250,14 @@ class AssetMockServiceTest {
     private static Stream<Arguments> scenarios() {
         // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
         //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
-        // cashflowEvents = 6개월치 buildMonthEvents 합산:
-        //  NEED_IMPROVEMENT: (6 고정 + 19 템플릿) × 6개월 = 150
-        //  NEED_COMPLEMENT:  (6 고정 + 20 템플릿) × 6개월 = 156
-        //  STABLE:           (5 고정 + 21 템플릿) × 6개월 = 156  (대출 없음 → 고정 5개)
+        // cashflowEvents = 6개월치 buildMonthEvents 합산 (develop 머지 이후 시나리오 확장됨):
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
-                        InvestmentPropensity.ACTIVE, 150),
+                        InvestmentPropensity.ACTIVE, 234),
                 Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL, 156),
+                        InvestmentPropensity.NEUTRAL, 192),
                 Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
-                        InvestmentPropensity.STABLE, 156)
+                        InvestmentPropensity.STABLE, 174)
         );
     }
 
