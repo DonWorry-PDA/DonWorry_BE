@@ -28,12 +28,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -169,7 +171,7 @@ class AssetMockServiceTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
-    void currentMonthEventsAreRecurringPastMonthEventsAreNot() {
+    void currentMonthRegularEventsRecurringButConsumptionAndPastAreNot() {
         User user = mock(User.class);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         returnArgumentsFromSaveAll();
@@ -188,8 +190,15 @@ class AssetMockServiceTest {
                 .filter(e -> YearMonth.from(e.getEventDate()).isBefore(currentMonth))
                 .toList();
 
+        // 현재월: 정기 수입·고정비는 recurring=true, 일회성 소비는 recurring=false (#177 — 캘린더 미래 투영 방지)
+        Set<String> recurringTypes = Set.of("PENSION", "INTEREST", "DIVIDEND", "MAINTENANCE", "INSURANCE", "LOAN");
         assertThat(thisMonth).isNotEmpty();
-        assertThat(thisMonth).allSatisfy(e -> assertThat(e.getRecurring()).isTrue());
+        assertThat(thisMonth).filteredOn(e -> recurringTypes.contains(e.getEventType()))
+                .isNotEmpty()
+                .allSatisfy(e -> assertThat(e.getRecurring()).isTrue());
+        assertThat(thisMonth).filteredOn(e -> !recurringTypes.contains(e.getEventType()))
+                .isNotEmpty()
+                .allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
         assertThat(pastMonths).isNotEmpty();
         assertThat(pastMonths).allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
     }
@@ -208,7 +217,18 @@ class AssetMockServiceTest {
     private void returnArgumentsFromSaveAll() {
         lenient().when(etfPoolProvider.getPool()).thenReturn(etfPool());
         lenient().when(holdingRepository.findStockProductIds(any())).thenReturn(stockPool());
-        lenient().when(accountRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
+        // 운영은 IDENTITY로 accountId가 채워진다. saveHoldings가 brokerage.getAccountId()를 쓰므로
+        // mock에서도 저장 시 ID를 부여해야 List.of(null) NPE가 나지 않는다(테스트 인프라 보정).
+        lenient().when(accountRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Account> accounts = toList(invocation.getArgument(0));
+            long nextId = 1L;
+            for (Account account : accounts) {
+                if (account.getAccountId() == null) {
+                    ReflectionTestUtils.setField(account, "accountId", nextId++);
+                }
+            }
+            return accounts;
+        });
         lenient().when(holdingRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(pensionRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(debtRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
