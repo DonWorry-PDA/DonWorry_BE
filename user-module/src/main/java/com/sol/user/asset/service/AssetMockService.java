@@ -109,7 +109,9 @@ public class AssetMockService {
                         && account.getAccountNumber().startsWith("MOCK-"))
                 .toList();
         List<Long> mockAccountIds = mockAccounts.stream().map(Account::getAccountId).toList();
-        holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
+        if (!mockAccountIds.isEmpty()) {
+            holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
+        }
         accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));

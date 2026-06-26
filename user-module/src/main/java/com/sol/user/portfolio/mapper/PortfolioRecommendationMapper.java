@@ -190,25 +190,14 @@ public class PortfolioRecommendationMapper {
 
     /**
      * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
-     * 동일 productId가 SAFE/SHORT_TERM 버킷에 중복 등장(예: SOL CD금리MMF)하는 경우
-     * remaining을 순차 차감해 이중 공제를 방지한다. net ≤ 0인 항목은 제거.
-     */
-    /**
-     * 추천 종목별 순 매수 금액 = 목표 배분액 − 기존 보유 평가액.
-     * 동일 productId가 SAFE/SHORT_TERM 버킷에 중복 등장(예: SOL CD금리MMF)하는 경우
-     * remaining을 순차 차감해 이중 공제를 방지한다. net ≤ 0인 항목은 제거.
-     *
-     * <p>추천 목록에 없는 기존 BROKERAGE ETF(예: 개별 액티브 ETF)는 productId 매칭이 안 되어
-     * per-product 차감이 불가능하다. 이를 maxBuyTotal(= 가용현금)로 전체 합계를 상한하여
-     * 실제 이체·매수 가능 금액을 초과하지 않도록 한다.
+     * 추천 목록에 없는 기존 BROKERAGE ETF는 per-product 차감이 불가하므로
+     * maxBuyTotal(= 가용현금)로 전체 합계를 상한한다.
+     * 스케일링 시 FLOOR로 내림해 합계가 maxBuyTotal을 초과하지 않도록 보장한다.
      */
     private List<Holding> netHoldings(List<Holding> holdings, Map<Long, BigDecimal> existingByProductId,
                                       BigDecimal maxBuyTotal) {
         if (maxBuyTotal.compareTo(BigDecimal.ZERO) <= 0) {
             return List.of();
-        }
-        if (existingByProductId.isEmpty()) {
-            return holdings;
         }
         Map<Long, BigDecimal> remaining = new HashMap<>(existingByProductId);
         List<Holding> result = new ArrayList<>();
@@ -222,14 +211,13 @@ public class PortfolioRecommendationMapper {
                         h.role(), h.currency(), h.weight(), net));
             }
         }
-        // 추천 목록에 없는 기존 ETF 평가액이 있으면 per-product 차감이 안 된다.
-        // 전체 합계가 maxBuyTotal(= 가용 현금)을 초과하면 비율대로 축소한다.
         BigDecimal netTotal = result.stream().map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (netTotal.compareTo(maxBuyTotal) > 0) {
+            // FLOOR로 내림해 독립 반올림 누적이 maxBuyTotal을 초과하지 않도록 보장
             BigDecimal scale = maxBuyTotal.divide(netTotal, 10, RoundingMode.HALF_UP);
             List<Holding> scaled = new ArrayList<>();
             for (Holding h : result) {
-                BigDecimal s = h.amount().multiply(scale).setScale(RATIO_SCALE, RoundingMode.HALF_UP);
+                BigDecimal s = h.amount().multiply(scale).setScale(RATIO_SCALE, RoundingMode.FLOOR);
                 if (s.compareTo(BigDecimal.ZERO) > 0) {
                     scaled.add(new Holding(h.productId(), h.ticker(), h.productName(),
                             h.role(), h.currency(), h.weight(), s));
