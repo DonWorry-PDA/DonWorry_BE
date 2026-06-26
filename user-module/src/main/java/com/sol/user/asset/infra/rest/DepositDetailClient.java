@@ -52,7 +52,7 @@ public class DepositDetailClient {
             }
             return Optional.of(response.data().get(0));
         } catch (Exception e) {
-            throw new BaseException(ErrorCode.PRODUCT_POOL_UNAVAILABLE);
+            return Optional.empty();
         }
     }
 }
