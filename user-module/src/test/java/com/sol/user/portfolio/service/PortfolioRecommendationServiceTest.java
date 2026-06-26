@@ -24,6 +24,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.survey.dto.SurveyAnswerResponse;
 import com.sol.user.survey.service.SurveyService;
+import com.sol.user.trade.infra.rest.EtfPriceClient;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -46,6 +47,8 @@ class PortfolioRecommendationServiceTest {
     private final HoldingRepository holdingRepository = mock(HoldingRepository.class);
     // 이체 필요액 계산용 BROKERAGE 예수금 조회 의존: 미스텁 시 빈 Optional → 잔고 0(holdings 매핑 무영향)
     private final AccountRepository accountRepository = mock(AccountRepository.class);
+    // #186: netHoldings의 1주 미만 필터용 현재가 조회 의존
+    private final EtfPriceClient etfPriceClient = mock(EtfPriceClient.class);
 
     private final PortfolioRecommendationService service = new PortfolioRecommendationService(
             new OperationGradeCalculator(),
@@ -57,7 +60,8 @@ class PortfolioRecommendationServiceTest {
             surveyService,
             cashFlowDiagnosisService,
             holdingRepository,
-            accountRepository
+            accountRepository,
+            etfPriceClient
     );
 
     @Test
@@ -72,6 +76,8 @@ class PortfolioRecommendationServiceTest {
                         .monthlyCashFlow(BigDecimal.valueOf(1_000_000))
                         .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
                         .build());
+        // 현재가 — 순매수액(백만 단위)을 충분히 밑도는 1주 값이라 모든 추천 종목이 매수 대상으로 유지됨
+        given(etfPriceClient.getCurrentPrice(any())).willReturn(10_000L);
 
         RecommendationResponse response = service.recommend(1L);
 
