@@ -8,6 +8,7 @@ import com.sol.product.deposit.repository.DepositDetailRepository;
 import com.sol.product.etf.entity.EtfDetail;
 import com.sol.product.etf.repository.EtfDetailRepository;
 import com.sol.product.pensionsaving.repository.PensionSavingDetailRepository;
+import com.sol.product.product.dto.DepositDetailBatchItem;
 import com.sol.product.product.dto.ProductBatchItem;
 import com.sol.product.product.dto.ProductDetailResponse;
 import com.sol.product.product.entity.FinancialProduct;
@@ -41,6 +42,24 @@ public class ProductService {
         }
         return financialProductRepository.findAllByProductIdIn(productIds).stream()
                 .map(ProductBatchItem::from)
+                .toList();
+    }
+
+    public List<DepositDetailBatchItem> getDepositDetailsByProductIds(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        return depositDetailRepository.findByProductProductIdIn(productIds).stream()
+                .map(d -> new DepositDetailBatchItem(
+                        d.getProduct().getProductId(),
+                        d.getInterestRate(),
+                        d.getMaturityMonths()))
+                .toList();
+    }
+
+    public List<Long> getAllDepositProductIds() {
+        return depositDetailRepository.findAll().stream()
+                .map(d -> d.getProduct().getProductId())
                 .toList();
     }
 

@@ -1,6 +1,7 @@
 package com.sol.product.product.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.product.product.dto.DepositDetailBatchItem;
 import com.sol.product.product.dto.ProductBatchItem;
 import com.sol.product.product.dto.ProductDetailResponse;
 import com.sol.product.product.service.ProductService;
@@ -35,5 +36,18 @@ public class ProductController {
     public ResponseEntity<ApiResponse<List<ProductBatchItem>>> getProductsByIds(
             @RequestParam List<Long> ids) {
         return ResponseEntity.ok(ApiResponse.ok(productService.getProductsByIds(ids)));
+    }
+
+    @Operation(summary = "예금 상품 상세 배치 조회")
+    @GetMapping("/deposit-details")
+    public ResponseEntity<ApiResponse<List<DepositDetailBatchItem>>> getDepositDetails(
+            @RequestParam List<Long> productIds) {
+        return ResponseEntity.ok(ApiResponse.ok(productService.getDepositDetailsByProductIds(productIds)));
+    }
+
+    @Operation(summary = "전체 예금 상품 ID 목록 조회 (mock 연동용)")
+    @GetMapping("/deposit-ids")
+    public ResponseEntity<ApiResponse<List<Long>>> getDepositProductIds() {
+        return ResponseEntity.ok(ApiResponse.ok(productService.getAllDepositProductIds()));
     }
 }
