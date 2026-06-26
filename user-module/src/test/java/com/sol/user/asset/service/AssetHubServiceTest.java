@@ -9,6 +9,7 @@ import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
@@ -43,6 +44,7 @@ class AssetHubServiceTest {
     @Mock CashFlowDiagnosisService cashFlowDiagnosisService;
     @Mock LifeStabilityService lifeStabilityService;
     @Mock AssetAggregator assetAggregator;
+    @Mock SalaryPlanRepository salaryPlanRepository;
 
     @InjectMocks AssetHubService assetHubService;
 
