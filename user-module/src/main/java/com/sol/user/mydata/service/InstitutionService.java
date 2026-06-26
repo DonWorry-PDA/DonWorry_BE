@@ -62,6 +62,13 @@ public class InstitutionService {
                         Collectors.mapping(a -> ACCOUNT_TYPE_LABEL.get(a.getAccountType()), Collectors.toList())
                 ));
 
+        Map<String, Long> totalByDbName = existingAccounts.stream()
+                .filter(a -> a.getDepositBalance() != null)
+                .collect(Collectors.groupingBy(
+                        Account::getInstitutionName,
+                        Collectors.summingLong(a -> a.getDepositBalance().longValue())
+                ));
+
         return InstitutionCode.all().stream()
                 .map(code -> {
                     boolean connected = code.getDbNames().stream().anyMatch(connectedDbNames::contains);
@@ -71,7 +78,12 @@ public class InstitutionService {
                                     .distinct()
                                     .toList()
                             : null;
-                    return InstitutionResponse.of(code, connected, products);
+                    Long totalAmountKrw = connected
+                            ? code.getDbNames().stream()
+                                    .mapToLong(dbName -> totalByDbName.getOrDefault(dbName, 0L))
+                                    .sum()
+                            : null;
+                    return InstitutionResponse.of(code, connected, products, totalAmountKrw);
                 })
                 .toList();
     }
