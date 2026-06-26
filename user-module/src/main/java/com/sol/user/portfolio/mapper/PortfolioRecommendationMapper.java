@@ -185,7 +185,8 @@ public class PortfolioRecommendationMapper {
         return switch (type) {
             case STABLE -> "안정 월급형";
             case BALANCED -> "균형 월급형";
-            case LIQUIDITY -> "여유자금 성장형";
+            // "단기 목돈 확보"가 핵심이라 '성장형'은 더 많이 번다는 오해를 부른다 → 유동성 관점으로 명명.
+            case LIQUIDITY -> "유동성 확보형";
         };
     }
 
