@@ -30,4 +30,7 @@ public class RecommendationResponse {
 
     private String q3ReferenceLabel;           // Q3 표 기준 안내 (예: "안정안 기준 예시")
     private List<Q3Scenario> q3Scenarios;
+
+    /** 현재 BROKERAGE 예수금. 이체 필요액 = max(0, Σholdings[].amount − brokerageBalance). */
+    private BigDecimal brokerageBalance;
 }
