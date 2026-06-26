@@ -33,7 +33,6 @@ public class InstitutionService {
     private final AssetConnectionRepository assetConnectionRepository;
     private final UserRepository userRepository;
 
-    @Transactional
     public List<InstitutionResponse> getInstitutions(Long userId) {
         Set<String> connectedDbNames = assetConnectionRepository.findByUserUserId(userId).stream()
                 .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
@@ -43,10 +42,6 @@ public class InstitutionService {
         List<Account> existingAccounts = accountRepository.findByUserUserId(userId).stream()
                 .filter(a -> Boolean.TRUE.equals(a.getExistingAccount()))
                 .toList();
-
-        existingAccounts.stream()
-                .filter(a -> a.getDisplayNumber() == null)
-                .forEach(a -> a.updateDisplayNumber(generateDisplayNumber()));
 
         existingAccounts.stream()
                 .map(Account::getInstitutionName)
