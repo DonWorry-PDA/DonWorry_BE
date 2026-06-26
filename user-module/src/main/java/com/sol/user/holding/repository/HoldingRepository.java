@@ -25,7 +25,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM Holding h WHERE h.account.accountId IN :accountIds")
-    void deleteByAccountIdsInBatch(@Param("accountIds") List<Long> accountIds);
+    void deleteAllByAccountIdIn(@Param("accountIds") List<Long> accountIds);
 
     Optional<Holding> findByAccountAccountIdAndProductId(Long accountId, Long productId);
 

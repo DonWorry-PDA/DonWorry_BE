@@ -48,6 +48,9 @@ public class Account {
     @Column(name = "opened_at")
     private LocalDate openedAt;
 
+    @Column(name = "display_number", length = 30)
+    private String displayNumber;
+
     @Column(name = "product_id")
     private Long productId;
 
@@ -73,11 +76,27 @@ public class Account {
         this.existingAccount = existingAccount;
     }
 
+    public static Account createMockExternal(User user, String accountType, String institutionName,
+                                             String displayNumber, BigDecimal depositBalance) {
+        Account account = new Account();
+        account.user = user;
+        account.accountType = accountType;
+        account.institutionName = institutionName;
+        account.displayNumber = displayNumber;
+        account.depositBalance = depositBalance;
+        account.existingAccount = true;
+        return account;
+    }
+
     public void updateMock(String institutionName, String accountNumber, BigDecimal depositBalance) {
         this.institutionName = institutionName;
         this.accountNumber = accountNumber;
         this.depositBalance = depositBalance;
         this.existingAccount = true;
+    }
+
+    public void updateDisplayNumber(String displayNumber) {
+        this.displayNumber = displayNumber;
     }
 
     public void addBalance(BigDecimal amount) {
