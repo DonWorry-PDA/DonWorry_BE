@@ -2,6 +2,7 @@ package com.sol.user.monthlysalary.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -15,8 +16,11 @@ import java.util.List;
  */
 public record SalaryPlanConfirmRequest(
         @NotNull String planType,
-        @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal targetMonthlyLivingCost,
-        @NotNull BigDecimal expectedMonthlySalary,
+        // 엔티티 컬럼이 scale=0이라 소수 입력은 저장 시 절사됨 → DTO에서 정수 계약 강제(fail-fast).
+        @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 15, fraction = 0)
+        BigDecimal targetMonthlyLivingCost,
+        @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 15, fraction = 0)
+        BigDecimal expectedMonthlySalary,
         @NotEmpty @Size(max = 100) @Valid List<HoldingItem> holdings
 ) {
 
@@ -27,6 +31,7 @@ public record SalaryPlanConfirmRequest(
             @NotNull String accountType,
             BigDecimal weight,
             @NotNull @DecimalMin(value = "0", inclusive = false, message = "목표 배분액은 0보다 커야 합니다.")
+            @Digits(integer = 15, fraction = 0)
             BigDecimal targetAmount,
             BigDecimal productContribution
     ) {
