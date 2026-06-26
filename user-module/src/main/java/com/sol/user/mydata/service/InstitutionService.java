@@ -15,11 +15,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
@@ -81,8 +83,14 @@ public class InstitutionService {
         Map<String, AssetConnection> existingByDbName = assetConnectionRepository.findByUserUserId(userId).stream()
                 .collect(Collectors.toMap(AssetConnection::getInstitutionName, c -> c, (a, b) -> a));
 
+        Set<String> existingAccountInstitutions = accountRepository.findByUserUserId(userId).stream()
+                .filter(a -> Boolean.TRUE.equals(a.getExistingAccount()))
+                .map(Account::getInstitutionName)
+                .collect(Collectors.toSet());
+
         LocalDateTime now = LocalDateTime.now();
-        List<AssetConnection> toSave = new ArrayList<>();
+        List<AssetConnection> connectionsToSave = new ArrayList<>();
+        List<Account> accountsToSave = new ArrayList<>();
 
         for (InstitutionCode code : codes) {
             String category = "bank".equals(code.getType()) ? "BANK" : "SECURITIES";
@@ -90,14 +98,37 @@ public class InstitutionService {
                 AssetConnection existing = existingByDbName.get(dbName);
                 if (existing != null) {
                     existing.updateMock(dbName, now);
-                    toSave.add(existing);
+                    connectionsToSave.add(existing);
                 } else {
-                    toSave.add(new AssetConnection(user, dbName, category, "CONNECTED", now));
+                    connectionsToSave.add(new AssetConnection(user, dbName, category, "CONNECTED", now));
+                    if (!existingAccountInstitutions.contains(dbName)) {
+                        String accountType = dbName.endsWith("증권") ? "BROKERAGE" : "DEPOSIT";
+                        accountsToSave.add(new Account(user, accountType, dbName,
+                                generateUniqueAccountNumber(), generateRandomBalance(), true));
+                    }
                 }
             }
         }
 
-        assetConnectionRepository.saveAll(toSave);
+        assetConnectionRepository.saveAll(connectionsToSave);
+        accountRepository.saveAll(accountsToSave);
         return new InstitutionConnectResponse(codes.size());
+    }
+
+    private BigDecimal generateRandomBalance() {
+        long amount = ThreadLocalRandom.current().nextLong(10, 3001) * 10_000;
+        return BigDecimal.valueOf(amount);
+    }
+
+    private String generateUniqueAccountNumber() {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        String accountNumber;
+        do {
+            accountNumber = String.format("%03d-%04d-%06d",
+                    random.nextInt(100, 1000),
+                    random.nextInt(1000, 10000),
+                    random.nextInt(100000, 1000000));
+        } while (accountRepository.existsByAccountNumber(accountNumber));
+        return accountNumber;
     }
 }
