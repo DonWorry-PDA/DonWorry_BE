@@ -119,4 +119,10 @@ public class Account {
     public void linkDepositProduct(Long productId) {
         this.productId = productId;
     }
+
+    public void initOpenedAt(LocalDate date) {
+        if (this.openedAt == null) {
+            this.openedAt = date;
+        }
+    }
 }

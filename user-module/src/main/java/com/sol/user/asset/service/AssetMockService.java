@@ -173,14 +173,28 @@ public class AssetMockService {
     }
 
     private void linkDepositProductId(List<Account> accounts) {
-        accounts.stream()
-                .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getProductId() == null)
+        List<Account> depositAccounts = accounts.stream()
+                .filter(a -> "DEPOSIT".equals(a.getAccountType()))
+                .toList();
+
+        // productId가 없는 첫 번째 DEPOSIT 계정에 상품 연결 후 저장
+        depositAccounts.stream()
+                .filter(a -> a.getProductId() == null)
                 .findFirst()
                 .ifPresent(depositAccount -> depositDetailClient.fetchFirstDepositProductId()
                         .ifPresent(productId -> {
                             depositAccount.linkDepositProduct(productId);
                             accountRepository.save(depositAccount);
                         }));
+
+        // productId는 있지만 openedAt이 없는 모든 DEPOSIT 계정에 가입일 초기화
+        // (기존 데이터 + 방금 productId가 연결된 계정 모두 커버)
+        depositAccounts.stream()
+                .filter(a -> a.getProductId() != null && a.getOpenedAt() == null)
+                .forEach(a -> {
+                    a.initOpenedAt(LocalDate.now().minusMonths(10));
+                    accountRepository.save(a);
+                });
     }
 
     private List<Account> saveAssets(User user, Long userId, List<AssetSeed> seeds) {
