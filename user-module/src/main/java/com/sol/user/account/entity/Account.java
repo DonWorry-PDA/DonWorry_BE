@@ -51,6 +51,9 @@ public class Account {
     @Column(name = "display_number", length = 30)
     private String displayNumber;
 
+    @Column(name = "product_id")
+    private Long productId;
+
     public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
         Account account = new Account();
         account.user = user;
@@ -111,5 +114,9 @@ public class Account {
             throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE);
         }
         this.depositBalance = this.depositBalance.subtract(amount);
+    }
+
+    public void linkDepositProduct(Long productId) {
+        this.productId = productId;
     }
 }

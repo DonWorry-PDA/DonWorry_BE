@@ -15,6 +15,7 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
@@ -60,6 +61,7 @@ public class AssetMockService {
     private final InsurancePolicyRepository insurancePolicyRepository;
     private final EtfPoolProvider etfPoolProvider;
     private final LifeStabilityService lifeStabilityService;
+    private final DepositDetailClient depositDetailClient;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -142,6 +144,7 @@ public class AssetMockService {
         user.assignInvestmentPropensity(scenario.propensity());
 
         List<Account> accounts = saveAssets(user, userId, scenario.assets());
+        linkDepositProductId(accounts);
         List<Holding> holdings = saveHoldings(accounts, scenario.holdings(), scenario.stocks());
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
@@ -167,6 +170,17 @@ public class AssetMockService {
                         events.size()
                 )
         );
+    }
+
+    private void linkDepositProductId(List<Account> accounts) {
+        accounts.stream()
+                .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getProductId() == null)
+                .findFirst()
+                .ifPresent(depositAccount -> depositDetailClient.fetchFirstDepositProductId()
+                        .ifPresent(productId -> {
+                            depositAccount.linkDepositProduct(productId);
+                            accountRepository.save(depositAccount);
+                        }));
     }
 
     private List<Account> saveAssets(User user, Long userId, List<AssetSeed> seeds) {

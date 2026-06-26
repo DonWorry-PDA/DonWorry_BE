@@ -4,6 +4,8 @@ import com.sol.user.account.entity.Account;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingWithQuantityAndType;
+import com.sol.user.holding.dto.PensionHoldingProjection;
 import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
@@ -13,6 +15,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +34,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     @Query(value = """
             SELECT h.holding_id        AS holdingId,
+                   a.account_id        AS accountId,
                    h.product_id        AS productId,
                    h.evaluation_amount AS evaluationAmount,
                    a.account_type      AS accountType
@@ -46,6 +50,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     @Query(value = """
             SELECT h.holding_id        AS holdingId,
+                   a.account_id        AS accountId,
                    h.product_id        AS productId,
                    h.evaluation_amount AS evaluationAmount,
                    a.account_type      AS accountType
@@ -126,4 +131,36 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             ORDER BY SUM(h.evaluation_amount) DESC
             """, nativeQuery = true)
     List<StockDividendProjection> findStockDividendsByUserId(@Param("userId") Long userId);
+
+    @Query(value = """
+            SELECT h.product_id    AS productId,
+                   h.quantity      AS quantity,
+                   a.account_type  AS accountType
+            FROM holding h
+            JOIN account a ON h.account_id = a.account_id
+            WHERE a.user_id = :userId
+            """, nativeQuery = true)
+    List<HoldingWithQuantityAndType> findHoldingsWithQuantityAndTypeByUserId(@Param("userId") Long userId);
+
+    @Query(value = """
+            SELECT h.account_id        AS accountId,
+                   h.evaluation_amount AS evaluationAmount
+            FROM holding h
+            JOIN account a ON h.account_id = a.account_id
+            WHERE a.user_id = :userId
+              AND a.account_type IN ('IRP', 'PENSION_SAVING')
+            """, nativeQuery = true)
+    List<PensionHoldingProjection> findPensionHoldingsByUserId(@Param("userId") Long userId);
+
+    @Query(value = """
+            SELECT COALESCE(SUM(
+                CASE WHEN h.unrealized_gain_loss IS NOT NULL AND h.unrealized_gain_loss != ''
+                     THEN CAST(h.unrealized_gain_loss AS SIGNED)
+                     ELSE 0 END
+            ), 0)
+            FROM holding h
+            JOIN account a ON h.account_id = a.account_id
+            WHERE a.user_id = :userId
+            """, nativeQuery = true)
+    BigDecimal sumUnrealizedGainLossByUserId(@Param("userId") Long userId);
 }
