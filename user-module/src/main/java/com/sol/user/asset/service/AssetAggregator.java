@@ -43,13 +43,30 @@ public class AssetAggregator {
     }
 
     /**
+     * 월급 만들기 전용 집계 — 사용자가 선택UI(#115)에서 제외한 계좌·보유종목을 빼고 집계한다.
+     * 순자산·투자건강검진·은퇴시뮬은 전체 자산을 봐야 하므로 제외를 적용하지 않는 {@link #aggregate(Long)}을 쓴다.
+     * 제외 입도는 계좌(accountId)·종목(holdingId) 독립 — 계좌를 빼도 그 계좌의 보유종목은 별도 토글이라 유지된다.
+     */
+    @Transactional(readOnly = true)
+    public AssetBreakdown aggregate(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
+        return aggregateSnapshot(userId, excludedAccountIds, excludedHoldingIds).breakdown();
+    }
+
+    /**
      * {@link #aggregate}와 동일한 계산이지만, 호출부가 이미 읽은 accounts/holdings/products를
      * 재사용할 수 있도록 원본 데이터까지 함께 반환한다. 개별주 종목명처럼 {@link AssetBreakdown}이
      * 제공하지 않는 분해가 필요한 소비처(투자 건강검진 등)는 이 메서드로 DB·외부호출 중복을 피한다.
      */
     @Transactional(readOnly = true)
     public AssetSnapshot aggregateSnapshot(Long userId) {
-        List<Account> accounts = accountRepository.findByUserUserId(userId);
+        return aggregateSnapshot(userId, Set.of(), Set.of());
+    }
+
+    @Transactional(readOnly = true)
+    public AssetSnapshot aggregateSnapshot(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
+        List<Account> accounts = accountRepository.findByUserUserId(userId).stream()
+                .filter(account -> !excludedAccountIds.contains(account.getAccountId()))
+                .toList();
         BigDecimal cash = accounts.stream()
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -58,7 +75,9 @@ public class AssetAggregator {
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
+        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId).stream()
+                .filter(holding -> !excludedHoldingIds.contains(holding.getHoldingId()))
+                .toList();
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
             AssetBreakdown breakdown =

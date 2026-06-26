@@ -5,6 +5,8 @@ import com.sol.common.exception.ErrorCode;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
+import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.user.repository.UserRepository;
@@ -18,6 +20,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,8 @@ public class CashFlowDiagnosisService {
     private final HoldingRepository holdingRepository;
     private final UserRepository userRepository;
     private final ProductBatchClient productBatchClient;
+    private final SalaryAssetExclusionRepository salaryAssetExclusionRepository;
+    private final SalaryAssetMapper salaryAssetMapper;
 
     @Transactional(readOnly = true)
     public CashFlowDiagnosisResponse diagnose(Long userId) {
@@ -62,7 +67,13 @@ public class CashFlowDiagnosisService {
     }
 
     private BigDecimal calcMonthlyDividendIncome(Long userId) {
-        List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId);
+        // 월급 만들기에서 제외한 보유종목은 분배금 산출에서도 뺀다(선택UI #115 死선 해소).
+        // 국민연금은 제외 대상 자산이 아니므로 계좌 제외는 무관, 종목(HOLDING_*) 제외만 적용.
+        Set<Long> excludedHoldingIds = salaryAssetMapper.extractHoldingIds(
+                salaryAssetExclusionRepository.findAssetKeysByUserId(userId));
+        List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId).stream()
+                .filter(holding -> !excludedHoldingIds.contains(holding.getHoldingId()))
+                .toList();
         if (holdings.isEmpty()) {
             return BigDecimal.ZERO;
         }

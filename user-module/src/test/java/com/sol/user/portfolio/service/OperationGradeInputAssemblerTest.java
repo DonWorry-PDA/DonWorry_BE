@@ -4,6 +4,8 @@ import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
+import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
+import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.OperationGradeInput;
 import com.sol.user.portfolio.type.InvestmentPropensity;
@@ -21,6 +23,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -28,6 +31,9 @@ class OperationGradeInputAssemblerTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final AssetAggregator assetAggregator = mock(AssetAggregator.class);
+    private final SalaryAssetExclusionRepository salaryAssetExclusionRepository =
+            mock(SalaryAssetExclusionRepository.class);
+    private final SalaryAssetMapper salaryAssetMapper = new SalaryAssetMapper();
     private final PensionRepository pensionRepository = mock(PensionRepository.class);
     private final DebtRepository debtRepository = mock(DebtRepository.class);
     private final InsurancePolicyRepository insurancePolicyRepository = mock(InsurancePolicyRepository.class);
@@ -35,8 +41,8 @@ class OperationGradeInputAssemblerTest {
     private final SurveyService surveyService = mock(SurveyService.class);
 
     private final OperationGradeInputAssembler assembler = new OperationGradeInputAssembler(
-            userRepository, assetAggregator, pensionRepository, debtRepository,
-            insurancePolicyRepository, userGoalRepository, surveyService);
+            userRepository, assetAggregator, salaryAssetExclusionRepository, salaryAssetMapper,
+            pensionRepository, debtRepository, insurancePolicyRepository, userGoalRepository, surveyService);
 
     // ── #118-B: 증권 적합성진단 성향(User.investmentPropensity) 배선 ──────────────────
 
@@ -68,7 +74,7 @@ class OperationGradeInputAssemblerTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
         // 예수금 1억(연금 예수금 2천 포함) + 비연금 비STOCK 5천 + 연금 비STOCK 3천 + 개별주식 4천
-        given(assetAggregator.aggregate(1L)).willReturn(new AssetBreakdown(
+        given(assetAggregator.aggregate(eq(1L), any(), any())).willReturn(new AssetBreakdown(
                 BigDecimal.valueOf(100_000_000),  // cash
                 BigDecimal.valueOf(20_000_000),   // pensionCash
                 BigDecimal.valueOf(50_000_000),   // nonStockHoldingValue
@@ -101,7 +107,7 @@ class OperationGradeInputAssemblerTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
         // 증권 예수금 6억 + 종목 없음 → operatingTotal 6억, 연금 제약분 0
-        given(assetAggregator.aggregate(1L)).willReturn(
+        given(assetAggregator.aggregate(eq(1L), any(), any())).willReturn(
                 new AssetBreakdown(BigDecimal.valueOf(600_000_000), BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
 
