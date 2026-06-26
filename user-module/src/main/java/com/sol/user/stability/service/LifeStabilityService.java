@@ -29,7 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.YearMonth;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -111,7 +114,23 @@ public class LifeStabilityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
         List<Account> accounts = accountRepository.findByUserUserId(userId);
         List<InsurancePolicy> policies = insurancePolicyRepository.findByUserUserId(userId);
-        List<CashFlowEvent> events = cashFlowEventRepository.findByUserUserId(userId);
+        // 현금흐름 이벤트는 6개월치(현재월 + 과거 5개월)가 시드되므로, 월정액 지표 계산엔
+        // 가장 최근 1개월만 집계한다. 전체를 합산하면 financialIncome·essentialExpense가 ~6배로
+        // 부풀려져 충당률·필수지출·유동성 지표가 왜곡된다(#169 — #160의 6개월 거래내역 시드와 상호작용).
+        // recurring 플래그가 아닌 "최근 월(eventDate)" 기준이라 캘린더 수정(소비 recurring=false)과 무관.
+        List<CashFlowEvent> allEvents = cashFlowEventRepository.findByUserUserId(userId);
+        YearMonth latestMonth = allEvents.stream()
+                .map(CashFlowEvent::getEventDate)
+                .filter(Objects::nonNull)
+                .map(YearMonth::from)
+                .max(Comparator.naturalOrder())
+                .orElse(YearMonth.now());
+        // eventDate가 null인 행(날짜 미상)은 월 귀속이 불가하므로, 변경 전 동작을 유지하기 위해
+        // 조용히 제외하지 않고 항상 포함한다. 날짜가 있는 행만 최신 월로 스코핑해 6개월 누적 과다집계를 막는다.
+        List<CashFlowEvent> events = allEvents.stream()
+                .filter(event -> event.getEventDate() == null
+                        || YearMonth.from(event.getEventDate()).equals(latestMonth))
+                .toList();
 
         BigDecimal pensionIncome = pensionRepository.findByUserUserId(userId).stream()
                 .map(pension -> pension.getExpectedMonthlyAmount() == null
