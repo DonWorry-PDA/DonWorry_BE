@@ -54,7 +54,10 @@ public class ProductDetailMapper {
                 .high52w(etf.getHigh52w())
                 .low52w(etf.getLow52w())
                 .retirementPensionLimit(etf.getRetirementPensionLimit())
-                .personalPensionAvailable(etf.getPersonalPensionAvailable());
+                .personalPensionAvailable(etf.getPersonalPensionAvailable())
+                .prospectusUrl(etf.getProspectusUrl())
+                .simplifiedUrl(etf.getSimplifiedUrl())
+                .fundRulesUrl(etf.getFundRulesUrl());
 
         if (latestPrice != null) {
             builder.closingPrice(latestPrice.getClosingPrice())

@@ -11,6 +11,8 @@ import com.sol.user.asset.type.AssetCategory;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
+import com.sol.user.monthlysalary.entity.SalaryPlan;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.stability.dto.LifeStabilityResponse;
@@ -41,6 +43,7 @@ public class AssetHubService {
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final LifeStabilityService lifeStabilityService;
     private final AssetAggregator assetAggregator;
+    private final SalaryPlanRepository salaryPlanRepository;
 
     public AssetHubResponse getHub(Long userId) {
         AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
@@ -139,6 +142,8 @@ public class AssetHubService {
                         .achievementRate(coverageRate)
                         .targetAmount(cashFlow.getTargetMonthlyLivingCost())
                         .currentAmount(cashFlow.getMonthlyCashFlow())
+                        .hasActivePlan(salaryPlanRepository
+                                .existsByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE))
                         .build())
                 .lifeStability(buildLifeStabilityPreview(userId))
                 .investmentCheck(buildInvestmentCheckPreview(snapshot))
