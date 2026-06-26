@@ -47,9 +47,16 @@ public class InstitutionService {
                 .map(AssetConnection::getInstitutionName)
                 .collect(Collectors.toSet());
 
-        Map<String, List<String>> productsByDbName = accountRepository.findByUserUserId(userId).stream()
-                .filter(a -> Boolean.TRUE.equals(a.getExistingAccount())
-                        && ACCOUNT_TYPE_LABEL.containsKey(a.getAccountType()))
+        List<Account> existingAccounts = accountRepository.findByUserUserId(userId).stream()
+                .filter(a -> Boolean.TRUE.equals(a.getExistingAccount()))
+                .toList();
+
+        existingAccounts.stream()
+                .map(Account::getInstitutionName)
+                .forEach(connectedDbNames::add);
+
+        Map<String, List<String>> productsByDbName = existingAccounts.stream()
+                .filter(a -> ACCOUNT_TYPE_LABEL.containsKey(a.getAccountType()))
                 .collect(Collectors.groupingBy(
                         Account::getInstitutionName,
                         Collectors.mapping(a -> ACCOUNT_TYPE_LABEL.get(a.getAccountType()), Collectors.toList())
