@@ -77,6 +77,7 @@ public class AssetScheduleService {
             }
 
             long interval = proj.getDistributionIntervalMonths();
+            if (interval <= 0) continue;
             LocalDate projectedDate = proj.getLatestPaymentDate().plusMonths(interval);
             while (projectedDate.isBefore(today)) {
                 projectedDate = projectedDate.plusMonths(interval);
@@ -214,7 +215,7 @@ public class AssetScheduleService {
                     .date(maturityDate)
                     .type("DEPOSIT_MATURITY")
                     .label(label)
-                    .amount(account.getDepositBalance())
+                    .amount(account.getDepositBalance() == null ? BigDecimal.ZERO : account.getDepositBalance())
                     .estimated(false)
                     .build());
         }

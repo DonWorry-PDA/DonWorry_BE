@@ -37,9 +37,10 @@ public class AssetIncomeService {
     public AssetIncomeResponse getIncome(Long userId) {
         List<HoldingWithQuantityAndType> allHoldings =
                 holdingRepository.findHoldingsWithQuantityAndTypeByUserId(userId);
+        List<Account> accounts = accountRepository.findByUserUserId(userId);
         BigDecimal nationalPension = calcNationalPension(userId);
         BigDecimal etfDividend = calcEtfDividend(allHoldings);
-        BigDecimal depositInterest = calcDepositInterest(userId);
+        BigDecimal depositInterest = calcDepositInterest(accounts);
         BigDecimal pensionDividend = calcPensionDividend(allHoldings);
         BigDecimal unrealizedGainLoss = holdingRepository.sumUnrealizedGainLossByUserId(userId);
 
@@ -96,9 +97,7 @@ public class AssetIncomeService {
     }
 
     // 예금 이자: depositBalance × interestRate / 1200
-    private BigDecimal calcDepositInterest(Long userId) {
-        List<Account> accounts = accountRepository.findByUserUserId(userId);
-
+    private BigDecimal calcDepositInterest(List<Account> accounts) {
         List<Long> depositProductIds = accounts.stream()
                 .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getProductId() != null)
                 .map(Account::getProductId)
