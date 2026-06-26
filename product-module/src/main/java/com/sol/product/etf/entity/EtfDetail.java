@@ -62,4 +62,13 @@ public class EtfDetail {
     @Column(name = "risk_grade")
     private Integer riskGrade;
 
+    @Column(name = "prospectus_url", length = 500)
+    private String prospectusUrl;
+
+    @Column(name = "simplified_url", length = 500)
+    private String simplifiedUrl;
+
+    @Column(name = "fund_rules_url", length = 500)
+    private String fundRulesUrl;
+
 }

@@ -4,6 +4,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.product.dividend.entity.DividendHistory;
 import com.sol.product.dividend.repository.DividendHistoryRepository;
+import com.sol.product.etf.dto.EtfDocumentResponse;
 import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
@@ -46,6 +47,12 @@ public class EtfService {
     public EtfResponse getEtfByProductId(Long productId) {
         return etfDetailRepository.findByProductProductId(productId)
                 .map(this::toResponse)
+                .orElseThrow(() -> new BaseException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    public EtfDocumentResponse getEtfDocuments(String tickerCode) {
+        return etfDetailRepository.findByTickerCode(tickerCode)
+                .map(EtfDocumentResponse::from)
                 .orElseThrow(() -> new BaseException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 

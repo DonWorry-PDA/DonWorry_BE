@@ -1,6 +1,7 @@
 package com.sol.product.etf.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.product.etf.dto.EtfDocumentResponse;
 import com.sol.product.etf.dto.EtfMonthlyDividendItem;
 import com.sol.product.etf.dto.EtfPoolItem;
 import com.sol.product.etf.dto.EtfResponse;
@@ -59,6 +60,12 @@ public class EtfController {
     public ResponseEntity<ApiResponse<List<EtfMonthlyDividendItem>>> getMonthlyDividends(
             @RequestParam List<Long> productIds) {
         return ResponseEntity.ok(ApiResponse.ok(etfService.getMonthlyDividends(productIds)));
+    }
+
+    @Operation(summary = "ETF 문서 URL 조회 (투자설명서·간이투자설명서·집합투자규약)")
+    @GetMapping("/ticker/{tickerCode}/documents")
+    public ResponseEntity<ApiResponse<EtfDocumentResponse>> getEtfDocuments(@PathVariable String tickerCode) {
+        return ResponseEntity.ok(ApiResponse.ok(etfService.getEtfDocuments(tickerCode)));
     }
 
     @Operation(summary = "ETF 실시간 시세 전체 조회 (화이트리스트 26종)")
