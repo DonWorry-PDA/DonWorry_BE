@@ -354,13 +354,17 @@ public class AssetMockService {
                     scenario.monthlyLoanRepayment(), "EXPENSE", status, recurring));
         }
 
+        // 소비 거래는 일회성 내역이므로 항상 비반복(COMPLETED)으로 시드한다.
+        // 현재월 호출(recurring=true) 때 소비까지 recurring=true가 되면, 캘린더가 recurring 이벤트를
+        // 이후 모든 달로 투영해 7·8·9월…에 같은 소비가 반복 표시된다(#177). 정기 수입/고정비만
+        // recurring을 유지하고, 소비는 제 달에만 보이도록 한다.
         List<MockTransactionTemplates.TransactionTemplate> templates = scenario.transactions();
         for (int i = 0; i < templates.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = templates.get(i);
             int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
             BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
             events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
-                    amount, "EXPENSE", status, recurring));
+                    amount, "EXPENSE", "COMPLETED", false));
         }
 
         return events;
