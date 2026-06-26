@@ -23,6 +23,14 @@ import java.util.Set;
  * 총액이냐 예수금이냐"가 모듈마다 어긋났다. 마이데이터 계약은 {@code deposit_balance = 예수금(현금)만},
  * 종목값은 holding.evaluationAmount에만 존재하므로 모든 합산은 더하기다. 분류 기준은 선택 UI(#115)와
  * 동일하게 STOCK만 제외(ETF·FUND·BOND는 월급 재료에 포함).
+ *
+ * <p><b>화이트리스트 필터를 일부러 안 거는 이유(#141 정합):</b> #141 확정표는 "화이트리스트 ETF 26종만
+ * 재료, off-whitelist ETF(타사 TIGER·KODEX 등)는 운용대상 외"였다. 그러나 현재 보유 ETF는 시드가 SOL
+ * (화이트리스트) 풀로만 구성돼({@code AssetMockService.saveHoldings}가 풀 밖 티커를 throw) off-whitelist
+ * ETF가 데이터상 존재하지 않으므로 "STOCK만 제외" ≡ "화이트리스트 26종"이라 결과가 동일하다. 즉 여기
+ * 화이트리스트 ticker 대조를 추가해도 현 데이터에선 no-op다 — 실 마이데이터로 타사 ETF가 유입되는 시점에
+ * 풀 확대 정책과 함께 후속으로 다룬다(섣불리 걸면 타사 ETF 보유자의 월급 재료가 사라짐). 이 STOCK-only를
+ * "버그"로 보고 화이트리스트 필터를 도로 걸지 말 것.
  */
 @Component
 @RequiredArgsConstructor
@@ -43,13 +51,30 @@ public class AssetAggregator {
     }
 
     /**
+     * 월급 만들기 전용 집계 — 사용자가 선택UI(#115)에서 제외한 계좌·보유종목을 빼고 집계한다.
+     * 순자산·투자건강검진·은퇴시뮬은 전체 자산을 봐야 하므로 제외를 적용하지 않는 {@link #aggregate(Long)}을 쓴다.
+     * 제외 입도는 계좌(accountId)·종목(holdingId) 독립 — 계좌를 빼도 그 계좌의 보유종목은 별도 토글이라 유지된다.
+     */
+    @Transactional(readOnly = true)
+    public AssetBreakdown aggregate(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
+        return aggregateSnapshot(userId, excludedAccountIds, excludedHoldingIds).breakdown();
+    }
+
+    /**
      * {@link #aggregate}와 동일한 계산이지만, 호출부가 이미 읽은 accounts/holdings/products를
      * 재사용할 수 있도록 원본 데이터까지 함께 반환한다. 개별주 종목명처럼 {@link AssetBreakdown}이
      * 제공하지 않는 분해가 필요한 소비처(투자 건강검진 등)는 이 메서드로 DB·외부호출 중복을 피한다.
      */
     @Transactional(readOnly = true)
     public AssetSnapshot aggregateSnapshot(Long userId) {
-        List<Account> accounts = accountRepository.findByUserUserId(userId);
+        return aggregateSnapshot(userId, Set.of(), Set.of());
+    }
+
+    @Transactional(readOnly = true)
+    public AssetSnapshot aggregateSnapshot(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
+        List<Account> accounts = accountRepository.findByUserUserId(userId).stream()
+                .filter(account -> !excludedAccountIds.contains(account.getAccountId()))
+                .toList();
         BigDecimal cash = accounts.stream()
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -58,7 +83,9 @@ public class AssetAggregator {
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId);
+        List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId).stream()
+                .filter(holding -> !excludedHoldingIds.contains(holding.getHoldingId()))
+                .toList();
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
             AssetBreakdown breakdown =

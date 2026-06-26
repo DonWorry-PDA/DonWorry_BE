@@ -60,9 +60,11 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             """, nativeQuery = true)
     List<HoldingWithProduct> findHoldingsWithAccountTypeByUserId(@Param("userId") Long userId);
 
-    // 사용자의 전체 보유 종목 (product_id, quantity) — product-module REST로 ETF 여부 판별 후 월 분배금 계산에 사용
+    // 사용자의 전체 보유 종목 (holding_id, product_id, quantity) — product-module REST로 ETF 여부 판별 후 월 분배금 계산에 사용.
+    // holding_id는 월급 제외목록(HOLDING_*) 필터에 사용.
     @Query(value = """
-            SELECT h.product_id AS productId,
+            SELECT h.holding_id AS holdingId,
+                   h.product_id AS productId,
                    h.quantity   AS quantity
             FROM holding h
             JOIN account a ON h.account_id = a.account_id
