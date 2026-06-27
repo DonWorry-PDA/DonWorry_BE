@@ -29,8 +29,7 @@ public class SalaryAssetMapper {
     }
 
     public AssetItemDto toHoldingItem(HoldingWithProduct holding, ProductBatchItem product, Set<String> excludedKeys) {
-        // 제외키는 productId 기반 — 재동기화로 holding이 삭제·재삽입돼 holdingId가 바뀌어도 제외 유지.
-        String assetKey = createHoldingAssetKey(holding.getProductId());
+        String assetKey = createHoldingAssetKey(holding.getHoldingId());
         String productName = product != null ? product.productName() : null;
         String productType = product != null ? product.productType() : null;
 
@@ -47,9 +46,8 @@ public class SalaryAssetMapper {
         return ACCOUNT_ASSET_KEY_PREFIX + accountId;
     }
 
-    /** 보유종목 제외키는 productId 기반(holdingId는 재동기화 시 재발급되어 불안정). */
-    public String createHoldingAssetKey(Long productId) {
-        return HOLDING_ASSET_KEY_PREFIX + productId;
+    public String createHoldingAssetKey(Long holdingId) {
+        return HOLDING_ASSET_KEY_PREFIX + holdingId;
     }
 
     /** 제외목록(assetKey)에서 계좌 ID만 추출. 월급 집계 필터({@code AssetAggregator})가 키 포맷을 모르게 ID로 넘기기 위함. */
@@ -57,8 +55,8 @@ public class SalaryAssetMapper {
         return extractIds(assetKeys, ACCOUNT_ASSET_KEY_PREFIX);
     }
 
-    /** 제외목록(assetKey)에서 보유종목 productId만 추출. */
-    public Set<Long> extractExcludedProductIds(Set<String> assetKeys) {
+    /** 제외목록(assetKey)에서 보유종목 ID만 추출. */
+    public Set<Long> extractHoldingIds(Set<String> assetKeys) {
         return extractIds(assetKeys, HOLDING_ASSET_KEY_PREFIX);
     }
 

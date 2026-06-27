@@ -148,7 +148,7 @@ public class SalaryAssetService {
             allHoldings.stream()
                     .filter(h -> !isStockProduct(productMap.get(h.getProductId())))
                     .forEach(h -> availableAssetKeys.add(
-                            salaryAssetMapper.createHoldingAssetKey(h.getProductId())));
+                            salaryAssetMapper.createHoldingAssetKey(h.getHoldingId())));
         }
 
         return availableAssetKeys;
