@@ -61,4 +61,34 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             """)
     BigDecimal sumMonthlyFinancialIncomeByUserId(@Param("userId") Long userId);
 
+    /** 특정 기간 내 eventType별 금액 합계. 월간 리포트 배당/이자 항목 분리 집계용. */
+    @Query("""
+            SELECT COALESCE(SUM(e.amount), 0)
+            FROM CashFlowEvent e
+            WHERE e.user.userId = :userId
+              AND e.eventType = :eventType
+              AND e.eventDate BETWEEN :start AND :end
+            """)
+    BigDecimal sumAmountByEventTypeInPeriod(
+            @Param("userId") Long userId,
+            @Param("eventType") String eventType,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
+    /** 당월 recurring 고정지출 합계. 다음 달 나갈 돈 예측 용도(당월 고정지출 = 다음 달 예상 고정지출). */
+    @Query("""
+            SELECT COALESCE(SUM(e.amount), 0)
+            FROM CashFlowEvent e
+            WHERE e.user.userId = :userId
+              AND e.flowType = 'EXPENSE'
+              AND e.recurring = true
+              AND e.eventDate BETWEEN :start AND :end
+            """)
+    BigDecimal sumRecurringExpenseInPeriod(
+            @Param("userId") Long userId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
 }
