@@ -36,7 +36,7 @@ class OnboardingServiceTest {
         when(userGoalRepository.save(any(UserGoal.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OnboardingResponse response = onboardingService.complete(
-                1L, new OnboardingRequest(60, true, false, null, null));
+                1L, new OnboardingRequest(60, true, false, null, null, null, null));
 
         assertThat(response.monthlyTargetLivingCost()).isEqualByComparingTo("2200000");
         assertThat(response.monthlyExpectedMedicalCost()).isEqualByComparingTo("350000");
@@ -55,7 +55,7 @@ class OnboardingServiceTest {
 
         OnboardingResponse response = onboardingService.complete(
                 1L, new OnboardingRequest(null, null, null,
-                        BigDecimal.valueOf(2_200_000), BigDecimal.valueOf(350_000)));
+                        BigDecimal.valueOf(2_200_000), BigDecimal.valueOf(350_000), null, null));
 
         assertThat(existing.getMonthlyTargetLivingCost()).isEqualByComparingTo("2200000");
         assertThat(existing.getMonthlyExpectedMedicalCost()).isEqualByComparingTo("350000");

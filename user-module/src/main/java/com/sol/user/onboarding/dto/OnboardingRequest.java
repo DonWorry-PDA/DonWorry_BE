@@ -11,6 +11,8 @@ public record OnboardingRequest(
         Boolean retired,
         Boolean nationalPensionReceiving,
         BigDecimal monthlyTargetLivingCost,
-        BigDecimal monthlyExpectedMedicalCost
+        BigDecimal monthlyExpectedMedicalCost,
+        Boolean thirdPartyAgreed,
+        Boolean marketingAgreed
 ) {
 }

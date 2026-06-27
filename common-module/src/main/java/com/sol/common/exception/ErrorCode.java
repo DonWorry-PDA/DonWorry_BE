@@ -58,7 +58,10 @@ public enum ErrorCode {
     // Trade
     BROKERAGE_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "TRADE_001", "증권 계좌를 찾을 수 없습니다."),
     INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "TRADE_002", "잔고가 부족합니다."),
-    PRICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "TRADE_003", "현재가를 조회할 수 없습니다.");
+    PRICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "TRADE_003", "현재가를 조회할 수 없습니다."),
+
+    // Terms
+    INVALID_TERM_ID(HttpStatus.BAD_REQUEST, "TERMS_001", "수정할 수 없는 항목입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

@@ -50,6 +50,18 @@ public class User {
     @Column(name = "onboarding_completed", nullable = false)
     private Boolean onboardingCompleted = false;
 
+    @Column(name = "third_party_agreed", nullable = false)
+    private Boolean thirdPartyAgreed = false;
+
+    @Column(name = "third_party_agreed_at")
+    private LocalDateTime thirdPartyAgreedAt;
+
+    @Column(name = "marketing_agreed", nullable = false)
+    private Boolean marketingAgreed = false;
+
+    @Column(name = "marketing_agreed_at")
+    private LocalDateTime marketingAgreedAt;
+
     /**
      * 증권사 적합성진단(KYC) 투자자성향 — 우리 운용등급과 별개의 외부 보유값.
      * 앱이 산출하지 않으며 마이데이터·증권 연동으로 채워진다(writer는 연동 이슈에서 추가).
@@ -66,6 +78,27 @@ public class User {
     /** 증권 적합성진단(KYC) 성향 반영 — 마이데이터/증권 연동(현재는 목업 시더)이 호출하는 진입점. */
     public void assignInvestmentPropensity(InvestmentPropensity investmentPropensity) {
         this.investmentPropensity = investmentPropensity;
+    }
+
+    public void updateTermConsent(String termId, boolean agreed, LocalDateTime now) {
+        if ("thirdParty".equals(termId)) {
+            this.thirdPartyAgreed = agreed;
+            this.thirdPartyAgreedAt = agreed ? now : null;
+        } else if ("marketing".equals(termId)) {
+            this.marketingAgreed = agreed;
+            this.marketingAgreedAt = agreed ? now : null;
+        }
+    }
+
+    public void initTermConsents(Boolean thirdPartyAgreed, Boolean marketingAgreed, LocalDateTime now) {
+        if (thirdPartyAgreed != null) {
+            this.thirdPartyAgreed = thirdPartyAgreed;
+            this.thirdPartyAgreedAt = thirdPartyAgreed ? now : null;
+        }
+        if (marketingAgreed != null) {
+            this.marketingAgreed = marketingAgreed;
+            this.marketingAgreedAt = marketingAgreed ? now : null;
+        }
     }
 
     public void updateProfile(Integer age, Boolean retired,
