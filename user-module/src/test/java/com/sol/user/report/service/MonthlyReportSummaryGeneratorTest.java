@@ -22,7 +22,7 @@ class MonthlyReportSummaryGeneratorTest {
     @Test
     void 배당증가이면_늘었어요_문구() {
         List<String> lines = generator.generate(BigDecimal.valueOf(100_000), BigDecimal.valueOf(12.4), 75, true);
-        assertThat(lines.get(0)).contains("12%").contains("늘었어요");
+        assertThat(lines.get(0)).contains("12.4%").contains("늘었어요");
     }
 
     @Test
@@ -90,9 +90,16 @@ class MonthlyReportSummaryGeneratorTest {
     }
 
     @Test
-    void 배당_증가율_반올림_소수점제거() {
-        // 12.45 → 반올림 → 12%
+    void 배당_증가율_소수점1자리_표시() {
+        // 12.45 → setScale(1, HALF_UP) → 12.5%
         List<String> lines = generator.generate(BigDecimal.valueOf(100_000), new BigDecimal("12.45"), 75, true);
-        assertThat(lines.get(0)).contains("12%");
+        assertThat(lines.get(0)).contains("12.5%");
+    }
+
+    @Test
+    void 배당_증가율_정수이면_소수점_생략() {
+        // 10.0 → stripTrailingZeros → 10%
+        List<String> lines = generator.generate(BigDecimal.valueOf(100_000), new BigDecimal("10.0"), 75, true);
+        assertThat(lines.get(0)).contains("10%").doesNotContain("10.0%");
     }
 }

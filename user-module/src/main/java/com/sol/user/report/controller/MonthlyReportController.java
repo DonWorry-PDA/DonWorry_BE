@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 
 @Tag(name = "월간 리포트", description = "자산 변화·배당·소비·다음 달 미리보기를 담은 월간 리포트 API")
@@ -38,7 +39,7 @@ public class MonthlyReportController {
             @RequestParam(required = false) String month) {
         YearMonth ym;
         try {
-            ym = (month != null && !month.isBlank()) ? YearMonth.parse(month) : YearMonth.now();
+            ym = (month != null && !month.isBlank()) ? YearMonth.parse(month) : YearMonth.now(ZoneId.of("Asia/Seoul"));
         } catch (DateTimeParseException e) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }

@@ -75,13 +75,14 @@ public class MonthlyReportService {
         String judgment = calcJudgment(spendingRatio);
 
         // 다음 달 미리보기
+        YearMonth nextYm = ym.plusMonths(1);
         BigDecimal nextPension = pensionRepository
                 .findMonthlyAmount(userId, NATIONAL_PENSION_TYPE)
                 .orElse(BigDecimal.ZERO);
         BigDecimal nextDividend = calcMonthlyEtfDividend(userId);
         BigDecimal incomingTotal = nextPension.add(nextDividend);
         BigDecimal outgoingTotal = cashFlowEventRepository
-                .sumRecurringExpenseInPeriod(userId, start, end);
+                .sumRecurringExpenseInPeriod(userId, nextYm.atDay(1), nextYm.atEndOfMonth());
         BigDecimal currentBalance = accountRepository.findByUserUserId(userId).stream()
                 .map(Account::getDepositBalance)
                 .map(b -> b == null ? BigDecimal.ZERO : b)

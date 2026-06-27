@@ -29,7 +29,7 @@ public record MonthlyReportResponse(
             BigDecimal expenseAmount,
             BigDecimal incomeAmount,
             String judgment,     // "적정" / "주의" / "과다"
-            int spendingRatio    // expense / income × 100 (income=0이면 0)
+            int spendingRatio    // expense / income × 100. income=0이면 expense>0 → 999, 둘 다 0 → 0
     ) {}
 
     public record NextMonthPreviewSection(

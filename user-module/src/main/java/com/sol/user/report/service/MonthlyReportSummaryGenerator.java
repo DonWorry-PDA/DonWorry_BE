@@ -3,6 +3,7 @@ package com.sol.user.report.service;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,7 +43,7 @@ public class MonthlyReportSummaryGenerator {
         if (dividendChangeRate == null) {
             return "배당금이 꾸준히 들어오고 있어요.";
         }
-        int rate = dividendChangeRate.abs().setScale(0, java.math.RoundingMode.HALF_UP).intValue();
+        String rate = dividendChangeRate.abs().setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
         if (dividendChangeRate.signum() > 0) {
             return "배당금이 지난달보다 " + rate + "% 늘었어요.";
         }
