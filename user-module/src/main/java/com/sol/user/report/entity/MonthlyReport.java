@@ -26,6 +26,9 @@ public class MonthlyReport {
     @Column(name = "current_month", length = 7)
     private String currentMonth;
 
+    @Column(name = "total_asset", precision = 18, scale = 2)
+    private BigDecimal totalAsset;
+
     @Column(name = "asset_change_amount", precision = 18, scale = 2)
     private BigDecimal assetChangeAmount;
 
@@ -46,4 +49,17 @@ public class MonthlyReport {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    public static MonthlyReport snapshot(User user, String month, BigDecimal totalAsset) {
+        MonthlyReport r = new MonthlyReport();
+        r.user = user;
+        r.currentMonth = month;
+        r.totalAsset = totalAsset;
+        r.createdAt = LocalDateTime.now();
+        return r;
+    }
+
+    public void updateTotalAsset(BigDecimal totalAsset) {
+        this.totalAsset = totalAsset;
+    }
 }
