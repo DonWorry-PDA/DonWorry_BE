@@ -17,6 +17,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -76,6 +77,8 @@ public class Consultation extends BaseEntity {
             name = "consultation_context_topic",
             joinColumns = @JoinColumn(name = "consultation_id"))
     @Column(name = "content", length = 200)
+    // 목록 조회 시 상담별 lazy 로딩(N+1)을 배치로 합쳐 쿼리 수를 줄인다.
+    @BatchSize(size = 20)
     private List<String> contextTopics = new ArrayList<>();
 
     @Builder
