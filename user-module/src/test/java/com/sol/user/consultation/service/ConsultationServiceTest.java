@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,7 +49,7 @@ class ConsultationServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         ConsultationResponse response = service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 7L));
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 7L, null, null));
 
         ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
         verify(consultationRepository).save(captor.capture());
@@ -64,9 +65,82 @@ class ConsultationServiceTest {
     }
 
     @Test
+    void createWithoutTopicUsesTypeDefaultTitle() {
+        when(consultationRepository.save(any(Consultation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null));
+
+        ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
+        verify(consultationRepository).save(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo(ConsultType.PB.getDefaultTitle());
+    }
+
+    @Test
+    void createWithTopicAndContextTopicsStoresThem() {
+        when(consultationRepository.save(any(Consultation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConsultationResponse response = service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null,
+                        "국민연금 연기 비교 상담",
+                        List.of("연기율별 수령액 비교", "연기 시 손익분기 시점")));
+
+        ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
+        verify(consultationRepository).save(captor.capture());
+        Consultation saved = captor.getValue();
+        assertThat(saved.getTitle()).isEqualTo("국민연금 연기 비교 상담");
+        assertThat(saved.getContextTopics()).containsExactly("연기율별 수령액 비교", "연기 시 손익분기 시점");
+        assertThat(response.contextTopics()).containsExactly("연기율별 수령액 비교", "연기 시 손익분기 시점");
+    }
+
+    @Test
+    void createDropsBlankContextTopics() {
+        when(consultationRepository.save(any(Consultation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null,
+                        Arrays.asList("연기율별 수령액 비교", "  ", null)));
+
+        ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
+        verify(consultationRepository).save(captor.capture());
+        assertThat(captor.getValue().getContextTopics()).containsExactly("연기율별 수령액 비교");
+    }
+
+    @Test
+    void createWithTooLongTopicThrows() {
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null,
+                        "a".repeat(101), null)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void createWithTooManyContextTopicsThrows() {
+        List<String> tooMany = java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> "주제" + i).toList();
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, tooMany)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void createWithTooLongContextTopicThrows() {
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null,
+                        List.of("a".repeat(201)))))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
     void createWithNullTypeThrows() {
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(null, LocalDateTime.now(), null)))
+                new ConsultationCreateRequest(null, LocalDateTime.now(), null, null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -74,7 +148,7 @@ class ConsultationServiceTest {
     @Test
     void createWithPastScheduleThrows() {
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().minusDays(1), null)))
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().minusDays(1), null, null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }

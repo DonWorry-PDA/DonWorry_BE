@@ -30,6 +30,9 @@ import java.util.stream.Collectors;
 public class ConsultationService {
 
     private static final int MAX_MEMO_LENGTH = 1000;
+    private static final int MAX_TOPIC_LENGTH = 100;
+    private static final int MAX_CONTEXT_TOPICS = 10;
+    private static final int MAX_CONTEXT_TOPIC_LENGTH = 200;
 
     private final ConsultationRepository consultationRepository;
     private final ConsultationSummaryRepository consultationSummaryRepository;
@@ -43,10 +46,12 @@ public class ConsultationService {
         requireFutureSchedule(request.scheduledAt());
         ConsultType type = request.consultType();
         ConsultMethod method = defaultMethod(type);
+        String title = resolveTitle(type, request.topic());
+        List<String> contextTopics = sanitizeContextTopics(request.contextTopics());
 
         Consultation saved = consultationRepository.save(Consultation.builder()
                 .userId(userId)
-                .title(type.getDefaultTitle())
+                .title(title)
                 .consultType(type)
                 .status(ConsultStatus.RESERVED)
                 .scheduledAt(request.scheduledAt())
@@ -54,9 +59,38 @@ public class ConsultationService {
                 .branchName(method == ConsultMethod.FACE_TO_FACE ? defaultBranch(type) : null)
                 .counselorName(defaultCounselor(type))
                 .planId(request.planId())
+                .contextTopics(contextTopics)
                 .build());
 
         return ConsultationResponse.from(saved, false);
+    }
+
+    /** topic이 있으면 제목으로, 없으면 유형별 기본 제목으로 폴백. 길이 초과 시 거부. */
+    private String resolveTitle(ConsultType type, String topic) {
+        if (topic == null || topic.isBlank()) {
+            return type.getDefaultTitle();
+        }
+        String trimmed = topic.trim();
+        if (trimmed.length() > MAX_TOPIC_LENGTH) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        return trimmed;
+    }
+
+    /** 다룰 내용 정제 — null/blank 항목 제거, 개수·길이 제한 검증. */
+    private List<String> sanitizeContextTopics(List<String> contextTopics) {
+        if (contextTopics == null || contextTopics.isEmpty()) {
+            return List.of();
+        }
+        List<String> cleaned = contextTopics.stream()
+                .filter(t -> t != null && !t.isBlank())
+                .map(String::trim)
+                .toList();
+        if (cleaned.size() > MAX_CONTEXT_TOPICS
+                || cleaned.stream().anyMatch(t -> t.length() > MAX_CONTEXT_TOPIC_LENGTH)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        return cleaned;
     }
 
     public List<ConsultationResponse> getMyConsultations(Long userId) {
