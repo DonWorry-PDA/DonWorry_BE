@@ -5,6 +5,8 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
 import com.sol.user.mydata.dto.ConnectedInstitutionCountResponse;
+import com.sol.user.mydata.dto.ConnectedInstitutionResponse;
+import com.sol.user.mydata.dto.ConnectedInstitutionsResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
 import com.sol.user.user.repository.UserRepository;
 
@@ -51,6 +53,49 @@ class InstitutionServiceTest {
         ConnectedInstitutionCountResponse response = institutionService.getConnectedInstitutionCount(1L);
 
         assertThat(response.connectedInstitutionCount()).isEqualTo(5);
+    }
+
+    @Test
+    void connectedInstitutionsMergesMultiCategoryAndMatchesCount() {
+        // 온보딩 mock과 동일한 6행: 신한은행 BANK+LOAN → 1행 병합, distinct 5 (#211)
+        when(assetConnectionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                conn("신한은행", "BANK"),
+                conn("신한투자증권", "SECURITIES"),
+                conn("국민연금공단", "PENSION"),
+                conn("신한라이프", "INSURANCE"),
+                conn("신한카드", "CARD"),
+                conn("신한은행", "LOAN")
+        ));
+
+        ConnectedInstitutionsResponse response = institutionService.getConnectedInstitutions(1L);
+
+        // 길이 == connected-count(5) 불변식: count는 항상 institutions.size()와 같다
+        assertThat(response.institutions()).hasSize(5);
+        assertThat(response.connectedInstitutionCount()).isEqualTo(response.institutions().size());
+
+        // 신한은행은 BANK+LOAN이 1행으로 합쳐지고 대표 category는 우선순위 높은 BANK
+        assertThat(response.institutions())
+                .filteredOn(i -> "신한은행".equals(i.name()))
+                .singleElement()
+                .satisfies(i -> assertThat(i.category()).isEqualTo("BANK"));
+
+        // 정렬: 은행·증권 우선 → 연금·보험·카드
+        assertThat(response.institutions()).extracting(ConnectedInstitutionResponse::category)
+                .containsExactly("BANK", "SECURITIES", "PENSION", "INSURANCE", "CARD");
+
+        // 모든 항목에 렌더용 메타가 비어있지 않다(카탈로그 매칭 + category 폴백 양쪽)
+        assertThat(response.institutions()).allSatisfy(i -> {
+            assertThat(i.status()).isEqualTo("CONNECTED");
+            assertThat(i.label()).isNotBlank();
+            assertThat(i.brandColor()).isNotBlank();
+            assertThat(i.labelColor()).isNotBlank();
+        });
+
+        // 카탈로그에 없는 연금은 category 폴백 라벨("연금")을 쓴다
+        assertThat(response.institutions())
+                .filteredOn(i -> "국민연금공단".equals(i.name()))
+                .singleElement()
+                .satisfies(i -> assertThat(i.label()).isEqualTo("연금"));
     }
 
     @Test
