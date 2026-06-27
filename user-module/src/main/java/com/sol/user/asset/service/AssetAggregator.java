@@ -53,11 +53,11 @@ public class AssetAggregator {
     /**
      * 월급 만들기 전용 집계 — 사용자가 선택UI(#115)에서 제외한 계좌·보유종목을 빼고 집계한다.
      * 순자산·투자건강검진·은퇴시뮬은 전체 자산을 봐야 하므로 제외를 적용하지 않는 {@link #aggregate(Long)}을 쓴다.
-     * 제외 입도는 계좌(accountId)·종목(holdingId) 독립 — 계좌를 빼도 그 계좌의 보유종목은 별도 토글이라 유지된다.
+     * 제외 입도는 계좌(accountId)·종목(productId) 독립 — 계좌를 빼도 그 계좌의 보유종목은 별도 토글이라 유지된다.
      */
     @Transactional(readOnly = true)
-    public AssetBreakdown aggregate(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
-        return aggregateSnapshot(userId, excludedAccountIds, excludedHoldingIds).breakdown();
+    public AssetBreakdown aggregate(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedProductIds) {
+        return aggregateSnapshot(userId, excludedAccountIds, excludedProductIds).breakdown();
     }
 
     /**
@@ -71,7 +71,7 @@ public class AssetAggregator {
     }
 
     @Transactional(readOnly = true)
-    public AssetSnapshot aggregateSnapshot(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedHoldingIds) {
+    public AssetSnapshot aggregateSnapshot(Long userId, Set<Long> excludedAccountIds, Set<Long> excludedProductIds) {
         List<Account> accounts = accountRepository.findByUserUserId(userId).stream()
                 .filter(account -> !excludedAccountIds.contains(account.getAccountId()))
                 .toList();
@@ -84,7 +84,7 @@ public class AssetAggregator {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<HoldingWithProduct> holdings = holdingRepository.findHoldingsWithAccountTypeByUserId(userId).stream()
-                .filter(holding -> !excludedHoldingIds.contains(holding.getHoldingId()))
+                .filter(holding -> !excludedProductIds.contains(holding.getProductId()))
                 .toList();
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
