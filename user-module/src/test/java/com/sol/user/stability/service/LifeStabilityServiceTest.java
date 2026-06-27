@@ -6,6 +6,7 @@ import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
@@ -29,6 +30,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +45,7 @@ class LifeStabilityServiceTest {
     private DebtRepository debtRepository;
     private InsurancePolicyRepository insurancePolicyRepository;
     private CashFlowEventRepository cashFlowEventRepository;
+    private EtfDividendCalculator etfDividendCalculator;
     private LifeStabilityService service;
 
     @BeforeEach
@@ -54,6 +57,9 @@ class LifeStabilityServiceTest {
         debtRepository = mock(DebtRepository.class);
         insurancePolicyRepository = mock(InsurancePolicyRepository.class);
         cashFlowEventRepository = mock(CashFlowEventRepository.class);
+        etfDividendCalculator = mock(EtfDividendCalculator.class);
+        // 배당은 보유ETF 기반 단일 출처(#216). 기본 0, 충당률 검증 테스트에서 개별 stub.
+        lenient().when(etfDividendCalculator.monthlyDividend(any())).thenReturn(BigDecimal.ZERO);
         service = new LifeStabilityService(
                 new LifeStabilityCalculator(),
                 new LifeStabilityMessageGenerator(),
@@ -63,7 +69,8 @@ class LifeStabilityServiceTest {
                 pensionRepository,
                 debtRepository,
                 insurancePolicyRepository,
-                cashFlowEventRepository
+                cashFlowEventRepository,
+                etfDividendCalculator
         );
     }
 
@@ -89,11 +96,12 @@ class LifeStabilityServiceTest {
         ));
         when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
                 event(user, "INTEREST", "INCOME", 48_000),
-                event(user, "DIVIDEND", "INCOME", 100_000),
                 event(user, "MAINTENANCE", "EXPENSE", 180_000),
                 event(user, "INSURANCE", "EXPENSE", 200_000),
                 event(user, "CARD", "EXPENSE", 1_400_000)
         ));
+        // 배당은 보유ETF 기반(#216) — financialIncome = 이자 48,000 + 배당 100,000
+        when(etfDividendCalculator.monthlyDividend(1L)).thenReturn(money(100_000));
         when(stabilityScoreRepository.save(any(StabilityScore.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -164,17 +172,17 @@ class LifeStabilityServiceTest {
         LocalDate lastMonth = base.minusMonths(1);
         when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
                 dated(user, "INTEREST", "INCOME", 48_000, thisMonth),
-                dated(user, "DIVIDEND", "INCOME", 100_000, thisMonth),
                 dated(user, "MAINTENANCE", "EXPENSE", 180_000, thisMonth),
                 dated(user, "INSURANCE", "EXPENSE", 200_000, thisMonth),
                 dated(user, "CARD", "EXPENSE", 1_400_000, thisMonth),
                 // 과거월(동일 값) — 집계에서 제외되어야 한다
                 dated(user, "INTEREST", "INCOME", 48_000, lastMonth),
-                dated(user, "DIVIDEND", "INCOME", 100_000, lastMonth),
                 dated(user, "MAINTENANCE", "EXPENSE", 180_000, lastMonth),
                 dated(user, "INSURANCE", "EXPENSE", 200_000, lastMonth),
                 dated(user, "CARD", "EXPENSE", 1_400_000, lastMonth)
         ));
+        // 배당은 보유ETF 기반(#216) — 월 변동 없음
+        when(etfDividendCalculator.monthlyDividend(1L)).thenReturn(money(100_000));
         when(stabilityScoreRepository.save(any(StabilityScore.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -203,7 +211,7 @@ class LifeStabilityServiceTest {
         ));
         when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
                 dated(user, "INTEREST", "INCOME", 48_000, LocalDate.now()),
-                dated(user, "DIVIDEND", "INCOME", 100_000, null)   // 날짜 미상 — 집계에 포함돼야 함
+                dated(user, "INTEREST", "INCOME", 100_000, null)   // 날짜 미상 — 집계에 포함돼야 함
         ));
         when(stabilityScoreRepository.save(any(StabilityScore.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

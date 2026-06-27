@@ -45,8 +45,6 @@ public class MonthlyReportService {
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
         YearMonth prevYm = ym.minusMonths(1);
-        LocalDate prevStart = prevYm.atDay(1);
-        LocalDate prevEnd = prevYm.atEndOfMonth();
 
         // 자산 변화
         BigDecimal currentTotal = assetAggregator.aggregate(userId).grossTotal();
@@ -58,11 +56,10 @@ public class MonthlyReportService {
         // 연금·배당·이자 (이번 달 실제 수령액)
         BigDecimal receivedPension = cashFlowEventRepository
                 .sumAmountByEventTypeInPeriod(userId, "PENSION", start, end);
-        BigDecimal dividendAmount = cashFlowEventRepository
-                .sumAmountByEventTypeInPeriod(userId, "DIVIDEND", start, end);
-        BigDecimal prevDividend = cashFlowEventRepository
-                .sumAmountByEventTypeInPeriod(userId, "DIVIDEND", prevStart, prevEnd);
-        BigDecimal dividendChangeRate = calcChangeRate(dividendAmount, prevDividend);
+        // 배당은 시드 이벤트가 아니라 보유 ETF 기반 단일 출처로 계산한다(#216).
+        // 보유 기준이라 월별 변동이 없어 전월 대비 증감률은 표시하지 않는다(null).
+        BigDecimal dividendAmount = calcMonthlyEtfDividend(userId);
+        BigDecimal dividendChangeRate = null;
         BigDecimal interestAmount = cashFlowEventRepository
                 .sumAmountByEventTypeInPeriod(userId, "INTEREST", start, end);
 
@@ -99,15 +96,6 @@ public class MonthlyReportService {
                 mapper.toSpending(expenseAmount, incomeAmount, judgment, spendingRatio),
                 mapper.toNextMonthPreview(incomingTotal, nextPension, nextDividend, outgoingTotal, balanceSufficient)
         );
-    }
-
-    private BigDecimal calcChangeRate(BigDecimal current, BigDecimal previous) {
-        if (previous == null || previous.signum() == 0) {
-            return null;
-        }
-        return current.subtract(previous)
-                .multiply(BigDecimal.valueOf(100))
-                .divide(previous, 1, RoundingMode.HALF_UP);
     }
 
     private int calcSpendingRatio(BigDecimal expense, BigDecimal income) {

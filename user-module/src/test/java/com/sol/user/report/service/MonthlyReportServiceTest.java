@@ -96,11 +96,13 @@ class MonthlyReportServiceTest {
                 eq(USER_ID), eq("PENSION"), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(won(1_200_000));
         when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), eq("DIVIDEND"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(won(100_000), won(88_000)); // 당월, 전월
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
                 eq(USER_ID), eq("INTEREST"), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(won(32_450));
+        // 배당은 보유ETF 기반 단일 출처(#216): 10주 × 10,000 = 100,000
+        when(holdingRepository.findAllHoldingsByUserId(USER_ID))
+                .thenReturn(List.of(etfHolding(1L, new BigDecimal("10"))));
+        when(productBatchClient.fetchEtfMonthlyDividends(anyList()))
+                .thenReturn(Map.of(1L, new BigDecimal("10000")));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
@@ -119,28 +121,13 @@ class MonthlyReportServiceTest {
     }
 
     @Test
-    void 전월배당이_0이면_변화율이_null() {
+    void 배당_변화율은_보유ETF_기반이라_표시하지_않는다() {
         stubDefaults();
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), eq("DIVIDEND"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(won(100_000), BigDecimal.ZERO);
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
+        // 배당이 보유ETF 기반(월 변동 없음)으로 바뀌어 전월 대비 증감률은 표시하지 않는다(#216).
         assertThat(response.income().dividendChangeRate()).isNull();
-    }
-
-    @Test
-    void 배당_변화율을_소수점1자리로_계산한다() {
-        stubDefaults();
-        // 100_000 / 88_000 - 1 = 13.6...% → 13.6
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), eq("DIVIDEND"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(won(100_000), won(88_000));
-
-        MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
-
-        assertThat(response.income().dividendChangeRate()).isEqualByComparingTo("13.6");
     }
 
     // ─── 소비 ─────────────────────────────────────────────────────
