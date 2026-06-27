@@ -8,6 +8,7 @@ import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
 import com.sol.user.holding.repository.HoldingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -152,6 +153,33 @@ class CalendarQueryServiceTest {
         assertThat(event.estimated()).isTrue();
         assertThat(schedule.estimated()).isTrue();
         assertThat(schedule.title()).isEqualTo("SOL 미국배당다우존스 예상 분배금");
+    }
+
+    @Test
+    void showsActualDividendPaymentAsConfirmedOnPaymentDate() {
+        LocalDate from = LocalDate.of(2026, 6, 1);
+        LocalDate to = LocalDate.of(2026, 6, 30);
+        HoldingDividendPaymentProjection input = mock(HoldingDividendPaymentProjection.class);
+        when(input.getProductId()).thenReturn(100L);
+        when(input.getProductName()).thenReturn("SOL 미국배당다우존스");
+        when(input.getQuantity()).thenReturn(BigDecimal.valueOf(5000));
+        when(input.getAmountPerUnit()).thenReturn(new BigDecimal("33.00"));
+        when(input.getPaymentDate()).thenReturn(LocalDate.of(2026, 6, 3));
+        when(cashFlowEventRepository.findCalendarEvents(1L, from, to)).thenReturn(List.of());
+        when(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(1L, from, to))
+                .thenReturn(List.of());
+        when(holdingRepository.findDividendPaymentsByUserId(1L, from, to)).thenReturn(List.of(input));
+        when(holdingRepository.findDividendCalendarInputsByUserId(1L)).thenReturn(List.of());
+
+        var result = service.getMonth(1L, 2026, 6);
+
+        var event = result.events().get("2026-06-03").get(0);
+        var schedule = result.schedules().get("2026-06-03").get(0);
+        assertThat(event.category()).isEqualTo(CalendarEventCategory.DIVIDEND);
+        assertThat(event.amountKrw()).isEqualByComparingTo("165000"); // 33 × 5000
+        assertThat(event.estimated()).isFalse();   // 확정(실지급)
+        assertThat(schedule.estimated()).isFalse();
+        assertThat(schedule.title()).isEqualTo("SOL 미국배당다우존스 분배금");
     }
 
     @Test
