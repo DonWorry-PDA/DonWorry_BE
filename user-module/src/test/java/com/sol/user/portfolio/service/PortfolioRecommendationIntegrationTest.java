@@ -117,7 +117,7 @@ class PortfolioRecommendationIntegrationTest {
     private void prepareUser(Long userId, int age, MockType mockType, BigDecimal targetLivingCost) {
         jdbcTemplate.update("INSERT INTO users (user_id, onboarding_completed) VALUES (?, ?)", userId, false);
         onboardingService.complete(userId, new OnboardingRequest(
-                age, true, true, targetLivingCost, BigDecimal.valueOf(350_000)));
+                age, true, true, targetLivingCost, BigDecimal.valueOf(350_000), null, null));
         surveyService.save(userId, survey(2, 1, 1));
         assetMockService.seed(userId, mockType);
     }
