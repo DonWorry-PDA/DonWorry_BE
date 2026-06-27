@@ -63,6 +63,19 @@ class LifeStabilityMessageGeneratorTest {
     }
 
     @Test
+    void nullMetricsDoNotThrowAndFallBackToNoRisk() {
+        // StabilityScore 지표 컬럼은 nullable — null 행이 와도 NPE 없이 fallback이어야 한다.
+        LifeStabilityCalculatedResult result = LifeStabilityCalculatedResult.builder()
+                .totalScore(0)
+                .grade(LifeStabilityGrade.STABLE)
+                .build();
+
+        List<String> messages = generator.generateImprovementMessages(result);
+
+        assertThat(messages).containsExactly(FALLBACK);
+    }
+
+    @Test
     void cashflowMessageAppearsWheneverCashflowIndicatorIsNotStable() {
         // 다른 지표는 모두 안정이고 충당률만 미달이어도 메시지가 나와야 한다(기존엔 누락).
         LifeStabilityCalculatedResult result = allStable()
