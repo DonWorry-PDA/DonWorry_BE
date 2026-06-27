@@ -23,14 +23,23 @@ public class EtfDividendCalculator {
     private final HoldingRepository holdingRepository;
     private final ProductBatchClient productBatchClient;
 
-    /** 사용자 보유 ETF의 월 예상 분배금 합계(원, 반올림). 보유종목이 없으면 0. */
+    /**
+     * 사용자 보유 ETF의 월 예상 분배금 합계(원, 반올림). 보유종목이 없으면 0.
+     * 생활안정도 재계산은 자산 동기화 트랜잭션 경로에서도 호출되므로, Product 서비스 조회
+     * 실패는 격리(fail-open)해 0으로 처리한다 — 외부 장애가 sync·재계산을 롤백시키지 않게 한다.
+     */
     public BigDecimal monthlyDividend(Long userId) {
         List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId);
         if (holdings.isEmpty()) {
             return BigDecimal.ZERO;
         }
         List<Long> productIds = holdings.stream().map(EtfHolding::getProductId).toList();
-        Map<Long, BigDecimal> monthlyDividendMap = productBatchClient.fetchEtfMonthlyDividends(productIds);
+        Map<Long, BigDecimal> monthlyDividendMap;
+        try {
+            monthlyDividendMap = productBatchClient.fetchEtfMonthlyDividends(productIds);
+        } catch (RuntimeException e) {
+            return BigDecimal.ZERO;
+        }
         return holdings.stream()
                 .map(h -> monthlyDividendMap.getOrDefault(h.getProductId(), BigDecimal.ZERO)
                         .multiply(h.getQuantity()))

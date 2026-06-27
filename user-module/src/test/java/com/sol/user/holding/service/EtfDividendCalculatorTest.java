@@ -55,6 +55,18 @@ class EtfDividendCalculatorTest {
         assertThat(calculator.monthlyDividend(1L)).isEqualByComparingTo("0");
     }
 
+    @Test
+    void Product_조회가_실패하면_0으로_격리한다() {
+        given(holdingRepository.findAllHoldingsByUserId(1L)).willReturn(List.of(
+                holding(101L, new BigDecimal("10"))
+        ));
+        given(productBatchClient.fetchEtfMonthlyDividends(anyList()))
+                .willThrow(new RuntimeException("product service down"));
+
+        // 외부 장애가 생활안정도 재계산·자산 sync를 깨지 않도록 fail-open
+        assertThat(calculator.monthlyDividend(1L)).isEqualByComparingTo("0");
+    }
+
     private EtfHolding holding(Long productId, BigDecimal quantity) {
         return new EtfHolding() {
             @Override public Long getHoldingId() { return productId; }
