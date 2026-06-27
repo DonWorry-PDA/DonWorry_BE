@@ -1,11 +1,13 @@
 package com.sol.user.mydata.controller;
 
+import com.sol.user.mydata.dto.ConnectedInstitutionCountResponse;
 import com.sol.user.mydata.dto.MydataAccountResponse;
 import com.sol.user.mydata.dto.MydataCashFlowResponse;
 import com.sol.user.mydata.dto.MydataHoldingResponse;
 import com.sol.user.mydata.dto.MydataPensionResponse;
 import com.sol.user.mydata.dto.MydataTradeResponse;
 import com.sol.user.mydata.dto.MydataTransactionsResponse;
+import com.sol.user.mydata.service.InstitutionService;
 import com.sol.user.mydata.service.MydataQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,9 @@ class MydataControllerTest {
 
     @Mock
     private MydataQueryService mydataQueryService;
+
+    @Mock
+    private InstitutionService institutionService;
 
     @InjectMocks
     private MydataController mydataController;
@@ -129,6 +134,20 @@ class MydataControllerTest {
                 .andExpect(jsonPath("$.data[0].productId").value(100));
 
         verify(mydataQueryService).getHoldings(1L);
+    }
+
+    @Test
+    void getConnectedInstitutionCountReturnsWrappedCount() throws Exception {
+        when(institutionService.getConnectedInstitutionCount(1L))
+                .thenReturn(new ConnectedInstitutionCountResponse(5));
+
+        mockMvc.perform(get("/api/user/mydata/institutions/connected-count")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.connectedInstitutionCount").value(5));
+
+        verify(institutionService).getConnectedInstitutionCount(1L);
     }
 
     @Test
