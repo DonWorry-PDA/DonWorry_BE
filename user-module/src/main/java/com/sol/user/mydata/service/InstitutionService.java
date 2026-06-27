@@ -8,8 +8,11 @@ import com.sol.user.assetconnection.domain.ConnectedInstitutions;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
 import com.sol.user.mydata.dto.ConnectedInstitutionCountResponse;
+import com.sol.user.mydata.dto.ConnectedInstitutionResponse;
+import com.sol.user.mydata.dto.ConnectedInstitutionsResponse;
 import com.sol.user.mydata.dto.InstitutionConnectResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
+import com.sol.user.mydata.type.InstitutionCategory;
 import com.sol.user.mydata.type.InstitutionCode;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -87,6 +91,49 @@ public class InstitutionService {
     public ConnectedInstitutionCountResponse getConnectedInstitutionCount(Long userId) {
         long count = ConnectedInstitutions.count(assetConnectionRepository.findByUserUserId(userId));
         return new ConnectedInstitutionCountResponse((int) count);
+    }
+
+    /**
+     * 연결된 기관 목록(#211). 진실 소스 = {@code AssetConnection}(CONNECTED), institutionName distinct로
+     * {@link ConnectedInstitutions#count}와 동일 모집단이라 길이 == connected-count 불변식이 성립한다.
+     * 한 기관이 여러 category면 우선순위가 높은 하나를 대표로 골라 1행으로 합친다(신한은행 BANK+LOAN → BANK).
+     */
+    public ConnectedInstitutionsResponse getConnectedInstitutions(Long userId) {
+        Map<String, List<AssetConnection>> byName = assetConnectionRepository.findByUserUserId(userId).stream()
+                .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
+                .collect(Collectors.groupingBy(AssetConnection::getInstitutionName));
+
+        List<ConnectedInstitutionResponse> institutions = byName.entrySet().stream()
+                .map(e -> toResponse(e.getKey(), representativeCategory(e.getValue())))
+                .sorted(Comparator.comparingInt(r -> InstitutionCategory.from(r.category())
+                        .map(InstitutionCategory::priority).orElse(Integer.MAX_VALUE)))
+                .toList();
+
+        return ConnectedInstitutionsResponse.of(institutions);
+    }
+
+    /** 한 기관의 여러 연결 category 중 우선순위가 가장 높은(ordinal 최소) 대표 category를 고른다. */
+    private String representativeCategory(List<AssetConnection> connections) {
+        return connections.stream()
+                .map(AssetConnection::getCategory)
+                .min(Comparator.comparingInt(category -> InstitutionCategory.from(category)
+                        .map(InstitutionCategory::priority).orElse(Integer.MAX_VALUE)))
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT));
+    }
+
+    /** 표시 메타: 기관명이 카탈로그(dbName)와 매칭되면 카탈로그값, 아니면 category 폴백을 쓴다. */
+    private ConnectedInstitutionResponse toResponse(String institutionName, String category) {
+        return InstitutionCode.byDbName(institutionName)
+                .map(code -> new ConnectedInstitutionResponse(institutionName, category, "CONNECTED",
+                        code.getLabel(), code.getBrandColor(), code.getLabelColor()))
+                .orElseGet(() -> {
+                    InstitutionCategory meta = InstitutionCategory.from(category).orElse(null);
+                    String label = meta != null ? meta.getFallbackLabel() : institutionName;
+                    String brandColor = meta != null ? meta.getFallbackBrandColor() : "#6B7280";
+                    String labelColor = meta != null ? meta.getFallbackLabelColor() : "#FFFFFF";
+                    return new ConnectedInstitutionResponse(institutionName, category, "CONNECTED",
+                            label, brandColor, labelColor);
+                });
     }
 
     @Transactional

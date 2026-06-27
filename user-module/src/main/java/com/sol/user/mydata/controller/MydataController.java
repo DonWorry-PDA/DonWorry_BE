@@ -2,6 +2,7 @@ package com.sol.user.mydata.controller;
 
 import com.sol.common.response.ApiResponse;
 import com.sol.user.mydata.dto.ConnectedInstitutionCountResponse;
+import com.sol.user.mydata.dto.ConnectedInstitutionsResponse;
 import com.sol.user.mydata.dto.InstitutionConnectRequest;
 import com.sol.user.mydata.dto.InstitutionConnectResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
@@ -50,6 +51,16 @@ public class MydataController {
     public ResponseEntity<ApiResponse<ConnectedInstitutionCountResponse>> getConnectedInstitutionCount(
             @RequestAttribute("userId") Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(institutionService.getConnectedInstitutionCount(userId)));
+    }
+
+    @Operation(summary = "연결된 기관 목록 조회",
+            description = "연결된 기관 목록(AssetConnection 기준, 기관명 distinct, 전 도메인) + 카운트 동봉. "
+                    + "한 기관이 여러 category면 1행으로 합치고 대표 category를 고른다. "
+                    + "institutions.length == connectedInstitutionCount 보장(온보딩 카운트와 정합).")
+    @GetMapping("/institutions/connected")
+    public ResponseEntity<ApiResponse<ConnectedInstitutionsResponse>> getConnectedInstitutions(
+            @RequestAttribute("userId") Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(institutionService.getConnectedInstitutions(userId)));
     }
 
     @Operation(summary = "금융기관 연결")
