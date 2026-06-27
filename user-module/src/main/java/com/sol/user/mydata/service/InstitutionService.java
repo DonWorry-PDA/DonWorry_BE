@@ -103,10 +103,16 @@ public class InstitutionService {
                 .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
                 .collect(Collectors.groupingBy(AssetConnection::getInstitutionName));
 
+        // category 우선순위로 1차 정렬, 같은 category 안에서는 기관명으로 2차 정렬해
+        // groupingBy의 비결정적 순회 순서에 의존하지 않고 항상 안정적 표시 순서를 보장한다.
+        Comparator<ConnectedInstitutionResponse> byCategoryThenName = Comparator
+                .comparingInt((ConnectedInstitutionResponse r) -> InstitutionCategory.from(r.category())
+                        .map(InstitutionCategory::priority).orElse(Integer.MAX_VALUE))
+                .thenComparing(ConnectedInstitutionResponse::name);
+
         List<ConnectedInstitutionResponse> institutions = byName.entrySet().stream()
                 .map(e -> toResponse(e.getKey(), representativeCategory(e.getValue())))
-                .sorted(Comparator.comparingInt(r -> InstitutionCategory.from(r.category())
-                        .map(InstitutionCategory::priority).orElse(Integer.MAX_VALUE)))
+                .sorted(byCategoryThenName)
                 .toList();
 
         return ConnectedInstitutionsResponse.of(institutions);

@@ -99,6 +99,22 @@ class InstitutionServiceTest {
     }
 
     @Test
+    void connectedInstitutionsSortStablyWithinSameCategory() {
+        // 같은 category(은행) 기관이 둘이면 기관명으로 2차 정렬해 항상 결정적 순서를 낸다 (#211)
+        when(assetConnectionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                conn("토스뱅크", "BANK"),
+                conn("신한투자증권", "SECURITIES"),
+                conn("KB국민은행", "BANK")
+        ));
+
+        ConnectedInstitutionsResponse response = institutionService.getConnectedInstitutions(1L);
+
+        // 은행 두 곳은 우선순위가 같으므로 기관명 오름차순(KB국민은행 < 토스뱅크), 그다음 증권
+        assertThat(response.institutions()).extracting(ConnectedInstitutionResponse::name)
+                .containsExactly("KB국민은행", "토스뱅크", "신한투자증권");
+    }
+
+    @Test
     void connectedFlagDerivesFromAssetConnectionNotAccountPresence() {
         // 신한은행: 연결 행 있음 → connected. 신한투자증권: 계좌만 있고 연결 행 없음 → NOT connected (#204)
         when(assetConnectionRepository.findByUserUserId(1L)).thenReturn(List.of(
