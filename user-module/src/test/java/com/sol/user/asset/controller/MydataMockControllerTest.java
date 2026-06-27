@@ -50,7 +50,7 @@ class MydataMockControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.connectedInstitutions").value(6))
+                .andExpect(jsonPath("$.data.connectedInstitutions").value(5))
                 .andExpect(jsonPath("$.data.message").value("마이데이터 정보를 불러왔습니다."))
                 .andExpect(jsonPath("$.data.assetSummary.netAsset").value(178_000_000))
                 .andExpect(jsonPath("$.data.mockType").doesNotExist());
@@ -81,7 +81,9 @@ class MydataMockControllerTest {
                         BigDecimal.valueOf(178_000_000),
                         List.of()
                 ),
-                new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7)
+                new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7),
+                // 연결 행 6개(신한은행 BANK+LOAN 포함) → 기관명 distinct 5
+                5
         );
     }
 }
