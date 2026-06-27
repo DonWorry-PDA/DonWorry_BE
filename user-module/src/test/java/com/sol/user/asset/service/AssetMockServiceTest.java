@@ -80,6 +80,8 @@ class AssetMockServiceTest {
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo(BigDecimal.valueOf(totalDebt));
         assertThat(response.assetSummary().netAsset()).isEqualByComparingTo(BigDecimal.valueOf(netAsset));
         assertThat(response.generatedCounts().connections()).isEqualTo(6);
+        // 연결 행 6개지만 신한은행 BANK+LOAN이 1곳으로 합쳐져 기관명 distinct는 5 (#204)
+        assertThat(response.connectedInstitutionCount()).isEqualTo(5);
         assertThat(response.generatedCounts().cashflowEvents()).isEqualTo(expectedCashflowCount);
         assertThat(response.generatedCounts().holdings()).isEqualTo(holdingCount);
         // 시나리오별 투자성향(KYC 목업)이 유저에 시드된다 — #118 권유가능등급 필터의 입력

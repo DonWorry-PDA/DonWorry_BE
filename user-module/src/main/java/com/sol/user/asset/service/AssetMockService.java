@@ -9,6 +9,7 @@ import com.sol.user.asset.dto.AssetSummaryResponse;
 import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.dto.MockGeneratedCounts;
 import com.sol.user.asset.type.MockType;
+import com.sol.user.assetconnection.domain.ConnectedInstitutions;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
 import com.sol.user.cashflow.entity.CashFlowEvent;
@@ -168,7 +169,8 @@ public class AssetMockService {
                         debts.size(),
                         policies.size(),
                         events.size()
-                )
+                ),
+                (int) ConnectedInstitutions.count(connections)
         );
     }
 
