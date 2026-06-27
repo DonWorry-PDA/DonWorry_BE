@@ -12,6 +12,9 @@ public interface SalaryPlanRepository extends JpaRepository<SalaryPlan, Long> {
     /** 허브 분기 플래그용 — ACTIVE plan 존재 여부. */
     boolean existsByUserUserIdAndStatus(Long userId, String status);
 
+    /** 상담 예약의 planId 소유권 검증용 — 해당 plan이 이 사용자 소유인지. */
+    boolean existsByPlanIdAndUserUserId(Long planId, Long userId);
+
     /** 재확정 시 supersede 대상 조회(items 불필요). ACTIVE는 유니크라 최대 1건. */
     Optional<SalaryPlan> findByUserUserIdAndStatus(Long userId, String status);
 

@@ -10,6 +10,7 @@ import com.sol.user.consultation.entity.Consultation;
 import com.sol.user.consultation.repository.ConsultationRepository;
 import com.sol.user.consultation.repository.ConsultationSummaryRepository;
 import com.sol.user.consultation.type.ConsultMethod;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.consultation.type.ConsultStatus;
 import com.sol.user.consultation.type.ConsultType;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,19 +35,22 @@ class ConsultationServiceTest {
 
     private ConsultationRepository consultationRepository;
     private ConsultationSummaryRepository summaryRepository;
+    private SalaryPlanRepository salaryPlanRepository;
     private ConsultationService service;
 
     @BeforeEach
     void setUp() {
         consultationRepository = mock(ConsultationRepository.class);
         summaryRepository = mock(ConsultationSummaryRepository.class);
-        service = new ConsultationService(consultationRepository, summaryRepository);
+        salaryPlanRepository = mock(SalaryPlanRepository.class);
+        service = new ConsultationService(consultationRepository, summaryRepository, salaryPlanRepository);
     }
 
     @Test
     void createAssignsReservedStatusAndTypeDefaults() {
         when(consultationRepository.save(any(Consultation.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(salaryPlanRepository.existsByPlanIdAndUserUserId(7L, 1L)).thenReturn(true);
 
         ConsultationResponse response = service.create(1L,
                 new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 7L, null, null));
@@ -135,6 +139,17 @@ class ConsultationServiceTest {
                         List.of("a".repeat(201)))))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void createWithUnownedPlanThrows() {
+        when(salaryPlanRepository.existsByPlanIdAndUserUserId(99L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 99L, null, null)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        verify(consultationRepository, never()).save(any(Consultation.class));
     }
 
     @Test

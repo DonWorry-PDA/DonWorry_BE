@@ -12,6 +12,7 @@ import com.sol.user.consultation.entity.ConsultationSummary;
 import com.sol.user.consultation.repository.ConsultationRepository;
 import com.sol.user.consultation.repository.ConsultationSummaryRepository;
 import com.sol.user.consultation.type.ConsultMethod;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.consultation.type.ConsultStatus;
 import com.sol.user.consultation.type.ConsultType;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class ConsultationService {
 
     private final ConsultationRepository consultationRepository;
     private final ConsultationSummaryRepository consultationSummaryRepository;
+    private final SalaryPlanRepository salaryPlanRepository;
 
     /** 예약 생성 — 유형별 기본 방식/지점/상담원을 배정한다. */
     @Transactional
@@ -44,6 +46,7 @@ public class ConsultationService {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         requireFutureSchedule(request.scheduledAt());
+        requireOwnedPlan(userId, request.planId());
         ConsultType type = request.consultType();
         ConsultMethod method = defaultMethod(type);
         String title = resolveTitle(type, request.topic());
@@ -63,6 +66,16 @@ public class ConsultationService {
                 .build());
 
         return ConsultationResponse.from(saved, false);
+    }
+
+    /** planId가 있으면 본인 소유 plan인지 검증. null이면 통과(아직 plan 미연동 호출 호환). */
+    private void requireOwnedPlan(Long userId, Long planId) {
+        if (planId == null) {
+            return;
+        }
+        if (!salaryPlanRepository.existsByPlanIdAndUserUserId(planId, userId)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     /** topic이 있으면 제목으로, 없으면 유형별 기본 제목으로 폴백. 길이 초과 시 거부. */
