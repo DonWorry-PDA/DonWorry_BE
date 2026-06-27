@@ -4,8 +4,10 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.assetconnection.domain.ConnectedInstitutions;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.mydata.dto.ConnectedInstitutionCountResponse;
 import com.sol.user.mydata.dto.InstitutionConnectResponse;
 import com.sol.user.mydata.dto.InstitutionResponse;
 import com.sol.user.mydata.type.InstitutionCode;
@@ -34,6 +36,8 @@ public class InstitutionService {
     private final UserRepository userRepository;
 
     public List<InstitutionResponse> getInstitutions(Long userId) {
+        // 연결 판정의 진실 소스는 AssetConnection뿐이다(#204). 계좌 보유는 연결의 '결과'지
+        // '근거'가 아니므로 connected 플래그에 섞지 않는다. 계좌는 아래 계좌번호·잔액 표시에만 쓴다.
         Set<String> connectedDbNames = assetConnectionRepository.findByUserUserId(userId).stream()
                 .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
                 .map(AssetConnection::getInstitutionName)
@@ -42,10 +46,6 @@ public class InstitutionService {
         List<Account> existingAccounts = accountRepository.findByUserUserId(userId).stream()
                 .filter(a -> Boolean.TRUE.equals(a.getExistingAccount()))
                 .toList();
-
-        existingAccounts.stream()
-                .map(Account::getInstitutionName)
-                .forEach(connectedDbNames::add);
 
         Map<String, List<String>> displayNumbersByDbName = existingAccounts.stream()
                 .filter(a -> a.getDisplayNumber() != null)
@@ -78,6 +78,15 @@ public class InstitutionService {
                     return InstitutionResponse.of(code, connected, accountNumbers, totalAmountKrw);
                 })
                 .toList();
+    }
+
+    /**
+     * 연결된 기관 수(#204). 온보딩 응답과 동일한 정의({@link ConnectedInstitutions})로 산출해
+     * 양 화면이 항상 같은 값을 내도록 한다. 진실 소스는 카탈로그가 아니라 AssetConnection 테이블이다.
+     */
+    public ConnectedInstitutionCountResponse getConnectedInstitutionCount(Long userId) {
+        long count = ConnectedInstitutions.count(assetConnectionRepository.findByUserUserId(userId));
+        return new ConnectedInstitutionCountResponse((int) count);
     }
 
     @Transactional
