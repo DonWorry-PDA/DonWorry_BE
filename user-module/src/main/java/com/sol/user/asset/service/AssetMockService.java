@@ -43,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -213,13 +214,28 @@ public class AssetMockService {
             // UPDATE로 처리되는데, Hibernate가 INSERT를 UPDATE보다 먼저 flush 하면서
             // account_number 유니크 충돌(500)이 발생했다. 번호를 타입 기준으로 고정하면
             // 매칭 키와 번호가 항상 일치해 재동기화가 멱등해지고 충돌이 원천 차단된다.
-            desired.add(new Account(user, seed.category(), seed.institutionName(),
-                    "MOCK-" + userId + "-" + seed.category(), seed.amount(), true));
+            Account account = new Account(user, seed.category(), seed.institutionName(),
+                    "MOCK-" + userId + "-" + seed.category(), seed.amount(), true);
+            account.updateDisplayNumber(generateDisplayNumber());
+            desired.add(account);
         }
         return upsertByKey(existing, desired, Account::getAccountType,
-                (target, seed) -> target.updateMock(seed.getInstitutionName(),
-                        seed.getAccountNumber(), seed.getDepositBalance()),
+                (target, seed) -> {
+                    target.updateMock(seed.getInstitutionName(),
+                            seed.getAccountNumber(), seed.getDepositBalance());
+                    if (target.getDisplayNumber() == null) {
+                        target.updateDisplayNumber(seed.getDisplayNumber());
+                    }
+                },
                 accountRepository::deleteAll, accountRepository::saveAll);
+    }
+
+    private String generateDisplayNumber() {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        return String.format("%03d-%04d-%06d",
+                random.nextInt(100, 1000),
+                random.nextInt(1000, 10000),
+                random.nextInt(100000, 1000000));
     }
 
     private List<Holding> saveHoldings(List<Account> accounts,
