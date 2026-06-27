@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 class EtfDividendCalculatorTest {
@@ -65,6 +66,8 @@ class EtfDividendCalculatorTest {
 
         // 외부 장애가 생활안정도 재계산·자산 sync를 깨지 않도록 fail-open
         assertThat(calculator.monthlyDividend(1L)).isEqualByComparingTo("0");
+        // 호출 자체는 실제로 일어났고(=실패 경로를 탔고) 그 예외를 격리한 것임을 확인
+        verify(productBatchClient).fetchEtfMonthlyDividends(List.of(101L));
     }
 
     private EtfHolding holding(Long productId, BigDecimal quantity) {
