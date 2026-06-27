@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,7 +40,7 @@ public class TermsController {
     public ResponseEntity<ApiResponse<TermsConsentResponse>> updateConsent(
             @RequestAttribute("userId") Long userId,
             @PathVariable String termId,
-            @RequestBody TermsConsentRequest request) {
+            @RequestBody @Valid TermsConsentRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(termsService.updateConsent(userId, termId, request)));
     }
 }
