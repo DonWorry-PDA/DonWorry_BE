@@ -113,6 +113,13 @@ public enum InstitutionCode {
                 .findFirst();
     }
 
+    /** DB 기관명(dbNames)으로 카탈로그 코드를 찾는다. 연결 목록의 표시 메타 매칭에 사용(#211). */
+    public static Optional<InstitutionCode> byDbName(String dbName) {
+        return Arrays.stream(values())
+                .filter(code -> code.dbNames.contains(dbName))
+                .findFirst();
+    }
+
     public static List<InstitutionCode> all() {
         return List.of(values());
     }
