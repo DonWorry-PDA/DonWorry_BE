@@ -161,7 +161,8 @@ public class AssetCompositionService {
                     .getOrDefault(account.getAccountId(), List.of()).stream()
                     .filter(h -> {
                         ProductBatchItem product = products.get(h.getProductId());
-                        boolean isStock = product != null && "STOCK".equals(product.productType());
+                        if (product == null) return false;
+                        boolean isStock = "STOCK".equals(product.productType());
                         return stockOnly ? isStock : !isStock;
                     })
                     .map(h -> {
