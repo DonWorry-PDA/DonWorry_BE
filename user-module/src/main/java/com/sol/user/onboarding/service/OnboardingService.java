@@ -29,7 +29,7 @@ public class OnboardingService {
     @Transactional
     public OnboardingResponse complete(Long userId, OnboardingRequest request) {
         if (request == null) {
-            request = new OnboardingRequest(null, null, null, null, null);
+            request = new OnboardingRequest(null, null, null, null, null, null, null);
         }
         BigDecimal targetLivingCost = orDefault(request.monthlyTargetLivingCost(), DEFAULT_TARGET_LIVING_COST);
         BigDecimal expectedMedicalCost = orDefault(request.monthlyExpectedMedicalCost(), DEFAULT_EXPECTED_MEDICAL_COST);
@@ -41,6 +41,7 @@ public class OnboardingService {
 
         LocalDateTime now = LocalDateTime.now();
         user.updateProfile(request.age(), request.retired(), request.nationalPensionReceiving(), now);
+        user.initTermConsents(request.thirdPartyAgreed(), request.marketingAgreed(), now);
 
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
                 .map(existing -> {
