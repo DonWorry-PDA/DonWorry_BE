@@ -14,7 +14,7 @@ public record MydataSyncResponse(
 ) {
     public static MydataSyncResponse from(MockAssetResponse result, String message) {
         return new MydataSyncResponse(
-                result.generatedCounts().connections(),
+                result.connectedInstitutionCount(),
                 result.generatedAt(),
                 message,
                 result.assetSummary()

@@ -10,6 +10,8 @@ import com.sol.user.holding.dto.HoldingWithQuantityAndType;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,12 +33,17 @@ public class AssetIncomeService {
     private final AccountRepository accountRepository;
     private final ProductBatchClient productBatchClient;
     private final DepositDetailClient depositDetailClient;
+    private final UserRepository userRepository;
 
     public AssetIncomeResponse getIncome(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
         List<HoldingWithQuantityAndType> allHoldings =
                 holdingRepository.findHoldingsWithQuantityAndTypeByUserId(userId);
         List<Account> accounts = accountRepository.findByUserUserId(userId);
-        BigDecimal nationalPension = calcNationalPension(userId).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal nationalPension = Boolean.TRUE.equals(user.getNationalPensionReceiving())
+                ? calcNationalPension(userId).setScale(0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
         BigDecimal etfDividend = calcEtfDividend(allHoldings).setScale(0, RoundingMode.HALF_UP);
         BigDecimal depositInterest = calcDepositInterest(accounts).setScale(0, RoundingMode.HALF_UP);
         BigDecimal pensionDividend = calcPensionDividend(allHoldings).setScale(0, RoundingMode.HALF_UP);
