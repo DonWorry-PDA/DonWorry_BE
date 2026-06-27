@@ -364,10 +364,11 @@ public class AssetMockService {
                                                   Scenario scenario, boolean recurring) {
         String status = recurring ? "SCHEDULED" : "COMPLETED";
 
+        // 예금 이자만 시드로 적재한다. 배당은 보유 ETF(dividend_history) 기반 단일 출처로
+        // 통일했으므로 시드 DIVIDEND 이벤트는 만들지 않는다(캘린더 이중계상 제거, #216).
         BigDecimal interestIncome = scenario.monthlyFinancialIncome()
                 .multiply(BigDecimal.valueOf(30))
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
-        BigDecimal dividendIncome = scenario.monthlyFinancialIncome().subtract(interestIncome);
 
         List<CashFlowEvent> events = new ArrayList<>();
 
@@ -378,10 +379,6 @@ public class AssetMockService {
         if (interestIncome.signum() > 0) {
             events.add(event(user, monthStart.withDayOfMonth(20), "INTEREST", "예금 이자",
                     interestIncome, "INCOME", status, recurring));
-        }
-        if (dividendIncome.signum() > 0) {
-            events.add(event(user, monthStart.withDayOfMonth(28), "DIVIDEND", "ETF 배당금",
-                    dividendIncome, "INCOME", status, recurring));
         }
 
         if (scenario.monthlyMaintenanceExpense().signum() > 0) {

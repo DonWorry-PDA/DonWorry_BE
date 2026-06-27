@@ -223,7 +223,7 @@ class AssetMockServiceTest {
                 .toList();
 
         // 현재월: 정기 수입·고정비는 recurring=true, 일회성 소비는 recurring=false (#177 — 캘린더 미래 투영 방지)
-        Set<String> recurringTypes = Set.of("PENSION", "INTEREST", "DIVIDEND", "MAINTENANCE", "INSURANCE", "LOAN");
+        Set<String> recurringTypes = Set.of("PENSION", "INTEREST", "MAINTENANCE", "INSURANCE", "LOAN");
         assertThat(thisMonth).isNotEmpty();
         assertThat(thisMonth).filteredOn(e -> recurringTypes.contains(e.getEventType()))
                 .isNotEmpty()
@@ -283,11 +283,11 @@ class AssetMockServiceTest {
         // cashflowEvents = 6개월치 buildMonthEvents 합산 (develop 머지 이후 시나리오 확장됨):
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
-                        InvestmentPropensity.ACTIVE, 234),
+                        InvestmentPropensity.ACTIVE, 228),
                 Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL, 192),
+                        InvestmentPropensity.NEUTRAL, 186),
                 Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
-                        InvestmentPropensity.STABLE, 174)
+                        InvestmentPropensity.STABLE, 168)
         );
     }
 
