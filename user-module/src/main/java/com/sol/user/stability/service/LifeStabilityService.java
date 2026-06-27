@@ -7,6 +7,7 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.repository.PensionRepository;
@@ -47,6 +48,7 @@ public class LifeStabilityService {
     private final DebtRepository debtRepository;
     private final InsurancePolicyRepository insurancePolicyRepository;
     private final CashFlowEventRepository cashFlowEventRepository;
+    private final EtfDividendCalculator etfDividendCalculator;
 
     public LifeStabilityResponse preview() {
         LifeStabilityCalculationInput input = createMockInput();
@@ -135,7 +137,9 @@ public class LifeStabilityService {
                 .map(pension -> pension.getExpectedMonthlyAmount() == null
                         ? BigDecimal.ZERO : pension.getExpectedMonthlyAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal financialIncome = sumEvents(events, "INCOME", List.of("INTEREST", "DIVIDEND"));
+        // 배당은 시드 이벤트가 아니라 보유 ETF 기반 단일 출처로 합산한다(#216).
+        BigDecimal financialIncome = sumEvents(events, "INCOME", List.of("INTEREST"))
+                .add(etfDividendCalculator.monthlyDividend(userId));
         BigDecimal essentialExpense = sumEvents(events, "EXPENSE", List.of("MAINTENANCE", "INSURANCE", "CARD"));
         if (essentialExpense.signum() == 0) {
             essentialExpense = goal.getMonthlyTargetLivingCost();
