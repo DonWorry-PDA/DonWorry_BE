@@ -7,6 +7,9 @@ source /home/ec2-user/deploy/deploy.env
 aws ecr get-login-password --region ap-northeast-2 | \
   docker login --username AWS --password-stdin $ECR_URI
 
+# 이전 이미지·미사용 레이어 정리 (디스크 확보)
+docker image prune -af 2>/dev/null || true
+
 # git SHA 태그로 이미지 pull
 docker pull $ECR_URI/donworry/user-module:$IMAGE_TAG
 
