@@ -53,11 +53,26 @@ public class AssetCompositionService {
             accountsByCategory.computeIfAbsent(category, k -> new ArrayList<>()).add(account);
         }
 
-        List<AssetGroupItem> groups = Arrays.stream(AssetCategory.values())
-                .filter(accountsByCategory::containsKey)
-                .map(cat -> buildGroup(cat, accountsByCategory.get(cat),
-                        holdingsByAccountId, snapshot.products(), depositDetails))
-                .toList();
+        // PENSION, DEPOSIT, ETC — 기존 로직 그대로
+        List<AssetGroupItem> groups = new ArrayList<>();
+        for (AssetCategory cat : new AssetCategory[]{
+                AssetCategory.PENSION, AssetCategory.DEPOSIT, AssetCategory.ETC}) {
+            if (accountsByCategory.containsKey(cat)) {
+                groups.add(buildGroup(cat, accountsByCategory.get(cat),
+                        holdingsByAccountId, snapshot.products(), depositDetails));
+            }
+        }
+
+        // BROKERAGE(ETF) 계좌: ETF 그룹(비STOCK)과 STOCK 그룹으로 분리
+        List<Account> brokerageAccounts = accountsByCategory.getOrDefault(AssetCategory.ETF, List.of());
+        if (!brokerageAccounts.isEmpty()) {
+            AssetGroupItem etfGroup = buildBrokerageGroup(
+                    AssetCategory.ETF, brokerageAccounts, holdingsByAccountId, snapshot.products(), false);
+            AssetGroupItem stockGroup = buildBrokerageGroup(
+                    AssetCategory.STOCK, brokerageAccounts, holdingsByAccountId, snapshot.products(), true);
+            if (etfGroup.getTotalAmount().signum() > 0) groups.add(etfGroup);
+            if (stockGroup.getTotalAmount().signum() > 0) groups.add(stockGroup);
+        }
 
         return AssetCompositionResponse.builder()
                 .totalAsset(totalAsset)
@@ -126,6 +141,60 @@ public class AssetCompositionService {
                 .interestRate(interestRate)
                 .maturityDate(maturityDate)
                 .holdings(holdingItems)
+                .build();
+    }
+
+    /**
+     * BROKERAGE 계좌를 ETF(비STOCK)와 STOCK 두 그룹으로 분리한다.
+     * stockOnly=false → 계좌 잔액 + 비STOCK 보유종목 (ETF 그룹)
+     * stockOnly=true  → STOCK 보유종목만, 잔액 없음 (STOCK 그룹)
+     */
+    private AssetGroupItem buildBrokerageGroup(AssetCategory category,
+                                                List<Account> accounts,
+                                                Map<Long, List<HoldingWithProduct>> holdingsByAccountId,
+                                                Map<Long, ProductBatchItem> products,
+                                                boolean stockOnly) {
+        List<AssetAccountItem> accountItems = new ArrayList<>();
+        for (Account account : accounts) {
+            BigDecimal balance = stockOnly ? BigDecimal.ZERO : nz(account.getDepositBalance());
+            List<AssetHoldingItem> holdingItems = holdingsByAccountId
+                    .getOrDefault(account.getAccountId(), List.of()).stream()
+                    .filter(h -> {
+                        ProductBatchItem product = products.get(h.getProductId());
+                        boolean isStock = product != null && "STOCK".equals(product.productType());
+                        return stockOnly ? isStock : !isStock;
+                    })
+                    .map(h -> {
+                        ProductBatchItem product = products.get(h.getProductId());
+                        return AssetHoldingItem.builder()
+                                .productName(product == null ? "알 수 없음" : product.productName())
+                                .evaluationAmount(nz(h.getEvaluationAmount()))
+                                .build();
+                    })
+                    .toList();
+            if (balance.signum() == 0 && holdingItems.isEmpty()) continue;
+            accountItems.add(AssetAccountItem.builder()
+                    .accountId(account.getAccountId())
+                    .institutionName(account.getInstitutionName())
+                    .accountType(account.getAccountType())
+                    .balance(balance)
+                    .holdings(holdingItems)
+                    .build());
+        }
+        BigDecimal totalAmount = accountItems.stream()
+                .map(a -> {
+                    BigDecimal b = nz(a.getBalance());
+                    BigDecimal h = a.getHoldings().stream()
+                            .map(hi -> nz(hi.getEvaluationAmount()))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    return b.add(h);
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return AssetGroupItem.builder()
+                .category(category.name())
+                .label(category.getLabel())
+                .totalAmount(totalAmount)
+                .accounts(accountItems)
                 .build();
     }
 

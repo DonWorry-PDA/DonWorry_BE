@@ -8,7 +8,7 @@ package com.sol.user.asset.type;
 public enum AssetCategory {
     PENSION("연금"),
     DEPOSIT("예금"),
-    ETF("투자"),
+    ETF("ETF"),
     STOCK("주식"),
     ETC("기타");
 
