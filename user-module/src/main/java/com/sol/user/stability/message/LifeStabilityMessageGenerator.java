@@ -13,45 +13,45 @@ public class LifeStabilityMessageGenerator {
 
     public String generateSummary(LifeStabilityCalculatedResult result) {
         return switch (result.getGrade()) {
-            case STABLE -> "\uD604\uC7AC \uC0DD\uD65C\uBE44\uB97C \uC548\uC815\uC801\uC73C\uB85C \uCDA9\uB2F9\uD560 \uC218 \uC788\uB294 \uC0C1\uD0DC\uC608\uC694.";
-            case NEED_COMPLEMENT -> "\uD604\uC7AC \uC0DD\uD65C\uBE44\uB294 \uC77C\uBD80 \uCDA9\uB2F9\uB418\uACE0 \uC788\uC9C0\uB9CC, \uBCF4\uC644\uC774 \uD544\uC694\uD574\uC694.";
-            case NEED_IMPROVEMENT -> "\uD604\uC7AC \uD604\uAE08\uD750\uB984\uB9CC\uC73C\uB85C\uB294 \uC0DD\uD65C\uBE44\uAC00 \uBD80\uC871\uD574\uC694. \uC548\uC815\uC801\uC778 \uD604\uAE08\uD750\uB984 \uD655\uBCF4\uAC00 \uC6B0\uC120\uC774\uC5D0\uC694.";
+            case STABLE -> "현재 생활비를 안정적으로 충당할 수 있는 상태예요.";
+            case NEED_COMPLEMENT -> "현재 생활비는 일부 충당되고 있지만, 보완이 필요해요.";
+            case NEED_IMPROVEMENT -> "현재 현금흐름만으로는 생활비가 부족해요. 안정적인 현금흐름 확보가 우선이에요.";
         };
     }
 
     /**
-     * \uAC1C\uC120 \uC81C\uC548 \u2014 \uD654\uBA74 \uC9C0\uD45C \uBC30\uC9C0(indicators)\uC640 \uB3D9\uC77C\uD55C \uC0C1\uD0DC \uD310\uC815({@link LifeStabilityIndicatorStatus})\uC744 \uC0AC\uC6A9\uD574
-     * '\uC548\uC815'\uC774 \uC544\uB2CC \uC9C0\uD45C\uB9C8\uB2E4 \uB300\uC751 \uBA54\uC2DC\uC9C0\uB97C \uC0DD\uC131\uD55C\uB2E4. \uBAA8\uB4E0 \uC9C0\uD45C\uAC00 \uC548\uC815\uC77C \uB54C\uB9CC \uC704\uD5D8 \uC5C6\uC74C \uC548\uB0B4.
+     * 개선 제안 — 화면 지표 배지(indicators)와 동일한 상태 판정({@link LifeStabilityIndicatorStatus})을 사용해
+     * '안정'이 아닌 지표마다 대응 메시지를 생성한다. 모든 지표가 안정일 때만 위험 없음 안내.
      */
     public List<String> generateImprovementMessages(LifeStabilityCalculatedResult result) {
         List<String> messages = new ArrayList<>();
 
         if (LifeStabilityIndicatorStatus.ofCashflowCoverage(result.getCashflowCoverageRate()) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC6D4 \uD655\uBCF4 \uC218\uC785\uC774 \uBAA9\uD45C \uC0DD\uD65C\uBE44\uC5D0 \uBBF8\uCE58\uC9C0 \uBABB\uD574\uC694. \uC548\uC815\uC801\uC778 \uD604\uAE08\uD750\uB984 \uD655\uBCF4\uAC00 \uD544\uC694\uD574\uC694.");
+            messages.add("월 확보 수입이 목표 생활비에 미치지 못해요. 안정적인 현금흐름 확보가 필요해요.");
         }
 
         if (LifeStabilityIndicatorStatus.ofEssentialExpense(result.getEssentialExpenseRate()) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC218\uC785 \uB300\uBE44 \uD544\uC218\uC9C0\uCD9C \uBE44\uC911\uC774 \uB192\uC740 \uD3B8\uC774\uC5D0\uC694. \uACE0\uC815 \uC9C0\uCD9C\uC744 \uC810\uAC80\uD574 \uBCF4\uC138\uC694.");
+            messages.add("수입 대비 필수지출 비중이 높은 편이에요. 고정 지출을 점검해 보세요.");
         }
 
         if (LifeStabilityIndicatorStatus.ofMonths(result.getMedicalPreparednessMonths(), LifeStabilityIndicatorStatus.MEDICAL_GOOD_MONTHS) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC608\uC0C1 \uC758\uB8CC\uBE44\uC5D0 \uB300\uBE44\uD55C \uC900\uBE44\uC790\uAE08\uC774 \uBD80\uC871\uD560 \uC218 \uC788\uC5B4\uC694.");
+            messages.add("예상 의료비에 대비한 준비자금이 부족할 수 있어요.");
         }
 
         if (LifeStabilityIndicatorStatus.ofMonths(result.getLiquidityMonths(), LifeStabilityIndicatorStatus.LIQUIDITY_GOOD_MONTHS) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC720\uB3D9\uC131 \uC790\uC0B0\uC774 \uCDA9\uBD84\uD558\uC9C0 \uC54A\uC744 \uC218 \uC788\uC5B4\uC694. \uCD5C\uC18C 6\uAC1C\uC6D4\uCE58 \uD544\uC218\uC9C0\uCD9C\uC744 \uBA3C\uC800 \uD655\uBCF4\uD558\uB294 \uAC83\uC774 \uC88B\uC544\uC694.");
+            messages.add("유동성 자산이 충분하지 않을 수 있어요. 최소 6개월치 필수지출을 먼저 확보하는 것이 좋아요.");
         }
 
         if (LifeStabilityIndicatorStatus.ofDebtBurden(result.getDebtBurdenRate()) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC6D4 \uC18C\uB4DD \uB300\uBE44 \uB300\uCD9C \uC0C1\uD658 \uBD80\uB2F4\uC774 \uB192\uC740 \uD3B8\uC774\uC5D0\uC694.");
+            messages.add("월 소득 대비 대출 상환 부담이 높은 편이에요.");
         }
 
         if (LifeStabilityIndicatorStatus.ofRiskAssetDependency(result.getRiskAssetDependencyRate()) != LifeStabilityIndicatorStatus.STABLE) {
-            messages.add("\uC0DD\uD65C\uBE44 \uC77C\uBD80\uB97C \uC704\uD5D8\uC790\uC0B0\uC5D0 \uC758\uC874\uD560 \uAC00\uB2A5\uC131\uC774 \uC788\uC5B4 \uC548\uC815\uC801\uC778 \uD604\uAE08\uD750\uB984 \uD655\uBCF4\uAC00 \uD544\uC694\uD574\uC694.");
+            messages.add("생활비 일부를 위험자산에 의존할 가능성이 있어 안정적인 현금흐름 확보가 필요해요.");
         }
 
         if (messages.isEmpty()) {
-            messages.add("\uD604\uC7AC \uC0C1\uD0DC\uC5D0\uC11C\uB294 \uD070 \uC704\uD5D8 \uC694\uC778\uC774 \uB450\uB4DC\uB7EC\uC9C0\uC9C0 \uC54A\uC544\uC694.");
+            messages.add("현재 상태에서는 큰 위험 요인이 두드러지지 않아요.");
         }
 
         return messages;
@@ -59,13 +59,13 @@ public class LifeStabilityMessageGenerator {
 
     public String generateGuardrailReason(LifeStabilityCalculatedResult result) {
         if (result.getRecommendedPlanType() == RecommendedPlanType.GROWTH_EXTRA_ASSET) {
-            return "\uC0DD\uD65C \uC548\uC815\uB3C4\uAC00 \uB9E4\uC6B0 \uC591\uD638\uD574 \uC5EC\uC720\uC790\uAE08 \uC131\uC7A5\uD615\uAE4C\uC9C0 \uAC80\uD1A0\uD560 \uC218 \uC788\uC5B4\uC694.";
+            return "생활 안정도가 매우 양호해 여유자금 성장형까지 검토할 수 있어요.";
         }
 
         if (result.getRecommendedPlanType() == RecommendedPlanType.BALANCED_INCOME) {
-            return "\uC0DD\uD65C \uC548\uC815\uB3C4\uAC00 \uC591\uD638\uD574 \uADE0\uD615 \uC6D4\uAE09\uD615\uC744 \uC6B0\uC120 \uAC80\uD1A0\uD560 \uC218 \uC788\uC5B4\uC694.";
+            return "생활 안정도가 양호해 균형 월급형을 우선 검토할 수 있어요.";
         }
 
-        return "\uC0DD\uD65C \uC548\uC815\uB3C4 \uBCF4\uC644\uC774 \uD544\uC694\uD558\uC5EC \uC548\uC815\uC801\uC778 \uD604\uAE08\uD750\uB984 \uC124\uACC4\uC548\uC744 \uC6B0\uC120 \uAC80\uD1A0\uD558\uB294 \uAC83\uC774 \uC88B\uC544\uC694.";
+        return "생활 안정도 보완이 필요하여 안정적인 현금흐름 설계안을 우선 검토하는 것이 좋아요.";
     }
 }
