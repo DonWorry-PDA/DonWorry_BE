@@ -5,6 +5,7 @@ import com.sol.user.consultation.type.ConsultMethod;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Builder
 public record ConsultationResponse(
@@ -17,6 +18,7 @@ public record ConsultationResponse(
         String location,
         String counselorName,
         Long planId,
+        List<String> contextTopics,
         boolean hasSummary
 ) {
     public static ConsultationResponse from(Consultation c, boolean hasSummary) {
@@ -33,6 +35,7 @@ public record ConsultationResponse(
                         : c.getMethod().getLabel())
                 .counselorName(c.getCounselorName())
                 .planId(c.getPlanId())
+                .contextTopics(c.getContextTopics())
                 .hasSummary(hasSummary)
                 .build();
     }

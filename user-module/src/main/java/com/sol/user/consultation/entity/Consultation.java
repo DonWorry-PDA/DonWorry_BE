@@ -6,20 +6,26 @@ import com.sol.common.exception.ErrorCode;
 import com.sol.user.consultation.type.ConsultMethod;
 import com.sol.user.consultation.type.ConsultStatus;
 import com.sol.user.consultation.type.ConsultType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "consultation")
@@ -65,10 +71,21 @@ public class Consultation extends BaseEntity {
     @Column(name = "user_memo", length = 1000)
     private String userMemo;
 
+    /** 신청 맥락에서 "이번 상담에서 다룰 내용" — FE가 보낸 문자열을 그대로 저장한다. */
+    @ElementCollection
+    @CollectionTable(
+            name = "consultation_context_topic",
+            joinColumns = @JoinColumn(name = "consultation_id"))
+    @Column(name = "content", length = 200)
+    // 목록 조회 시 상담별 lazy 로딩(N+1)을 배치로 합쳐 쿼리 수를 줄인다.
+    @BatchSize(size = 20)
+    private List<String> contextTopics = new ArrayList<>();
+
     @Builder
     private Consultation(Long userId, String title, ConsultType consultType, ConsultStatus status,
                          LocalDateTime scheduledAt, ConsultMethod method, String branchName,
-                         String counselorName, Long planId, String userMemo) {
+                         String counselorName, Long planId, String userMemo,
+                         List<String> contextTopics) {
         this.userId = userId;
         this.title = title;
         this.consultType = consultType;
@@ -79,6 +96,7 @@ public class Consultation extends BaseEntity {
         this.counselorName = counselorName;
         this.planId = planId;
         this.userMemo = userMemo;
+        this.contextTopics = contextTopics == null ? new ArrayList<>() : new ArrayList<>(contextTopics);
     }
 
     /** 일정 변경 — 예약 상태에서만 가능. */
