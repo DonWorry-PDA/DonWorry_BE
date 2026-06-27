@@ -283,8 +283,13 @@ public class AssetMockService {
                         seed.evaluationAmount(), seed.quantity()));
             }
         }
-        holdingRepository.deleteAllByAccountIdIn(List.of(brokerage.getAccountId()));
-        return holdingRepository.saveAll(desired);
+        // 재동기화 시 (account, productId) 기준 upsert — 기존 보유행을 재사용해 holdingId를 유지한다.
+        // deleteAll+insert는 holdingId를 재발급해 월급 자산 제외(HOLDING_*)가 풀리는 문제(#207)를 유발.
+        List<Holding> existing = holdingRepository.findByAccountIn(List.of(brokerage));
+        return upsertByKey(existing, desired,
+                h -> String.valueOf(h.getProductId()),
+                (target, seed) -> target.updateMockValuation(seed.getEvaluationAmount(), seed.getQuantity()),
+                holdingRepository::deleteAll, holdingRepository::saveAll);
     }
 
     private List<Pension> savePensions(User user, Scenario scenario) {

@@ -115,6 +115,34 @@ class AssetMockServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void reusesExistingHoldingOnResyncSoHoldingIdIsStable() {
+        // #207: 재동기화 시 같은 (account, productId) 보유행은 재사용해 holdingId를 유지해야 한다.
+        // (deleteAll+insert로 holdingId가 재발급되면 월급 자산 제외(HOLDING_*)가 풀린다)
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        Holding existing = new Holding(mock(Account.class), 1001L,
+                new BigDecimal("1"), new BigDecimal("1"));
+        ReflectionTestUtils.setField(existing, "holdingId", 999L);
+        when(holdingRepository.findByAccountIn(any())).thenReturn(List.of(existing));
+
+        assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(holdingRepository).saveAll(captor.capture());
+        List<Holding> saved = toList((Iterable<Holding>) captor.getValue());
+
+        Holding reused = saved.stream().filter(h -> h.getProductId().equals(1001L)).findFirst().orElseThrow();
+        // 기존 행 재사용 → holdingId 유지, 평가액·수량만 갱신
+        assertThat(reused.getHoldingId()).isEqualTo(999L);
+        assertThat(reused.getEvaluationAmount()).isEqualByComparingTo("40000000");
+        // 다른 productId는 신규 추가
+        assertThat(saved).extracting(Holding::getProductId).contains(1002L);
+    }
+
+    @Test
     void updatesExistingMockAssetsWhenSameUserChangesScenario() {
         User user = mock(User.class);
         when(user.getUserId()).thenReturn(1L);

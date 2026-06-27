@@ -50,6 +50,12 @@ public class Holding {
         this.quantity = quantity;
     }
 
+    /** mock 재동기화 시 기존 보유행을 재사용해 평가액·수량만 갱신한다(holdingId 유지 — #207). */
+    public void updateMockValuation(BigDecimal evaluationAmount, BigDecimal quantity) {
+        this.evaluationAmount = evaluationAmount;
+        this.quantity = quantity;
+    }
+
     public static Holding ofBuy(Account account, Long productId, BigDecimal quantity, BigDecimal currentPrice) {
         Holding h = new Holding();
         h.account = account;
