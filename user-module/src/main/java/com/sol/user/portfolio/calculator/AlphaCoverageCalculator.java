@@ -166,12 +166,13 @@ public class AlphaCoverageCalculator {
         //   보존분 자본차익은 미실현(상속으로 귀속) → 기존 "전액 surplusRisk capgain" 이중계상 제거.
         // 전부 net 실수령. yield(이자·배당)는 전액 과세, 소진 annuity는 원금회수분 비과세·수익분만 과세,
         // 연금저축은 과세이연이라 yield·annuity 전액 연금소득세.
+        //   #192: 위험 소진분 gain은 배당분(도미사일 무관 15.4%)/자본차익분(국내주식형 비과세)으로 분해 과세.
         BigDecimal total = netNationalPension(input.monthlyNationalPension())
                 .add(netFinancial(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE)))
                 .add(netFinancial(monthlyYield(safePreserved, PortfolioConstants.SAFE_RATE)))
                 .add(netAnnuityFinancial(safeDeplete, PortfolioConstants.SAFE_RATE, years))
                 .add(netFinancial(monthlyYield(riskPreserved, dividendFrac)))
-                .add(netAnnuityFinancial(riskDeplete, PortfolioConstants.EXPECTED_TOTAL_RETURN, years));
+                .add(netRiskAnnuity(riskDeplete, dividendFrac, capGainTaxableWeight(plan), years));
         if (canWithdrawPension) {
             total = total
                     .add(netPrivatePension(monthlyYield(pensionPreserved, PortfolioConstants.PENSION_SAVING_RATE), input.age()))
@@ -220,6 +221,7 @@ public class AlphaCoverageCalculator {
     /**
      * 소진분 annuity 실수령 — 원금회수분은 비과세(세후 원금이므로), 수익분(이자·자본차익)만 금융소득세.
      * 통째 과세하면 원금회수에도 세금이 붙어 "원금소진+상속+바닥=총자산" 보존 불변식이 깨진다.
+     * 안전 소진분(채권=이자) 전용 — 위험 소진분은 자본차익 국내/해외 구분이 있어 netRiskAnnuity를 쓴다.
      */
     private BigDecimal netAnnuityFinancial(BigDecimal principal, BigDecimal annualRate, BigDecimal years) {
         if (principal.signum() <= 0) {
@@ -229,6 +231,41 @@ public class AlphaCoverageCalculator {
         BigDecimal principalBack = monthlyDepletion(principal, years);          // 비과세 원금회수분
         BigDecimal gain = gross.subtract(principalBack).max(BigDecimal.ZERO);   // 과세 수익분
         return principalBack.add(netFinancial(gain));
+    }
+
+    /**
+     * 위험 소진분 annuity 실수령 — 원금회수분 비과세, gain(=배당+자본차익)을 구성비로 분해해 차등 과세.
+     *   r=EXPECTED_TOTAL_RETURN(배당+자본차익). 배당분 = gain×(div/r): 분배금이라 도미사일 무관 15.4%.
+     *   자본차익분 = gain−배당분: 국내주식형은 매매차익 비과세 → 과세분 가중(taxableWeight)만 15.4%.
+     *   배당률이 r 이상이면 자본차익분 0(전액 배당과세). taxableWeight=1.0(전액 해외)이면
+     *   netFinancial 선형성으로 기존 netAnnuityFinancial과 수학적으로 동일 → #192 이전 동작 보존.
+     */
+    private BigDecimal netRiskAnnuity(BigDecimal principal, BigDecimal dividendFrac,
+                                      BigDecimal taxableWeight, BigDecimal years) {
+        if (principal.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal r = PortfolioConstants.EXPECTED_TOTAL_RETURN;                // > 0 보장(상수)
+        BigDecimal gross = monthlyAnnuity(principal, r, years);
+        BigDecimal principalBack = monthlyDepletion(principal, years);          // 비과세 원금회수분
+        BigDecimal gain = gross.subtract(principalBack).max(BigDecimal.ZERO);   // 과세 대상 수익분(배당+자본차익)
+        // 수익률 구성비로 분해. 배당률>r이면 분배분이 gain을 넘지 않도록 cap → 자본차익분 0.
+        BigDecimal dividendShare = gain.multiply(dividendFrac)
+                .divide(r, CALC_SCALE, RoundingMode.HALF_UP)
+                .min(gain);
+        BigDecimal capGainShare = gain.subtract(dividendShare);                 // ≥ 0
+        BigDecimal taxedCapGain = capGainShare.multiply(taxableWeight);         // 해외분만 과세
+        BigDecimal exemptCapGain = capGainShare.subtract(taxedCapGain);         // 국내주식형 비과세분
+        return principalBack
+                .add(netFinancial(dividendShare))
+                .add(netFinancial(taxedCapGain))
+                .add(exemptCapGain);
+    }
+
+    /** 위험버킷 자본차익 과세분 가중(null=전액 과세 1.0 폴백 → #192 이전 동작·기존 테스트 보존). */
+    private BigDecimal capGainTaxableWeight(PlanAllocation plan) {
+        BigDecimal weight = plan.getRiskCapGainTaxableWeight();
+        return weight == null ? BigDecimal.ONE : weight;
     }
 
     /** 연 수익(원금 × 연이율)을 월로. rate는 분수(0.035). */

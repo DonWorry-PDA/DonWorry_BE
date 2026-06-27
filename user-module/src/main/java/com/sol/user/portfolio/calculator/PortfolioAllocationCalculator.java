@@ -95,6 +95,7 @@ public class PortfolioAllocationCalculator {
                 .map(Holding::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
+        BigDecimal riskCapGainTaxableWeight = weightedCapGainTaxableWeight(riskHoldings);
 
         BigDecimal safeTarget = input.totalAsset()
                 .subtract(riskTarget)
@@ -127,6 +128,7 @@ public class PortfolioAllocationCalculator {
                 .surplusSafeAmount(money(surplusSafeAmount))
                 .shortTermBucket(money(shortTermBucket))
                 .planDividendRate(planDividendRate)
+                .riskCapGainTaxableWeight(riskCapGainTaxableWeight)
                 .holdings(holdings)
                 .build();
     }
@@ -216,6 +218,25 @@ public class PortfolioAllocationCalculator {
             ));
         }
         return holdings;
+    }
+
+    /**
+     * 위험버킷 자본차익 과세분 가중 = 과세(해외주식형) 금액 / 위험버킷 합. 국내주식형은 매매차익 비과세라 0으로 제외.
+     * 금액 기준이라 #118 슬롯 제외로 비중 합이 1.0 미만이어도 과세분율이 [0,1]로 정확. 위험버킷 없으면 1.0(전액 과세, 영향無).
+     */
+    private BigDecimal weightedCapGainTaxableWeight(List<Holding> holdings) {
+        BigDecimal total = BigDecimal.ZERO;
+        BigDecimal taxable = BigDecimal.ZERO;
+        for (Holding h : holdings) {
+            total = total.add(h.amount());
+            if (!PortfolioConstants.isCapitalGainExempt(h.ticker())) {
+                taxable = taxable.add(h.amount());
+            }
+        }
+        if (total.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ONE;
+        }
+        return taxable.divide(total, RATE_SCALE, RoundingMode.HALF_UP);
     }
 
     /** 위험버킷 가중평균 배당률 = Σ(비중 × 배당률). 배당률 null은 0으로. */

@@ -71,6 +71,17 @@ public final class PortfolioConstants {
     /** (H) 환헤지 ticker — etf_detail에 currency 컬럼이 없어 ticker로 판정. */
     private static final List<String> HEDGE_TICKERS = List.of("452360", "461600");
 
+    /**
+     * 국내주식형 ETF — 매매차익(자본차익) 비과세 대상. 국내 주식만으로 구성된 주식형만 비과세이며,
+     * 해외주식형·채권형·MMF·채권혼합형(0192S0은 코스피200 50% 담아도 혼합형이라 과세)은 전부 매매차익 15.4% 과세
+     * → 이 셋에 없으면 과세. 분배금은 종류 불문 15.4%라(들고만 있어도 발생) 이 분기와 무관.
+     * currencyOf(HEDGED/UNHEDGED)는 환헤지축이라 재사용 불가 → 별도 과세분류축이다.
+     * (조사 전수검증: 411540 KOSPI200Top10 / 292500 KRX300 / 484880 금융지주 / 0152E0 배당성향탑픽 / 0105E0 코리아고배당)
+     */
+    private static final List<String> CAPGAIN_EXEMPT_TICKERS = List.of(
+            "411540", "292500", "484880", "0152E0", "0105E0"
+    );
+
     // ── 권유가능등급 (성향별 최소 위험등급, product.riskGrade >= minGrade 이면 권유 가능) ──
     //    공격:1~6 적극:2~6 위험중립:3~6 안정추구:4~6 안정:5~6
     public static final Map<InvestmentPropensity, Integer> RECOMMENDABLE_MIN_GRADE = Map.of(
@@ -255,6 +266,12 @@ public final class PortfolioConstants {
                 throw new IllegalStateException("세율은 [0,1) 범위여야 함: " + rate);
             }
         }
+        // 6) 자본차익 비과세 셋은 위험(주식형) 티커의 부분집합 — 채권·MMF·혼합형은 주식형이 아니라 비과세 불가.
+        for (String ticker : CAPGAIN_EXEMPT_TICKERS) {
+            if (!RISK_TICKERS.contains(ticker)) {
+                throw new IllegalStateException("자본차익 비과세 티커가 위험(주식형)이 아님: " + ticker);
+            }
+        }
     }
 
     private static void validateSafeComposition(String name, List<SafeSlotWeight> composition, int suitableMinGrade) {
@@ -290,6 +307,11 @@ public final class PortfolioConstants {
 
     public static CurrencyExposure currencyOf(String ticker) {
         return HEDGE_TICKERS.contains(ticker) ? CurrencyExposure.HEDGED : CurrencyExposure.UNHEDGED;
+    }
+
+    /** 국내주식형이면 매매차익(자본차익) 비과세. 분배금은 종류 불문 과세라 이 분기와 무관. */
+    public static boolean isCapitalGainExempt(String ticker) {
+        return CAPGAIN_EXEMPT_TICKERS.contains(ticker);
     }
 
     public static boolean isRecommendable(InvestmentPropensity propensity, int riskGrade) {

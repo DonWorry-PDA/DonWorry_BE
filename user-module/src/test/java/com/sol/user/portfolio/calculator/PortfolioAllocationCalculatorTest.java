@@ -109,6 +109,29 @@ class PortfolioAllocationCalculatorTest {
         assertThat(stable.getRiskTarget()).isGreaterThan(BigDecimal.ZERO);
     }
 
+    // ── #192 위험버킷 자본차익 과세분 가중 산출 ───────────────────────────────────
+
+    @Test
+    void 위험버킷이_전부_해외주식형이면_자본차익_과세분가중은_1이다() {
+        // 현 SLOT_TICKER는 위험코어를 전부 해외(446720·452360·476030)로 해소 → 전액 과세
+        AllocationResult result = calculator.calculate(activeInput(4));
+
+        PlanAllocation balanced = plan(result, PlanType.BALANCED); // 446720·452360·476030 3종
+        assertThat(balanced.getRiskCapGainTaxableWeight()).isEqualByComparingTo("1");
+        PlanAllocation stable = plan(result, PlanType.STABLE);     // 452360 단일
+        assertThat(stable.getRiskCapGainTaxableWeight()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 위험버킷이_비면_자본차익_과세분가중은_1로_폴백된다() {
+        // 안정형: 위험버킷 비고 안전 흡수 → 분모 0 → 1.0 폴백(전액 과세, 영향 없음)
+        AllocationResult result = calculator.calculate(stableInput(3));
+
+        PlanAllocation stable = plan(result, PlanType.STABLE);
+        assertThat(riskHoldings(stable)).isEmpty();
+        assertThat(stable.getRiskCapGainTaxableWeight()).isEqualByComparingTo("1");
+    }
+
     // ── 구조적 부족: 여유분<=0 → 트랙 전환, 3안 스킵 ──────────────────────────────
 
     @Test

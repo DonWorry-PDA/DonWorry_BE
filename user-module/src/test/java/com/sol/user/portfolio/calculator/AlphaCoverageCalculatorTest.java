@@ -266,6 +266,67 @@ class AlphaCoverageCalculatorTest {
         return calculator.calculate(input).getPlanCoverages().get(0).getMonthlyIncome();
     }
 
+    // ── #192 위험 소진분 자본차익 국내/해외 과세 구분 ─────────────────────────────
+
+    @Test
+    void 위험소진_자본차익은_국내주식형이면_비과세라_월수령이_해외보다_크다() {
+        BigDecimal incomeForeign = riskOnlyMonthlyIncome(BigDecimal.ONE);   // 전액 해외 → 자본차익 15.4%
+        BigDecimal incomeDomestic = riskOnlyMonthlyIncome(BigDecimal.ZERO); // 전액 국내주식형 → 자본차익 비과세
+        assertThat(incomeDomestic).isGreaterThan(incomeForeign);
+    }
+
+    @Test
+    void 위험소진_과세분가중_혼합이면_국내와_해외_사이의_월수령이다() {
+        BigDecimal foreign = riskOnlyMonthlyIncome(BigDecimal.ONE);
+        BigDecimal domestic = riskOnlyMonthlyIncome(BigDecimal.ZERO);
+        BigDecimal blended = riskOnlyMonthlyIncome(new BigDecimal("0.6"));   // 해외 60%·국내 40%
+        assertThat(blended).isGreaterThan(foreign).isLessThan(domestic);
+    }
+
+    @Test
+    void 과세분가중_null이면_전액과세_1_0과_동일하다_기존동작_보존() {
+        // 기존 테스트들이 riskCapGainTaxableWeight 미설정(null)이므로, null=1.0 폴백 동치를 명시 가드.
+        BigDecimal nullWeight = riskOnlyMonthlyIncome(null);
+        BigDecimal fullTaxable = riskOnlyMonthlyIncome(BigDecimal.ONE);
+        assertThat(nullWeight).isEqualByComparingTo(fullTaxable);
+    }
+
+    @Test
+    void 배당이_분배금이라_국내주식형이어도_배당분은_과세된다() {
+        // 국내주식형(taxableWeight=0)이라도 분배금은 도미사일 무관 15.4% → 소진분 월수령이 무과세보다 작아야.
+        // 무과세 가정(가상): 비교용으로 배당분까지 면제되면 안 된다는 걸, 배당률 0 대비로 검증한다.
+        BigDecimal withDividend = riskOnlyMonthlyIncomeWithDividend(BigDecimal.ZERO, new BigDecimal("3.0000"));
+        BigDecimal noDividend = riskOnlyMonthlyIncomeWithDividend(BigDecimal.ZERO, new BigDecimal("0.0001"));
+        // 배당분이 과세되므로, 배당비중이 큰 쪽(withDividend)은 net이 더 깎인다(자본차익분은 둘 다 비과세).
+        assertThat(withDividend).isLessThan(noDividend);
+    }
+
+    private BigDecimal riskOnlyMonthlyIncome(BigDecimal taxableWeight) {
+        return riskOnlyMonthlyIncomeWithDividend(taxableWeight, new BigDecimal("2.0000"));
+    }
+
+    private BigDecimal riskOnlyMonthlyIncomeWithDividend(BigDecimal taxableWeight, BigDecimal dividendRate) {
+        // 위험버킷만 남기고 q3=2(전액 소진) → 자본차익 실현분이 월수령에 최대로 반영되도록 분리.
+        PlanAllocation riskOnly = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.valueOf(200_000_000))
+                .surplusSafeAmount(BigDecimal.ZERO)
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(dividendRate) // < 4.5%(r)라 자본차익분 존재
+                .riskCapGainTaxableWeight(taxableWeight)
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .q3(2)
+                .monthlyNationalPension(BigDecimal.ZERO)
+                .pensionSaving(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.ZERO)
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL).plans(List.of(riskOnly)).build())
+                .build();
+        return calculator.calculate(input).getPlanCoverages().get(0).getMonthlyIncome();
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private CoverageInput.CoverageInputBuilder baseBuilder() {
