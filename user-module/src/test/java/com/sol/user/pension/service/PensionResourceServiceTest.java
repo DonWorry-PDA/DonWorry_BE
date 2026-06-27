@@ -8,6 +8,8 @@ import com.sol.user.pension.dto.PensionResourceResponse;
 import com.sol.user.pension.dto.PensionResourceResponse.PensionItem;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,9 +19,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,12 +38,16 @@ class PensionResourceServiceTest {
     private AccountRepository accountRepository;
     @Mock
     private HoldingRepository holdingRepository;
+    @Mock
+    private UserRepository userRepository;
 
     private PensionResourceService service;
 
     @BeforeEach
     void setUp() {
-        service = new PensionResourceService(pensionRepository, accountRepository, holdingRepository);
+        service = new PensionResourceService(pensionRepository, accountRepository, holdingRepository, userRepository);
+        // 국민연금 항목은 '수령 전'일 때만 표시 — 기본 mock(getNationalPensionReceiving=null=수령 전)
+        lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(mock(User.class)));
     }
 
     // ─────────────────────────────────────────────────────────────────────────

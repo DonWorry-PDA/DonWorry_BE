@@ -10,6 +10,8 @@ import com.sol.user.holding.dto.HoldingWithQuantityAndType;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +45,8 @@ class AssetIncomeServiceTest {
     private ProductBatchClient productBatchClient;
     @Mock
     private DepositDetailClient depositDetailClient;
+    @Mock
+    private UserRepository userRepository;
 
     private AssetIncomeService service;
 
@@ -52,8 +57,13 @@ class AssetIncomeServiceTest {
                 holdingRepository,
                 accountRepository,
                 productBatchClient,
-                depositDetailClient
+                depositDetailClient,
+                userRepository
         );
+        // 국민연금 수령 게이팅: 수령 중(true)일 때만 income에 국민연금이 포함된다.
+        User user = mock(User.class);
+        lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        lenient().when(user.getNationalPensionReceiving()).thenReturn(true);
     }
 
     @Test
