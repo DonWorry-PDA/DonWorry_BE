@@ -114,7 +114,20 @@ public record AssetBreakdown(
 
     /** 자산 역할. 표시·집계 순서는 선언 순서 고정(현금흐름·성장·잠자는 돈·연금). */
     public enum AssetRole {
-        CASHFLOW, GROWTH, IDLE, PENSION
+        CASHFLOW("현금흐름"),
+        GROWTH("성장"),
+        IDLE("잠자는 돈"),
+        PENSION("연금");
+
+        private final String label;
+
+        AssetRole(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
     }
 
     /** 역할별 금액·비율(순자산 대비 %, 합 100). 금액 0 역할은 분해에서 제외돼 등장하지 않는다. */

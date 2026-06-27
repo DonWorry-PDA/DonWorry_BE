@@ -8,6 +8,8 @@ import com.sol.user.pension.dto.PensionResourceResponse;
 import com.sol.user.pension.dto.PensionResourceResponse.PensionItem;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.user.entity.User;
+import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,15 +43,21 @@ public class PensionResourceService {
     private final PensionRepository pensionRepository;
     private final AccountRepository accountRepository;
     private final HoldingRepository holdingRepository;
+    private final UserRepository userRepository;
 
     public PensionResourceResponse getPension(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
         List<PensionItem> items = new ArrayList<>();
 
-        // 국민연금
-        List<Pension> pensions = pensionRepository.findByUserUserId(userId);
-        for (Pension pension : pensions) {
-            if (TYPE_NATIONAL.equals(pension.getPensionType())) {
-                items.add(buildNationalItem(pension));
+        // 국민연금 — 수령 전인 경우에만 표시
+        // 수령 중이면 /income 섹션에 이미 반영되므로 중복 제거
+        if (!Boolean.TRUE.equals(user.getNationalPensionReceiving())) {
+            List<Pension> pensions = pensionRepository.findByUserUserId(userId);
+            for (Pension pension : pensions) {
+                if (TYPE_NATIONAL.equals(pension.getPensionType())) {
+                    items.add(buildNationalItem(pension));
+                }
             }
         }
 

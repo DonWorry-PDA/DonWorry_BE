@@ -135,7 +135,7 @@ public class AssetCompositionService {
         }
         // AssetBreakdown.roleAllocation()을 활용해 역할 기반 배분 생성
         return breakdown.roleAllocation().stream()
-                .map(slice -> new AssetAllocationItem(slice.role().name(), slice.ratio()))
+                .map(slice -> new AssetAllocationItem(slice.role().getLabel(), slice.ratio()))
                 .toList();
     }
 
