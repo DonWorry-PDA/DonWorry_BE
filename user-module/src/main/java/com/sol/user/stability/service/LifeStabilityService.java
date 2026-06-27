@@ -28,7 +28,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
@@ -222,12 +221,12 @@ public class LifeStabilityService {
                         .riskAssetDependencyRate(result.getRiskAssetDependencyRate())
                         .build())
                 .indicators(LifeStabilityIndicators.builder()
-                        .cashflowStatus(toCashflowStatus(result.getCashflowCoverageRate()).getLabel())
-                        .essentialExpenseStatus(toExpenseStatus(result.getEssentialExpenseRate()).getLabel())
-                        .medicalPreparednessStatus(toMonthStatus(result.getMedicalPreparednessMonths(), BigDecimal.valueOf(24)).getLabel())
-                        .liquidityStatus(toMonthStatus(result.getLiquidityMonths(), BigDecimal.valueOf(6)).getLabel())
-                        .debtBurdenStatus(toDebtStatus(result.getDebtBurdenRate()).getLabel())
-                        .riskAssetDependencyStatus(toRiskDependencyStatus(result.getRiskAssetDependencyRate()).getLabel())
+                        .cashflowStatus(LifeStabilityIndicatorStatus.ofCashflowCoverage(result.getCashflowCoverageRate()).getLabel())
+                        .essentialExpenseStatus(LifeStabilityIndicatorStatus.ofEssentialExpense(result.getEssentialExpenseRate()).getLabel())
+                        .medicalPreparednessStatus(LifeStabilityIndicatorStatus.ofMonths(result.getMedicalPreparednessMonths(), LifeStabilityIndicatorStatus.MEDICAL_GOOD_MONTHS).getLabel())
+                        .liquidityStatus(LifeStabilityIndicatorStatus.ofMonths(result.getLiquidityMonths(), LifeStabilityIndicatorStatus.LIQUIDITY_GOOD_MONTHS).getLabel())
+                        .debtBurdenStatus(LifeStabilityIndicatorStatus.ofDebtBurden(result.getDebtBurdenRate()).getLabel())
+                        .riskAssetDependencyStatus(LifeStabilityIndicatorStatus.ofRiskAssetDependency(result.getRiskAssetDependencyRate()).getLabel())
                         .build())
                 .planGuardrail(PlanGuardrailResponse.builder()
                         .growthPlanAllowed(result.isGrowthPlanAllowed())
@@ -254,54 +253,4 @@ public class LifeStabilityService {
                 .build();
     }
 
-    private LifeStabilityIndicatorStatus toCashflowStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.valueOf(100)) >= 0) {
-            return LifeStabilityIndicatorStatus.STABLE;
-        }
-        if (rate.compareTo(BigDecimal.valueOf(50)) >= 0) {
-            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
-        }
-        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
-    }
-
-    private LifeStabilityIndicatorStatus toExpenseStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.valueOf(50)) <= 0) {
-            return LifeStabilityIndicatorStatus.STABLE;
-        }
-        if (rate.compareTo(BigDecimal.valueOf(70)) <= 0) {
-            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
-        }
-        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
-    }
-
-    private LifeStabilityIndicatorStatus toMonthStatus(BigDecimal months, BigDecimal goodThreshold) {
-        if (months.compareTo(goodThreshold) >= 0) {
-            return LifeStabilityIndicatorStatus.STABLE;
-        }
-        BigDecimal normalThreshold = goodThreshold.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
-        if (months.compareTo(normalThreshold) >= 0) {
-            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
-        }
-        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
-    }
-
-    private LifeStabilityIndicatorStatus toDebtStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.valueOf(30)) <= 0) {
-            return LifeStabilityIndicatorStatus.STABLE;
-        }
-        if (rate.compareTo(BigDecimal.valueOf(40)) <= 0) {
-            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
-        }
-        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
-    }
-
-    private LifeStabilityIndicatorStatus toRiskDependencyStatus(BigDecimal rate) {
-        if (rate.compareTo(BigDecimal.ZERO) <= 0) {
-            return LifeStabilityIndicatorStatus.STABLE;
-        }
-        if (rate.compareTo(BigDecimal.valueOf(20)) <= 0) {
-            return LifeStabilityIndicatorStatus.NEED_COMPLEMENT;
-        }
-        return LifeStabilityIndicatorStatus.NEED_IMPROVEMENT;
-    }
 }
