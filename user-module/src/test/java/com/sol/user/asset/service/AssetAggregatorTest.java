@@ -32,8 +32,8 @@ class AssetAggregatorTest {
     void 제외목록을_적용하면_해당_계좌_예수금과_보유종목이_집계에서_빠진다() {
         stubData();
 
-        // 계좌2(예금 5천만)와 보유종목11(ETF 3억) 제외
-        AssetBreakdown breakdown = aggregator.aggregate(1L, Set.of(2L), Set.of(11L));
+        // 계좌2(예금 5천만)와 보유종목(productId 101, ETF 3억) 제외
+        AssetBreakdown breakdown = aggregator.aggregate(1L, Set.of(2L), Set.of(101L));
 
         // cash = 증권 예수금 1억 (계좌2 5천만 제외)
         assertThat(breakdown.cash()).isEqualByComparingTo("100000000");
@@ -54,6 +54,23 @@ class AssetAggregatorTest {
         // nonStock = ETF 2억 + 3억 = 5억
         assertThat(breakdown.nonStockHoldingValue()).isEqualByComparingTo("500000000");
         assertThat(breakdown.operatingTotal()).isEqualByComparingTo("650000000");
+    }
+
+    @Test
+    void 보유종목_제외는_productId_기반이라_재동기화로_holdingId가_바뀌어도_유지된다() {
+        // 재동기화로 holding이 삭제·재삽입돼 holdingId가 99로 새로 발급돼도,
+        // 제외는 productId(101)로 적용되므로 해당 종목이 그대로 빠진다(#207).
+        Account brokerage = mockAccount(1L, "BROKERAGE", 100_000_000);
+        given(accountRepository.findByUserUserId(1L)).willReturn(List.of(brokerage));
+
+        HoldingWithProduct reissued = mockHolding(99L, 101L, "BROKERAGE", 300_000_000);
+        given(holdingRepository.findHoldingsWithAccountTypeByUserId(1L)).willReturn(List.of(reissued));
+
+        AssetBreakdown breakdown = aggregator.aggregate(1L, Set.of(), Set.of(101L));
+
+        // 보유종목 전부 제외 → 예수금 1억만 남고 종목 평가액 0
+        assertThat(breakdown.nonStockHoldingValue()).isEqualByComparingTo("0");
+        assertThat(breakdown.cash()).isEqualByComparingTo("100000000");
     }
 
     private void stubData() {
