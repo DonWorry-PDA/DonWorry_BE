@@ -13,6 +13,7 @@ import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
 import com.sol.user.holding.repository.HoldingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class CalendarQueryService {
         List<CalendarItem> items = new ArrayList<>();
         addCashFlowItems(items, userId, targetMonth, from, to);
         addDebtMaturityItems(items, userId, from, to);
+        addActualDividendItems(items, userId, from, to);
         addExpectedDividendItems(items, userId, from, to);
         items.sort(Comparator.comparing(CalendarItem::date).thenComparing(CalendarItem::id));
 
@@ -150,6 +152,38 @@ public class CalendarQueryService {
                     CalendarEventCategory.MATURITY,
                     title,
                     null,
+                    false,
+                    false
+            ));
+        }
+    }
+
+    /**
+     * 과거·현재 달의 실제 지급된 분배금(확정). dividend_history의 실지급 행을 payment_date에 그대로 표시한다.
+     * 미래 투영({@link #addExpectedDividendItems})은 "최신지급일+interval"부터라 실지급(≤최신)과 겹치지 않는다.
+     */
+    private void addActualDividendItems(
+            List<CalendarItem> items,
+            Long userId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        for (HoldingDividendPaymentProjection input
+                : holdingRepository.findDividendPaymentsByUserId(userId, from, to)) {
+            if (input.getProductId() == null || input.getQuantity() == null
+                    || input.getAmountPerUnit() == null || input.getPaymentDate() == null) {
+                continue;
+            }
+            BigDecimal amount = input.getAmountPerUnit()
+                    .multiply(input.getQuantity())
+                    .setScale(0, RoundingMode.HALF_UP);
+            String productName = isBlank(input.getProductName()) ? "ETF" : input.getProductName();
+            items.add(new CalendarItem(
+                    "etf-dividend-actual-" + input.getProductId() + "-" + input.getPaymentDate(),
+                    input.getPaymentDate(),
+                    CalendarEventCategory.DIVIDEND,
+                    productName + " 분배금",
+                    amount,
                     false,
                     false
             ));
