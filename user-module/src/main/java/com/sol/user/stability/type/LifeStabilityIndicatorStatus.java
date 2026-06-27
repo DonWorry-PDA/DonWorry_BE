@@ -28,6 +28,9 @@ public enum LifeStabilityIndicatorStatus {
      * 동일 기준을 쓰도록 단일 출처로 모은다.
      */
     public static LifeStabilityIndicatorStatus ofCashflowCoverage(BigDecimal rate) {
+        if (rate == null) {
+            return STABLE; // 지표 값 미저장(legacy/부분 행) → NPE 방지, 무알람 처리
+        }
         if (rate.compareTo(BigDecimal.valueOf(100)) >= 0) {
             return STABLE;
         }
@@ -38,6 +41,9 @@ public enum LifeStabilityIndicatorStatus {
     }
 
     public static LifeStabilityIndicatorStatus ofEssentialExpense(BigDecimal rate) {
+        if (rate == null) {
+            return STABLE;
+        }
         if (rate.compareTo(BigDecimal.valueOf(50)) <= 0) {
             return STABLE;
         }
@@ -48,6 +54,9 @@ public enum LifeStabilityIndicatorStatus {
     }
 
     public static LifeStabilityIndicatorStatus ofMonths(BigDecimal months, BigDecimal goodThreshold) {
+        if (months == null) {
+            return STABLE;
+        }
         if (months.compareTo(goodThreshold) >= 0) {
             return STABLE;
         }
@@ -59,6 +68,9 @@ public enum LifeStabilityIndicatorStatus {
     }
 
     public static LifeStabilityIndicatorStatus ofDebtBurden(BigDecimal rate) {
+        if (rate == null) {
+            return STABLE;
+        }
         if (rate.compareTo(BigDecimal.valueOf(30)) <= 0) {
             return STABLE;
         }
@@ -69,6 +81,9 @@ public enum LifeStabilityIndicatorStatus {
     }
 
     public static LifeStabilityIndicatorStatus ofRiskAssetDependency(BigDecimal rate) {
+        if (rate == null) {
+            return STABLE;
+        }
         if (rate.compareTo(BigDecimal.ZERO) <= 0) {
             return STABLE;
         }
