@@ -120,6 +120,10 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
 
     // 보유 ETF의 기간 내 실제 지급 분배금(확정). 캘린더 확정 분배금 표시(#219).
     // dividend_history의 실지급 행을 payment_date 기준으로 가져온다(투영과 달리 +interval 적용 안 함).
+    // ⚠️ 한계: SUM(h.quantity)는 '현재' 보유 수량이라, 지급일 이후 해당 ETF를 추가 매수/매도하면
+    //   단가×현재수량이 실제 지급액과 어긋날 수 있다(기존 예상 분배금 투영도 동일 전제).
+    //   정확한 확정액은 '지급일 시점 보유수량 스냅샷' 또는 실입금 원천이 필요하나 현재 데이터엔 없다.
+    //   데모 ETF 보유는 시드 고정(지급일 수량=현재 수량)이라 영향 없음. 데이터 확보 시 정밀화 대상.
     @Query(value = """
             SELECT h.product_id      AS productId,
                    fp.product_name   AS productName,
