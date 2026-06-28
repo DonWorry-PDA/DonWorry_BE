@@ -1,9 +1,13 @@
 package com.sol.user.asset.service;
 
+import com.sol.user.account.entity.Account;
 import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetCompositionResponse;
+import com.sol.user.asset.dto.AssetCompositionResponse.AssetHoldingItem;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.debt.repository.DebtRepository;
+import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +21,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AssetCompositionServiceTest {
@@ -83,20 +89,117 @@ class AssetCompositionServiceTest {
         assertThat(response.getAllocation()).isEmpty();
     }
 
+    @Test
+    @DisplayName("ETF 보유종목에는 tickerCode와 quantity가 채워진다")
+    void getComposition_etfHolding_hasTickerCodeAndQuantity() {
+        HoldingWithProduct holding = mockHolding(1L, 10L, "BROKERAGE",
+                new BigDecimal("300000"), new BigDecimal("10.0000"));
+        ProductBatchItem product = new ProductBatchItem(10L, "SOL 미국배당다우존스", "ETF", "446720");
+
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
+                snapshotWith(new BigDecimal("300000"), List.of(holding), Map.of(10L, product)));
+        given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
+        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+
+        AssetCompositionResponse response = service.getComposition(1L);
+
+        AssetHoldingItem holdingItem = response.getGroups().stream()
+                .flatMap(g -> g.getAccounts().stream())
+                .flatMap(a -> a.getHoldings().stream())
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(holdingItem.getTickerCode()).isEqualTo("446720");
+        assertThat(holdingItem.getQuantity()).isEqualByComparingTo("10.0000");
+        assertThat(holdingItem.getEvaluationAmount()).isEqualByComparingTo("300000");
+    }
+
+    @Test
+    @DisplayName("비ETF 보유종목은 tickerCode가 null이다")
+    void getComposition_nonEtfHolding_tickerCodeIsNull() {
+        HoldingWithProduct holding = mockHolding(1L, 20L, "PENSION_SAVING",
+                new BigDecimal("500000"), new BigDecimal("1.0000"));
+        ProductBatchItem product = new ProductBatchItem(20L, "한국투자 TDF", "FUND", null);
+
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
+                snapshotWith(new BigDecimal("500000"), List.of(holding), Map.of(20L, product)));
+        given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
+        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+
+        AssetCompositionResponse response = service.getComposition(1L);
+
+        AssetHoldingItem holdingItem = response.getGroups().stream()
+                .flatMap(g -> g.getAccounts().stream())
+                .flatMap(a -> a.getHoldings().stream())
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(holdingItem.getTickerCode()).isNull();
+        assertThat(holdingItem.getQuantity()).isEqualByComparingTo("1.0000");
+    }
+
+    @Test
+    @DisplayName("보유종목이 없는 계좌는 holdings 리스트가 비어있다")
+    void getComposition_accountWithNoHoldings_emptyHoldingsList() {
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
+                snapshotWith(new BigDecimal("1000000"), List.of(), Map.of()));
+        given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
+        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+
+        AssetCompositionResponse response = service.getComposition(1L);
+
+        long holdingCount = response.getGroups().stream()
+                .flatMap(g -> g.getAccounts().stream())
+                .mapToLong(a -> a.getHoldings().size())
+                .sum();
+        assertThat(holdingCount).isZero();
+    }
+
     /**
      * AssetSnapshot 레코드: (AssetBreakdown, List<Account>, List<HoldingWithProduct>, Map<Long, ProductBatchItem>)
      * cash 파라미터를 전체 예수금 합으로 사용해 grossTotal = cash + 0 + 0 + 0 = cash
      */
     private AssetAggregator.AssetSnapshot emptySnapshot(BigDecimal totalAsset) {
-        // grossTotal() = cash + nonStockHoldingValue + pensionHoldingValue + stockHoldingValue
-        // 단순화: cash = totalAsset, 나머지는 모두 0
         AssetBreakdown breakdown = new AssetBreakdown(
-                totalAsset,     // cash
-                BigDecimal.ZERO, // pensionCash
-                BigDecimal.ZERO, // nonStockHoldingValue
-                BigDecimal.ZERO, // pensionHoldingValue
-                BigDecimal.ZERO  // stockHoldingValue
+                totalAsset,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
         );
         return new AssetAggregator.AssetSnapshot(breakdown, List.of(), List.of(), Map.of());
+    }
+
+    private AssetAggregator.AssetSnapshot snapshotWith(
+            BigDecimal holdingTotal,
+            List<HoldingWithProduct> holdings,
+            Map<Long, ProductBatchItem> products) {
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                holdingTotal,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        );
+        Account account = mock(Account.class);
+        when(account.getAccountId()).thenReturn(1L);
+        when(account.getAccountType()).thenReturn(
+                holdings.isEmpty() ? "DEPOSIT"
+                        : holdings.get(0).getAccountType());
+        when(account.getDepositBalance()).thenReturn(BigDecimal.ZERO);
+        when(account.getInstitutionName()).thenReturn("신한투자증권");
+        return new AssetAggregator.AssetSnapshot(breakdown, List.of(account), holdings, products);
+    }
+
+    private HoldingWithProduct mockHolding(Long holdingId, Long productId,
+                                           String accountType, BigDecimal eval, BigDecimal quantity) {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getHoldingId()).thenReturn(holdingId);
+        when(holding.getProductId()).thenReturn(productId);
+        when(holding.getAccountId()).thenReturn(1L);
+        when(holding.getAccountType()).thenReturn(accountType);
+        when(holding.getEvaluationAmount()).thenReturn(eval);
+        when(holding.getQuantity()).thenReturn(quantity);
+        return holding;
     }
 }

@@ -66,8 +66,8 @@ class AssetAggregatorTest {
         given(holdingRepository.findHoldingsWithAccountTypeByUserId(1L)).willReturn(List.of(h1, h2));
 
         given(productBatchClient.fetchProducts(any())).willReturn(Map.of(
-                100L, new ProductBatchItem(100L, "SOL ETF A", "ETF"),
-                101L, new ProductBatchItem(101L, "SOL ETF B", "ETF")));
+                100L, new ProductBatchItem(100L, "SOL ETF A", "ETF", null),
+                101L, new ProductBatchItem(101L, "SOL ETF B", "ETF", null)));
     }
 
     private Account mockAccount(Long accountId, String accountType, long deposit) {

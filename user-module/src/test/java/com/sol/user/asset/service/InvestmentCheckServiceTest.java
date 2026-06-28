@@ -347,7 +347,7 @@ class InvestmentCheckServiceTest {
     }
 
     private ProductBatchItem product(long productId, String name, String type) {
-        return new ProductBatchItem(productId, name, type);
+        return new ProductBatchItem(productId, name, type, null);
     }
 
     private BigDecimal won(long value) {
