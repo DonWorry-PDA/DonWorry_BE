@@ -22,6 +22,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -250,19 +251,24 @@ public class InvestmentCheckService {
                 .collect(Collectors.toSet());
 
         BigDecimal amount = BigDecimal.ZERO;
-        List<String> names = new ArrayList<>();
+        // amount는 보유 row별로 합산하되, 종목명은 productId 기준으로 dedupe(한 종목 다계좌 보유 시 1회만 노출).
+        Map<Long, String> namesByProduct = new LinkedHashMap<>();
         for (HoldingWithProduct holding : snapshot.holdings()) {
             if (!isCashflowHolding(holding, snapshot.products()) || covered.contains(holding.getProductId())) {
                 continue;
             }
             amount = amount.add(nz(holding.getEvaluationAmount()));
             ProductBatchItem product = snapshot.products().get(holding.getProductId());
-            names.add(product == null ? String.valueOf(holding.getProductId()) : product.productName());
+            namesByProduct.putIfAbsent(holding.getProductId(),
+                    product == null ? String.valueOf(holding.getProductId()) : product.productName());
         }
         if (amount.signum() <= 0) {
             return null;
         }
-        return UncoveredCashflow.builder().amount(amount).productNames(names).build();
+        return UncoveredCashflow.builder()
+                .amount(amount)
+                .productNames(new ArrayList<>(namesByProduct.values()))
+                .build();
     }
 
     /** 현금흐름 역할 보유 = 비STOCK · 비연금계좌. {@link AssetAggregator}의 nonStockHoldingValue 분류와 동일. */

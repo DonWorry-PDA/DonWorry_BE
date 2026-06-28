@@ -263,6 +263,26 @@ class InvestmentCheckServiceTest {
         assertThat(response.uncoveredCashflow()).isNull();
     }
 
+    @Test
+    void 같은_공백종목을_여러계좌로_보유하면_금액은_합산되고_종목명은_한_번만() {
+        // 분배없는 채권혼합(999)을 두 계좌에 각 2천·1천 보유 → amount 3천 합산, 종목명은 1회
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, won(60_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+        stubSnapshot(breakdown,
+                List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),
+                        holding(2L, 999L, 20_000_000, "BROKERAGE"),
+                        holding(3L, 999L, 10_000_000, "CMA")),
+                Map.of(101L, product(101L, "SOL 국고채3년", "ETF"),
+                        999L, product(999L, "SOL 코스피200채권혼합50", "FUND")));
+        when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
+                .thenReturn(List.of(etf(101L, 100, "300", 1)));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        assertThat(response.uncoveredCashflow().amount()).isEqualByComparingTo("30000000");
+        assertThat(response.uncoveredCashflow().productNames()).containsExactly("SOL 코스피200채권혼합50");
+    }
+
     // ── helpers ──
 
     private void stubBreakdown(AssetBreakdown breakdown) {
