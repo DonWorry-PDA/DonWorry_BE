@@ -91,4 +91,17 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             @Param("end") LocalDate end
     );
 
+    /** 특정 날짜·이벤트 타입 기준 유저별 합계. 알림 Provider용. */
+    @Query("""
+            SELECT e.user.userId, SUM(e.amount)
+            FROM CashFlowEvent e
+            WHERE e.eventType = :eventType
+              AND e.eventDate = :date
+            GROUP BY e.user.userId
+            """)
+    List<Object[]> findUserIdAndTotalAmountByEventTypeAndDate(
+            @Param("eventType") String eventType,
+            @Param("date") LocalDate date
+    );
+
 }
