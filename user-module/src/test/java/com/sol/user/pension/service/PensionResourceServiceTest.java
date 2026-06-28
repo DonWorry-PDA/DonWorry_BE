@@ -18,12 +18,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 import static com.sol.user.pension.service.PensionResourceService.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -54,7 +54,6 @@ class PensionResourceServiceTest {
     @Test
     @DisplayName("payoutMonths = (기대수명 - 개시나이) × 12")
     void payoutMonths_calculatedFromLifespan() {
-        // 55세 개시, 기대수명 83세 → 28년 × 12 = 336개월
         assertThat(payoutMonths(PENSION_START_AGE)).isEqualTo((EXPECTED_LIFESPAN - PENSION_START_AGE) * 12);
     }
 
@@ -79,7 +78,6 @@ class PensionResourceServiceTest {
     @Test
     @DisplayName("calculateMonthlyPmt: 연 3% 수익률로 IRP 65,000,000 → 약 286,000원/월 (±2,000)")
     void calculateMonthlyPmt_knownValue() {
-        // 연 3%, 336개월: PMT ≈ 286,000원 (단순 /240 = 270,833보다 높음)
         BigDecimal pmt = calculateMonthlyPmt(new BigDecimal("65000000"), payoutMonths(PENSION_START_AGE));
         assertThat(pmt.intValue()).isBetween(284_000, 288_000);
     }
@@ -105,7 +103,8 @@ class PensionResourceServiceTest {
         assertThat(item.getInstitutionName()).isNull();
         assertThat(item.getStartAge()).isEqualTo(63);
         assertThat(item.getCurrentBalance()).isNull();
-        assertThat(item.getExpectedMonthly()).isEqualByComparingTo("900000");
+        assertThat(item.getExpectedMonthlyGross()).isEqualByComparingTo("900000");
+        assertThat(item.getExpectedMonthlyNet()).isEqualByComparingTo("900000");
         assertThat(item.getTaxBenefitLimit()).isNull();
         assertThat(item.isEstimated()).isFalse();
         assertThat(item.getPayoutMonths()).isNull();
@@ -140,7 +139,6 @@ class PensionResourceServiceTest {
     @Test
     @DisplayName("IRP 계좌의 currentBalance = depositBalance + 펀드 평가액 합산")
     void irpAccount_holdingsSummedWithDeposit() {
-        // depositBalance=12,000,000 + holding=3,000,000 → 15,000,000
         Account irp = mockAccount(10L, "IRP", "신한은행", new BigDecimal("12000000"));
         PensionHoldingProjection holding = mockHoldingProjection(10L, new BigDecimal("3000000"));
         given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of());
@@ -151,15 +149,13 @@ class PensionResourceServiceTest {
 
         PensionItem item = response.getPensions().get(0);
         assertThat(item.getCurrentBalance()).isEqualByComparingTo("15000000");
-        // PMT(3%, 336개월, 15,000,000) > 0
-        assertThat(item.getExpectedMonthly()).isPositive();
-        // PMT > 단순분할 (수익률 양수)
-        assertThat(item.getExpectedMonthly())
+        assertThat(item.getExpectedMonthlyGross()).isPositive();
+        assertThat(item.getExpectedMonthlyGross())
                 .isGreaterThan(new BigDecimal("15000000").divide(BigDecimal.valueOf(336), 0, java.math.RoundingMode.HALF_UP));
     }
 
     @Test
-    @DisplayName("IRP expectedMonthly는 PMT 공식으로 계산된다 (단순 잔액/240 아님)")
+    @DisplayName("IRP expectedMonthlyGross는 PMT 공식으로 계산된다 (단순 잔액/240 아님)")
     void irpAccount_expectedMonthly_usesPmtNotSimpleDivision() {
         Account irp = mockAccount(10L, "IRP", "신한은행", new BigDecimal("12000000"));
         given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of());
@@ -168,13 +164,54 @@ class PensionResourceServiceTest {
 
         PensionResourceResponse response = service.getPension(USER_ID);
 
-        BigDecimal expectedMonthly = response.getPensions().get(0).getExpectedMonthly();
-        BigDecimal oldSimpleValue = new BigDecimal("50000"); // 12,000,000 / 240
+        BigDecimal gross = response.getPensions().get(0).getExpectedMonthlyGross();
+        assertThat(gross).isNotEqualByComparingTo(new BigDecimal("50000")); // 12,000,000 / 240
+        assertThat(gross).isGreaterThan(new BigDecimal("35714")); // 12,000,000/336
+    }
 
-        // PMT(3%, 336개월)는 단순 나누기와 다름
-        assertThat(expectedMonthly).isNotEqualByComparingTo(oldSimpleValue);
-        // 수익률이 양수이므로 단순 /336보다 큼
-        assertThat(expectedMonthly).isGreaterThan(new BigDecimal("35714")); // 12,000,000/336
+    // ─────────────────────────────────────────────────────────────────────────
+    // IRP 세후 계산
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("IRP: irpRetirementAmount/personalAmount가 있으면 세후 수령액이 계산된다")
+    void irpAccount_withComposition_netMonthlyCalculated() {
+        Account irp = mockIrpAccount(10L, "신한은행",
+                new BigDecimal("12000000"),
+                new BigDecimal("7200000"),
+                new BigDecimal("4800000"),
+                LocalDate.now().minusYears(15));
+        given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of());
+        given(accountRepository.findByUserUserId(USER_ID)).willReturn(List.of(irp));
+        given(holdingRepository.findPensionHoldingsByUserId(USER_ID)).willReturn(List.of());
+
+        PensionResourceResponse response = service.getPension(USER_ID);
+
+        PensionItem item = response.getPensions().get(0);
+        assertThat(item.getExpectedMonthlyGross()).isPositive();
+        assertThat(item.getExpectedMonthlyNet()).isLessThan(item.getExpectedMonthlyGross());
+        assertThat(item.getRetirementAmount()).isEqualByComparingTo("7200000");
+        assertThat(item.getPersonalAmount()).isEqualByComparingTo("4800000");
+        assertThat(item.getYearsEnrolled()).isEqualTo(15);
+        assertThat(item.getEffectiveTaxRate()).isBetween(BigDecimal.ZERO, BigDecimal.ONE);
+    }
+
+    @Test
+    @DisplayName("IRP: irpRetirementAmount가 null이면 전액 개인납입금으로 처리, 세율 5.5%")
+    void irpAccount_noComposition_treatedAsPersonal() {
+        Account irp = mockIrpAccount(10L, "신한은행",
+                new BigDecimal("12000000"), null, null, null);
+        given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of());
+        given(accountRepository.findByUserUserId(USER_ID)).willReturn(List.of(irp));
+        given(holdingRepository.findPensionHoldingsByUserId(USER_ID)).willReturn(List.of());
+
+        PensionResourceResponse response = service.getPension(USER_ID);
+
+        PensionItem item = response.getPensions().get(0);
+        BigDecimal gross = item.getExpectedMonthlyGross();
+        BigDecimal expectedNet = gross.multiply(new BigDecimal("0.945"))
+                .setScale(0, java.math.RoundingMode.HALF_UP);
+        assertThat(item.getExpectedMonthlyNet()).isEqualByComparingTo(expectedNet);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -198,7 +235,26 @@ class PensionResourceServiceTest {
         assertThat(item.getTaxBenefitLimit()).isEqualByComparingTo("6000000");
         assertThat(item.isEstimated()).isTrue();
         assertThat(item.getPayoutMonths()).isEqualTo(336);
-        assertThat(item.getExpectedMonthly()).isPositive();
+        assertThat(item.getExpectedMonthlyGross()).isPositive();
+    }
+
+    @Test
+    @DisplayName("PENSION_SAVING: 전액 개인납입금, 세율 5.5% 적용")
+    void pensionSaving_netMonthly_appliesPersonalTaxRate() {
+        Account saving = mockAccount(20L, "PENSION_SAVING", "신한은행", new BigDecimal("6000000"));
+        given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of());
+        given(accountRepository.findByUserUserId(USER_ID)).willReturn(List.of(saving));
+        given(holdingRepository.findPensionHoldingsByUserId(USER_ID)).willReturn(List.of());
+
+        PensionResourceResponse response = service.getPension(USER_ID);
+
+        PensionItem item = response.getPensions().get(0);
+        BigDecimal gross = item.getExpectedMonthlyGross();
+        BigDecimal expectedNet = gross.multiply(new BigDecimal("0.945"))
+                .setScale(0, java.math.RoundingMode.HALF_UP);
+        assertThat(item.getExpectedMonthlyNet()).isEqualByComparingTo(expectedNet);
+        assertThat(item.getRetirementAmount()).isNull();
+        assertThat(item.getPersonalAmount()).isNull();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -206,7 +262,7 @@ class PensionResourceServiceTest {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("totalMonthlyPension은 모든 expectedMonthly의 합이다")
+    @DisplayName("totalMonthlyPension은 모든 expectedMonthlyGross의 합이다")
     void totalMonthlyPension_isSumOfAllExpectedMonthly() {
         Pension national = mockPension("NATIONAL", new BigDecimal("900000"), 63);
         Account irp = mockAccount(10L, "IRP", "신한은행", new BigDecimal("12000000"));
@@ -218,10 +274,29 @@ class PensionResourceServiceTest {
         PensionResourceResponse response = service.getPension(USER_ID);
 
         BigDecimal expectedTotal = response.getPensions().stream()
-                .map(PensionItem::getExpectedMonthly)
+                .map(PensionItem::getExpectedMonthlyGross)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(response.getTotalMonthlyPension()).isEqualByComparingTo(expectedTotal);
         assertThat(response.getPensions()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("totalMonthlyPensionNet은 모든 expectedMonthlyNet의 합이다")
+    void totalMonthlyPensionNet_isSumOfAllNet() {
+        Pension national = mockPension("NATIONAL", new BigDecimal("900000"), 63);
+        Account irp = mockIrpAccount(10L, "신한은행",
+                new BigDecimal("12000000"), new BigDecimal("7200000"),
+                new BigDecimal("4800000"), LocalDate.now().minusYears(15));
+        given(pensionRepository.findByUserUserId(USER_ID)).willReturn(List.of(national));
+        given(accountRepository.findByUserUserId(USER_ID)).willReturn(List.of(irp));
+        given(holdingRepository.findPensionHoldingsByUserId(USER_ID)).willReturn(List.of());
+
+        PensionResourceResponse response = service.getPension(USER_ID);
+
+        BigDecimal expectedNet = response.getPensions().stream()
+                .map(PensionItem::getExpectedMonthlyNet)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(response.getTotalMonthlyPensionNet()).isEqualByComparingTo(expectedNet);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -257,9 +332,8 @@ class PensionResourceServiceTest {
         PensionResourceResponse response = service.getPension(USER_ID);
 
         assertThat(response.getPensions()).hasSize(2);
-        // totalMonthlyPension = 두 항목의 합
         BigDecimal expectedTotal = response.getPensions().stream()
-                .map(PensionItem::getExpectedMonthly)
+                .map(PensionItem::getExpectedMonthlyGross)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(response.getTotalMonthlyPension()).isEqualByComparingTo(expectedTotal);
         List<String> institutions = response.getPensions().stream()
@@ -322,6 +396,22 @@ class PensionResourceServiceTest {
         when(a.getAccountType()).thenReturn(accountType);
         when(a.getInstitutionName()).thenReturn(institutionName);
         when(a.getDepositBalance()).thenReturn(depositBalance);
+        return a;
+    }
+
+    private Account mockIrpAccount(Long accountId, String institutionName,
+                                    BigDecimal depositBalance,
+                                    BigDecimal irpRetirementAmount,
+                                    BigDecimal irpPersonalAmount,
+                                    LocalDate openedAt) {
+        Account a = mock(Account.class);
+        when(a.getAccountId()).thenReturn(accountId);
+        when(a.getAccountType()).thenReturn("IRP");
+        when(a.getInstitutionName()).thenReturn(institutionName);
+        when(a.getDepositBalance()).thenReturn(depositBalance);
+        when(a.getIrpRetirementAmount()).thenReturn(irpRetirementAmount);
+        when(a.getIrpPersonalAmount()).thenReturn(irpPersonalAmount);
+        when(a.getOpenedAt()).thenReturn(openedAt);
         return a;
     }
 
