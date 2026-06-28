@@ -11,6 +11,7 @@ import java.util.List;
 public class PensionResourceResponse {
 
     private BigDecimal totalMonthlyPension;
+    private BigDecimal totalMonthlyPensionNet;
     private List<PensionItem> pensions;
 
     @Getter
@@ -21,10 +22,14 @@ public class PensionResourceResponse {
         private String institutionName;
         private Integer startAge;
         private BigDecimal currentBalance;
-        private BigDecimal expectedMonthly;
+        private BigDecimal retirementAmount;
+        private BigDecimal personalAmount;
+        private BigDecimal expectedMonthlyGross;
+        private BigDecimal expectedMonthlyNet;
+        private BigDecimal effectiveTaxRate;
         private BigDecimal taxBenefitLimit;
         private boolean estimated;
-        /** estimated=true 항목에만 설정. 수령 개시 나이부터 기대수명까지 개월 수 */
         private Integer payoutMonths;
+        private Integer yearsEnrolled;
     }
 }
