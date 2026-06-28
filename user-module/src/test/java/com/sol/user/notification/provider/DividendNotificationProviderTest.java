@@ -11,7 +11,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +28,9 @@ class DividendNotificationProviderTest {
     @Mock
     CashFlowEventRepository cashFlowEventRepository;
 
+    @Mock
+    Clock clock;
+
     @InjectMocks
     DividendNotificationProvider provider;
 
@@ -37,7 +43,7 @@ class DividendNotificationProviderTest {
     @Test
     @DisplayName("오늘 DIVIDEND 이벤트가 있는 유저에게 알림 대상을 반환한다")
     void returnsTargetsForTodayDividendEvents() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = fixedClock("2026-06-28");
         List<Object[]> rows = new ArrayList<>();
         rows.add(new Object[]{1L, BigDecimal.valueOf(500_000)});
         rows.add(new Object[]{3L, BigDecimal.valueOf(1_000_000)});
@@ -58,7 +64,7 @@ class DividendNotificationProviderTest {
     @Test
     @DisplayName("같은 유저의 여러 ETF 배당이 합산되어 반환된다")
     void sumsDividendAmountsPerUser() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = fixedClock("2026-06-28");
         List<Object[]> rows = new ArrayList<>();
         rows.add(new Object[]{1L, BigDecimal.valueOf(1_500_000)});
         given(cashFlowEventRepository.findUserIdAndTotalAmountByEventTypeAndDate(eq("DIVIDEND"), eq(today)))
@@ -73,10 +79,18 @@ class DividendNotificationProviderTest {
     @Test
     @DisplayName("오늘 DIVIDEND 이벤트가 없으면 빈 리스트를 반환한다")
     void returnsEmptyWhenNoEvents() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = fixedClock("2026-06-28");
         given(cashFlowEventRepository.findUserIdAndTotalAmountByEventTypeAndDate(eq("DIVIDEND"), eq(today)))
                 .willReturn(new ArrayList<>());
 
         assertThat(provider.findTargets()).isEmpty();
+    }
+
+    private LocalDate fixedClock(String date) {
+        LocalDate localDate = LocalDate.parse(date);
+        Instant instant = localDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant();
+        given(clock.instant()).willReturn(instant);
+        given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+        return localDate;
     }
 }

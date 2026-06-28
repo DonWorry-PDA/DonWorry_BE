@@ -32,10 +32,10 @@ public class MonthlyReportNotificationProvider implements NotificationProvider {
         YearMonth prevYm = YearMonth.now(clock).minusMonths(1);
         int prevMonthValue = prevYm.getMonthValue();
 
-        return monthlyReportRepository.findAllByCurrentMonth(prevYm.toString())
+        return monthlyReportRepository.findUserIdsByCurrentMonth(prevYm.toString())
                 .stream()
-                .map(report -> new NotificationTarget(
-                        report.getUser().getUserId(),
+                .map(userId -> new NotificationTarget(
+                        userId,
                         "월간 리포트",
                         prevMonthValue + "월 리포트가 준비됐어요. 지난달을 돌아보세요.",
                         "/report"

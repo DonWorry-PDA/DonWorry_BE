@@ -2,9 +2,7 @@ package com.sol.user.notification.provider;
 
 import com.sol.user.notification.dto.NotificationTarget;
 import com.sol.user.notification.entity.NotificationType;
-import com.sol.user.report.entity.MonthlyReport;
 import com.sol.user.report.repository.MonthlyReportRepository;
-import com.sol.user.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,7 +10,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,7 +19,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -48,15 +44,8 @@ class MonthlyReportNotificationProviderTest {
     @DisplayName("매월 1일에 전달 스냅샷이 있는 유저에게 알림 대상을 반환한다")
     void returnsTargetsOnFirstDayOfMonth() {
         fixedClock("2026-07-01");
-
-        User user1 = mock(User.class);
-        given(user1.getUserId()).willReturn(1L);
-        User user2 = mock(User.class);
-        given(user2.getUserId()).willReturn(3L);
-
-        MonthlyReport report1 = MonthlyReport.snapshot(user1, "2026-06", BigDecimal.valueOf(250_000_000));
-        MonthlyReport report2 = MonthlyReport.snapshot(user2, "2026-06", BigDecimal.valueOf(180_000_000));
-        given(monthlyReportRepository.findAllByCurrentMonth("2026-06")).willReturn(List.of(report1, report2));
+        given(monthlyReportRepository.findUserIdsByCurrentMonth("2026-06"))
+                .willReturn(List.of(1L, 3L));
 
         List<NotificationTarget> targets = provider.findTargets();
 
@@ -76,14 +65,14 @@ class MonthlyReportNotificationProviderTest {
         List<NotificationTarget> targets = provider.findTargets();
 
         assertThat(targets).isEmpty();
-        verify(monthlyReportRepository, never()).findAllByCurrentMonth(any());
+        verify(monthlyReportRepository, never()).findUserIdsByCurrentMonth(any());
     }
 
     @Test
     @DisplayName("1일이지만 전달 스냅샷이 없으면 빈 리스트를 반환한다")
     void returnsEmptyWhenNoPrevMonthSnapshot() {
         fixedClock("2026-07-01");
-        given(monthlyReportRepository.findAllByCurrentMonth("2026-06")).willReturn(List.of());
+        given(monthlyReportRepository.findUserIdsByCurrentMonth("2026-06")).willReturn(List.of());
 
         assertThat(provider.findTargets()).isEmpty();
     }

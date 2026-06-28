@@ -11,7 +11,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +28,9 @@ class PensionDepositNotificationProviderTest {
     @Mock
     CashFlowEventRepository cashFlowEventRepository;
 
+    @Mock
+    Clock clock;
+
     @InjectMocks
     PensionDepositNotificationProvider provider;
 
@@ -37,7 +43,7 @@ class PensionDepositNotificationProviderTest {
     @Test
     @DisplayName("오늘 PENSION 이벤트가 있는 유저에게 알림 대상을 반환한다")
     void returnsTargetsForTodayPensionEvents() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = fixedClock("2026-06-28");
         List<Object[]> rows = new ArrayList<>();
         rows.add(new Object[]{1L, BigDecimal.valueOf(1_200_000)});
         rows.add(new Object[]{2L, BigDecimal.valueOf(900_000)});
@@ -58,10 +64,18 @@ class PensionDepositNotificationProviderTest {
     @Test
     @DisplayName("오늘 PENSION 이벤트가 없으면 빈 리스트를 반환한다")
     void returnsEmptyWhenNoEvents() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = fixedClock("2026-06-28");
         given(cashFlowEventRepository.findUserIdAndTotalAmountByEventTypeAndDate(eq("PENSION"), eq(today)))
                 .willReturn(new ArrayList<>());
 
         assertThat(provider.findTargets()).isEmpty();
+    }
+
+    private LocalDate fixedClock(String date) {
+        LocalDate localDate = LocalDate.parse(date);
+        Instant instant = localDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant();
+        given(clock.instant()).willReturn(instant);
+        given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+        return localDate;
     }
 }

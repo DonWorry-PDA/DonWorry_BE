@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
 public class DividendNotificationProvider implements NotificationProvider {
 
     private final CashFlowEventRepository cashFlowEventRepository;
+    private final Clock clock;
 
     @Override
     public NotificationType getType() {
@@ -23,7 +25,7 @@ public class DividendNotificationProvider implements NotificationProvider {
 
     @Override
     public List<NotificationTarget> findTargets() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         return cashFlowEventRepository
                 .findUserIdAndTotalAmountByEventTypeAndDate("DIVIDEND", today)
                 .stream()

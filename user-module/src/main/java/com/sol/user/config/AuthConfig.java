@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.time.Clock;
+import java.time.ZoneId;
 
 @Configuration
 public class AuthConfig {
@@ -16,6 +17,6 @@ public class AuthConfig {
 
     @Bean
     public Clock clock() {
-        return Clock.systemDefaultZone();
+        return Clock.system(ZoneId.of("Asia/Seoul"));
     }
 }
