@@ -143,8 +143,21 @@ public class PensionResourceService {
         BigDecimal personalGross;
 
         if (retirementAmount != null && personalAmount != null) {
-            retirementGross = calculateMonthlyPmt(retirementAmount, pMonths);
-            personalGross = calculateMonthlyPmt(personalAmount, pMonths);
+            // PMT 기준을 currentBalance(예수금+보유자산)로 통일한다.
+            // 저장된 retirementAmount/personalAmount의 비율만 보존하여 분배.
+            BigDecimal storedTotal = retirementAmount.add(personalAmount);
+            BigDecimal retirementForPmt;
+            BigDecimal personalForPmt;
+            if (storedTotal.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal ratio = retirementAmount.divide(storedTotal, 10, RoundingMode.HALF_UP);
+                retirementForPmt = currentBalance.multiply(ratio).setScale(0, RoundingMode.HALF_UP);
+                personalForPmt = currentBalance.subtract(retirementForPmt);
+            } else {
+                retirementForPmt = BigDecimal.ZERO;
+                personalForPmt = currentBalance;
+            }
+            retirementGross = calculateMonthlyPmt(retirementForPmt, pMonths);
+            personalGross = calculateMonthlyPmt(personalForPmt, pMonths);
         } else {
             retirementAmount = null;
             personalAmount = null;
