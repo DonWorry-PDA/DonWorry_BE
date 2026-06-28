@@ -370,10 +370,41 @@ public class AssetMockService {
                 new AssetConnection(user, "신한카드", "CARD", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한은행", "LOAN", "CONNECTED", syncedAt)
         );
-        return upsertByKey(assetConnectionRepository.findByUserUserId(user.getUserId()), desired,
-                AssetConnection::getCategory,
-                (target, seed) -> target.updateMock(seed.getInstitutionName(), seed.getLastSyncedAt()),
-                assetConnectionRepository::deleteAll, assetConnectionRepository::saveAll);
+
+        // 재동기화는 mock 시드(신한 계열)만 추가/갱신한다(#223). 사용자가 마이페이지에서 직접
+        // 연결한 기관(예: KB·카카오)은 desired에 없어도 절대 삭제하지 않는다 — upsertByKey의
+        // '미매칭 행 삭제' 계약을 쓰면 수동 연결이 재동기화마다 사라진다(연결 테이블은 mock·수동
+        // 행이 섞여 있어 holding처럼 전량 재생성할 수 없다). 시드는 (기관명, category) 복합키로
+        // 매칭해 신한은행 BANK/LOAN 두 행을 각각 유지한다.
+        List<AssetConnection> existing = assetConnectionRepository.findByUserUserId(user.getUserId());
+        Map<String, AssetConnection> existingByKey = existing.stream()
+                .collect(Collectors.toMap(
+                        c -> connectionKey(c.getInstitutionName(), c.getCategory()),
+                        c -> c, (a, b) -> a, LinkedHashMap::new));
+
+        List<AssetConnection> result = new ArrayList<>(existing);
+        List<AssetConnection> toSave = new ArrayList<>();
+        for (AssetConnection seed : desired) {
+            AssetConnection found = existingByKey.get(connectionKey(seed.getInstitutionName(), seed.getCategory()));
+            if (found != null) {
+                found.updateMock(seed.getInstitutionName(), seed.getLastSyncedAt());
+                toSave.add(found);
+            } else {
+                toSave.add(seed);
+                result.add(seed);
+            }
+        }
+        assetConnectionRepository.saveAll(toSave);
+
+        // 온보딩 카운트 == 마이페이지 카운트 불변식(#204): 시드뿐 아니라 사용자 수동 연결까지
+        // 포함한 전체 CONNECTED 집합을 반환해 양 화면이 같은 모집단을 세도록 한다.
+        return result.stream()
+                .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
+                .toList();
+    }
+
+    private static String connectionKey(String institutionName, String category) {
+        return institutionName + "|" + category;
     }
 
     private List<CashFlowEvent> buildMonthEvents(User user, LocalDate monthStart,

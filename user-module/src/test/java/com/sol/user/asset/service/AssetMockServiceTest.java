@@ -4,6 +4,7 @@ import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.type.MockType;
+import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
 import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
@@ -33,6 +34,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +46,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -140,6 +143,40 @@ class AssetMockServiceTest {
         assertThat(reused.getEvaluationAmount()).isEqualByComparingTo("40000000");
         // 다른 productId는 신규 추가
         assertThat(saved).extracting(Holding::getProductId).contains(1002L);
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void preservesUserConnectedInstitutionsOnResync() {
+        // #223: 재동기화는 mock 시드(신한 계열)만 추가/갱신하고, 사용자가 마이페이지에서 직접
+        // 연결한 기관(KB)은 삭제하지 않아야 한다. (이전 category-키 upsert는 같은 BANK의
+        // 수동 연결을 '미매칭/중복'으로 보고 삭제·덮어써 마이페이지에서 사라지게 했다)
+        User user = mock(User.class);
+        when(user.getUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        LocalDateTime earlier = LocalDateTime.now().minusDays(1);
+        AssetConnection seededBank = new AssetConnection(user, "신한은행", "BANK", "CONNECTED", earlier);
+        AssetConnection manualBank = new AssetConnection(user, "KB국민은행", "BANK", "CONNECTED", earlier);
+        when(assetConnectionRepository.findByUserUserId(1L))
+                .thenReturn(List.of(seededBank, manualBank));
+
+        MockAssetResponse response = assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        // 수동 연결은 절대 삭제되지 않는다(연결 테이블엔 mock·수동 행이 섞여 있으므로).
+        verify(assetConnectionRepository, never()).deleteAll(any());
+
+        // 저장 대상은 신한 시드뿐 — KB는 건드리지 않는다.
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(assetConnectionRepository).saveAll(captor.capture());
+        List<AssetConnection> saved = toList((Iterable<AssetConnection>) captor.getValue());
+        assertThat(saved).extracting(AssetConnection::getInstitutionName)
+                .doesNotContain("KB국민은행");
+
+        // 온보딩 카운트 == 마이페이지 카운트(#204): 시드 5곳 + 수동 KB = 6곳
+        // (신한은행 BANK/LOAN은 기관 단위 1곳으로 합산).
+        assertThat(response.connectedInstitutionCount()).isEqualTo(6);
     }
 
     @Test
