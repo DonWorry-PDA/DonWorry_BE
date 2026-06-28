@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,8 +27,18 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class PensionResourceService {
 
-    private static final int PENSION_MONTHS = 240;
-    private static final int PENSION_START_AGE = 55;
+    /**
+     * 연금 수령 예상액 계산 기준
+     * - 연 수익률 3%: 한국 퇴직연금 장기 보수적 운용 수익률 기준
+     * - 기대수명 83세: 통계청 한국인 평균 기대수명
+     * - IRP/연금저축 개시 나이: 법정 최소 수령 나이 55세 고정
+     * 공식: PMT = PV × r / (1 − (1+r)^−n)
+     */
+    static final BigDecimal ANNUAL_RETURN_RATE = new BigDecimal("0.03");
+    static final int EXPECTED_LIFESPAN = 83;
+    static final int PENSION_START_AGE = 55;
+
+    private static final MathContext MC = new MathContext(15, RoundingMode.HALF_UP);
 
     private static final BigDecimal IRP_TAX_LIMIT = new BigDecimal("9000000");
     private static final BigDecimal PENSION_SAVING_TAX_LIMIT = new BigDecimal("6000000");
@@ -94,6 +105,7 @@ public class PensionResourceService {
                 .expectedMonthly(pension.getExpectedMonthlyAmount())
                 .taxBenefitLimit(null)
                 .estimated(false)
+                .payoutMonths(null)
                 .build();
     }
 
@@ -108,8 +120,8 @@ public class PensionResourceService {
         BigDecimal holdingValue = holdingsByAccount.getOrDefault(account.getAccountId(), BigDecimal.ZERO);
         BigDecimal currentBalance = deposit.add(holdingValue);
 
-        BigDecimal expectedMonthly = currentBalance
-                .divide(BigDecimal.valueOf(PENSION_MONTHS), 0, RoundingMode.HALF_UP);
+        int pMonths = payoutMonths(PENSION_START_AGE);
+        BigDecimal expectedMonthly = calculateMonthlyPmt(currentBalance, pMonths);
 
         return PensionItem.builder()
                 .type(type)
@@ -120,7 +132,39 @@ public class PensionResourceService {
                 .expectedMonthly(expectedMonthly)
                 .taxBenefitLimit(taxBenefitLimit)
                 .estimated(true)
+                .payoutMonths(pMonths)
                 .build();
+    }
+
+    /**
+     * 연금 월 수령액 계산 (PMT 공식)
+     * PMT = PV × r / (1 − (1+r)^−n)
+     *     = PV × r × (1+r)^n / ((1+r)^n − 1)
+     *
+     * @param balance      현재 잔액 (PV)
+     * @param pMonths      수령 기간 (개월, n)
+     */
+    static BigDecimal calculateMonthlyPmt(BigDecimal balance, int pMonths) {
+        if (balance.compareTo(BigDecimal.ZERO) <= 0 || pMonths <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        // 월 수익률 r = 연 수익률 / 12
+        BigDecimal r = ANNUAL_RETURN_RATE.divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
+
+        // (1+r)^n
+        BigDecimal onePlusRpowN = BigDecimal.ONE.add(r).pow(pMonths, MC);
+
+        // PMT = PV × r × (1+r)^n / ((1+r)^n − 1)
+        BigDecimal numerator = r.multiply(onePlusRpowN, MC);
+        BigDecimal denominator = onePlusRpowN.subtract(BigDecimal.ONE, MC);
+
+        return balance.multiply(numerator, MC).divide(denominator, 0, RoundingMode.HALF_UP);
+    }
+
+    /** 수령 개시 나이부터 기대수명까지의 수령 기간 (개월) */
+    static int payoutMonths(int startAge) {
+        return (EXPECTED_LIFESPAN - startAge) * 12;
     }
 
     private Map<Long, BigDecimal> buildHoldingMap(Long userId) {

@@ -24,5 +24,7 @@ public class PensionResourceResponse {
         private BigDecimal expectedMonthly;
         private BigDecimal taxBenefitLimit;
         private boolean estimated;
+        /** estimated=true 항목에만 설정. 수령 개시 나이부터 기대수명까지 개월 수 */
+        private Integer payoutMonths;
     }
 }
