@@ -129,6 +129,8 @@ public class AssetCompositionService {
                     ProductBatchItem product = products.get(h.getProductId());
                     return AssetHoldingItem.builder()
                             .productName(product == null ? "알 수 없음" : product.productName())
+                            .tickerCode(product == null ? null : product.tickerCode())
+                            .quantity(h.getQuantity())
                             .evaluationAmount(nz(h.getEvaluationAmount()))
                             .build();
                 })
@@ -169,6 +171,8 @@ public class AssetCompositionService {
                         ProductBatchItem product = products.get(h.getProductId());
                         return AssetHoldingItem.builder()
                                 .productName(product == null ? "알 수 없음" : product.productName())
+                                .tickerCode(product == null ? null : product.tickerCode())
+                                .quantity(h.getQuantity())
                                 .evaluationAmount(nz(h.getEvaluationAmount()))
                                 .build();
                     })

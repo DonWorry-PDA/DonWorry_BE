@@ -30,6 +30,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -65,6 +66,7 @@ public class AssetHubService {
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end)))
                 .monthlyExpense(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
+                .etfHoldings(buildEtfHoldings(snapshot))
                 .menus(buildMenus(userId, snapshot))
                 .build();
     }
@@ -130,6 +132,24 @@ public class AssetHubService {
         return buckets.stream()
                 .sorted(Comparator.comparing(b -> b.category.ordinal()))
                 .map(b -> new AssetAllocationItem(b.category.getLabel(), b.ratio()))
+                .toList();
+    }
+
+    /** ticker 기준으로 수량 합산 — 동일 ETF를 여러 계좌에 나눠 보유하는 경우 대응. */
+    private List<AssetHubResponse.EtfHoldingItem> buildEtfHoldings(AssetAggregator.AssetSnapshot snapshot) {
+        Map<Long, ProductBatchItem> products = snapshot.products();
+        return snapshot.holdings().stream()
+                .filter(h -> {
+                    ProductBatchItem p = products.get(h.getProductId());
+                    return p != null && p.tickerCode() != null;
+                })
+                .collect(Collectors.groupingBy(
+                        h -> products.get(h.getProductId()).tickerCode(),
+                        Collectors.reducing(BigDecimal.ZERO,
+                                h -> nz(h.getQuantity()), BigDecimal::add)
+                ))
+                .entrySet().stream()
+                .map(e -> new AssetHubResponse.EtfHoldingItem(e.getKey(), e.getValue()))
                 .toList();
     }
 

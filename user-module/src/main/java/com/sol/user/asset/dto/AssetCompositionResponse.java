@@ -41,6 +41,8 @@ public class AssetCompositionResponse {
     @Builder
     public static class AssetHoldingItem {
         private String productName;
+        private String tickerCode;
+        private BigDecimal quantity;
         private BigDecimal evaluationAmount;
     }
 }
