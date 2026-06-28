@@ -6,6 +6,7 @@ import com.sol.user.asset.dto.AssetIncomeResponse;
 import com.sol.user.asset.dto.AssetIncomeResponse.IncomeSource;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.holding.dto.HoldingWithQuantityAndType;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.pension.repository.PensionRepository;
@@ -17,7 +18,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,6 +34,7 @@ public class AssetIncomeService {
     private final ProductBatchClient productBatchClient;
     private final DepositDetailClient depositDetailClient;
     private final UserRepository userRepository;
+    private final AssetMapper assetMapper;
 
     public AssetIncomeResponse getIncome(Long userId) {
         User user = userRepository.findById(userId)
@@ -53,7 +54,7 @@ public class AssetIncomeService {
         BigDecimal lockedIncome = pensionDividend;
         BigDecimal totalMonthlyIncome = accessibleIncome.add(lockedIncome);
 
-        List<IncomeSource> sources = buildSources(
+        List<IncomeSource> sources = assetMapper.toIncomeSources(
                 nationalPension, etfDividend, depositInterest, pensionDividend);
 
         return AssetIncomeResponse.builder()
@@ -143,49 +144,5 @@ public class AssetIncomeService {
                     return monthlyDiv.multiply(quantity);
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private List<IncomeSource> buildSources(
-            BigDecimal nationalPension,
-            BigDecimal etfDividend,
-            BigDecimal depositInterest,
-            BigDecimal pensionDividend) {
-
-        List<IncomeSource> sources = new ArrayList<>();
-
-        if (nationalPension.signum() > 0) {
-            sources.add(IncomeSource.builder()
-                    .type("NATIONAL_PENSION")
-                    .label("국민연금")
-                    .amount(nationalPension)
-                    .locked(false)
-                    .build());
-        }
-        if (etfDividend.signum() > 0) {
-            sources.add(IncomeSource.builder()
-                    .type("ETF_DIVIDEND")
-                    .label("ETF 배당")
-                    .amount(etfDividend)
-                    .locked(false)
-                    .build());
-        }
-        if (depositInterest.signum() > 0) {
-            sources.add(IncomeSource.builder()
-                    .type("DEPOSIT_INTEREST")
-                    .label("예금 이자")
-                    .amount(depositInterest)
-                    .locked(false)
-                    .build());
-        }
-        if (pensionDividend.signum() > 0) {
-            sources.add(IncomeSource.builder()
-                    .type("PENSION_DIVIDEND")
-                    .label("연금 계좌 ETF 배당")
-                    .amount(pensionDividend)
-                    .locked(true)
-                    .build());
-        }
-
-        return sources;
     }
 }

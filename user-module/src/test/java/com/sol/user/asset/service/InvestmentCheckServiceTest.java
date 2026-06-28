@@ -8,12 +8,14 @@ import com.sol.user.asset.service.AssetAggregator.AssetSnapshot;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.StockDividendProjection;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -31,6 +33,7 @@ class InvestmentCheckServiceTest {
 
     @Mock AssetAggregator assetAggregator;
     @Mock HoldingRepository holdingRepository;
+    @Spy AssetMapper assetMapper = new AssetMapper();
 
     @InjectMocks InvestmentCheckService service;
 
@@ -342,12 +345,13 @@ class InvestmentCheckServiceTest {
             public Long getAccountId() { return holdingId; }
             public Long getProductId() { return productId; }
             public BigDecimal getEvaluationAmount() { return BigDecimal.valueOf(eval); }
+            public BigDecimal getQuantity() { return null; }
             public String getAccountType() { return accountType; }
         };
     }
 
     private ProductBatchItem product(long productId, String name, String type) {
-        return new ProductBatchItem(productId, name, type);
+        return new ProductBatchItem(productId, name, type, null);
     }
 
     private BigDecimal won(long value) {

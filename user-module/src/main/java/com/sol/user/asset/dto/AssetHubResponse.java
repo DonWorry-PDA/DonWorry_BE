@@ -17,6 +17,9 @@ public record AssetHubResponse(
         List<AssetAllocationItem> allocation,
         BigDecimal monthlyIncome,
         BigDecimal monthlyExpense,
+        List<EtfHoldingItem> etfHoldings,
+        BigDecimal etfSnapshotAmount,
         AssetHubMenus menus
 ) {
+    public record EtfHoldingItem(String ticker, BigDecimal quantity) {}
 }

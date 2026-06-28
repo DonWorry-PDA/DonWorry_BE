@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -40,8 +42,30 @@ public class ProductService {
         if (productIds == null || productIds.isEmpty()) {
             return List.of();
         }
-        return financialProductRepository.findAllByProductIdIn(productIds).stream()
-                .map(ProductBatchItem::from)
+        List<FinancialProduct> products = financialProductRepository.findAllByProductIdIn(productIds);
+
+        List<Long> etfProductIds = products.stream()
+                .filter(p -> TYPE_ETF.equals(p.getProductType()))
+                .map(FinancialProduct::getProductId)
+                .toList();
+        Map<Long, String> tickerByProductId = etfProductIds.isEmpty() ? Map.of()
+                : etfDetailRepository.findAllByProductProductIdIn(etfProductIds).stream()
+                        .collect(Collectors.toMap(
+                                e -> e.getProduct().getProductId(),
+                                EtfDetail::getTickerCode
+                        ));
+
+        if (etfProductIds.stream().anyMatch(id -> !tickerByProductId.containsKey(id))) {
+            throw new BaseException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        return products.stream()
+                .map(p -> new ProductBatchItem(
+                        p.getProductId(),
+                        p.getProductName(),
+                        p.getProductType(),
+                        tickerByProductId.get(p.getProductId())
+                ))
                 .toList();
     }
 

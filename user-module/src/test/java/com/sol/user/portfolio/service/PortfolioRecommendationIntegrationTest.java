@@ -65,7 +65,7 @@ class PortfolioRecommendationIntegrationTest {
             List<Long> ids = invocation.getArgument(0);
             Map<Long, ProductBatchItem> products = new HashMap<>();
             for (Long id : ids) {
-                products.put(id, new ProductBatchItem(id, "SOL " + id, "ETF"));
+                products.put(id, new ProductBatchItem(id, "SOL " + id, "ETF", null));
             }
             return products;
         });

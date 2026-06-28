@@ -3,10 +3,10 @@ package com.sol.user.asset.service;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
-import com.sol.user.asset.dto.AssetAllocationItem;
 import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubMenus;
 import com.sol.user.asset.dto.AssetHubResponse;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.asset.type.AssetCategory;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
@@ -25,8 +25,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +42,7 @@ public class AssetHubService {
     private final LifeStabilityService lifeStabilityService;
     private final AssetAggregator assetAggregator;
     private final SalaryPlanRepository salaryPlanRepository;
+    private final AssetMapper assetMapper;
 
     public AssetHubResponse getHub(Long userId) {
         AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
@@ -54,17 +53,20 @@ public class AssetHubService {
         YearMonth thisMonth = YearMonth.now();
         LocalDate start = thisMonth.atDay(1);
         LocalDate end = thisMonth.atEndOfMonth();
+        AssetMapper.EtfSnapshot etfSnapshot = assetMapper.toEtfSnapshot(snapshot);
 
         return AssetHubResponse.builder()
                 .totalAsset(totalAsset)
                 // 월간 자산 스냅샷(#6) 도입 전까지 증감 계산 불가 → null / FLAT
                 .changeAmount(null)
                 .changeDirection("FLAT")
-                .allocation(toAllocation(byCategory, totalAsset))
+                .allocation(assetMapper.toCategoryAllocation(byCategory, totalAsset))
                 .monthlyIncome(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end)))
                 .monthlyExpense(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
+                .etfHoldings(etfSnapshot.holdings())
+                .etfSnapshotAmount(etfSnapshot.snapshotAmount())
                 .menus(buildMenus(userId, snapshot))
                 .build();
     }
@@ -98,39 +100,6 @@ public class AssetHubService {
             }
         }
         return map;
-    }
-
-    /**
-     * 카테고리별 금액을 정수 % 로 변환한다.
-     * 내림 후 남는 잔여 %를 소수부가 큰 항목부터 1씩 배분해 합이 정확히 100 이 되도록 보정한다.
-     * 표시 순서는 enum 선언 순서(연금·예금·ETF·주식·기타) 고정.
-     */
-    private List<AssetAllocationItem> toAllocation(Map<AssetCategory, BigDecimal> byCategory, BigDecimal total) {
-        if (total.signum() <= 0) {
-            return List.of();
-        }
-
-        List<Bucket> buckets = new ArrayList<>();
-        for (Map.Entry<AssetCategory, BigDecimal> entry : byCategory.entrySet()) {
-            BigDecimal pct = entry.getValue()
-                    .multiply(BigDecimal.valueOf(100))
-                    .divide(total, 4, RoundingMode.HALF_UP);
-            int floor = pct.setScale(0, RoundingMode.DOWN).intValue();
-            BigDecimal remainder = pct.subtract(BigDecimal.valueOf(floor));
-            buckets.add(new Bucket(entry.getKey(), floor, remainder));
-        }
-
-        int assigned = buckets.stream().mapToInt(Bucket::ratio).sum();
-        int leftover = 100 - assigned;
-        buckets.stream()
-                .sorted(Comparator.comparing(Bucket::remainder).reversed())
-                .limit(Math.max(leftover, 0))
-                .forEach(Bucket::increment);
-
-        return buckets.stream()
-                .sorted(Comparator.comparing(b -> b.category.ordinal()))
-                .map(b -> new AssetAllocationItem(b.category.getLabel(), b.ratio()))
-                .toList();
     }
 
     private AssetHubMenus buildMenus(Long userId, AssetAggregator.AssetSnapshot snapshot) {
@@ -200,30 +169,5 @@ public class AssetHubService {
 
     private BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
-    }
-
-    /** 분포 계산용 가변 버킷. */
-    private static final class Bucket {
-        private final AssetCategory category;
-        private int ratio;
-        private final BigDecimal remainder;
-
-        private Bucket(AssetCategory category, int ratio, BigDecimal remainder) {
-            this.category = category;
-            this.ratio = ratio;
-            this.remainder = remainder;
-        }
-
-        private int ratio() {
-            return ratio;
-        }
-
-        private BigDecimal remainder() {
-            return remainder;
-        }
-
-        private void increment() {
-            ratio++;
-        }
     }
 }

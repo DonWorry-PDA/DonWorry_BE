@@ -39,6 +39,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
                    a.account_id        AS accountId,
                    h.product_id        AS productId,
                    h.evaluation_amount AS evaluationAmount,
+                   h.quantity          AS quantity,
                    a.account_type      AS accountType
             FROM holding h
             JOIN account a ON h.account_id = a.account_id
@@ -55,6 +56,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
                    a.account_id        AS accountId,
                    h.product_id        AS productId,
                    h.evaluation_amount AS evaluationAmount,
+                   h.quantity          AS quantity,
                    a.account_type      AS accountType
             FROM holding h
             JOIN account a ON h.account_id = a.account_id

@@ -13,6 +13,7 @@ import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
 import com.sol.user.stability.dto.LifeStabilityResponse;
 import com.sol.user.stability.service.LifeStabilityService;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -47,6 +49,7 @@ class AssetHubServiceTest {
     @Mock LifeStabilityService lifeStabilityService;
     @Mock AssetAggregator assetAggregator;
     @Mock SalaryPlanRepository salaryPlanRepository;
+    @Spy AssetMapper assetMapper = new AssetMapper();
 
     @InjectMocks AssetHubService assetHubService;
 
@@ -271,6 +274,91 @@ class AssetHubServiceTest {
         assertThat(response.menus().retirementSim().available()).isTrue();
     }
 
+    @Test
+    void ETF_보유종목은_etfHoldings에_ticker와_quantity가_담긴다() {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(1001L);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(5_000_000));
+        when(holding.getQuantity()).thenReturn(new BigDecimal("15.0000"));
+        ProductBatchItem product = new ProductBatchItem(1001L, "SOL 미국배당다우존스", "ETF", "446720");
+
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), List.of(),
+                        List.of(holding), Map.of(1001L, product)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.etfHoldings()).hasSize(1);
+        assertThat(response.etfHoldings().get(0).ticker()).isEqualTo("446720");
+        assertThat(response.etfHoldings().get(0).quantity()).isEqualByComparingTo("15.0000");
+        assertThat(response.etfSnapshotAmount()).isEqualByComparingTo("5000000");
+    }
+
+    @Test
+    void 비ETF_보유종목은_etfHoldings에_포함되지_않는다() {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(2001L);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(10_000_000));
+        ProductBatchItem product = new ProductBatchItem(2001L, "삼성전자", "STOCK", null);
+
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), List.of(),
+                        List.of(holding), Map.of(2001L, product)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.etfHoldings()).isEmpty();
+    }
+
+    @Test
+    void 동일_ETF를_여러_계좌에_보유하면_ticker_기준으로_수량이_합산된다() {
+        HoldingWithProduct h1 = mock(HoldingWithProduct.class);
+        when(h1.getProductId()).thenReturn(1001L);
+        when(h1.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(3_000_000));
+        when(h1.getQuantity()).thenReturn(new BigDecimal("10.0000"));
+
+        HoldingWithProduct h2 = mock(HoldingWithProduct.class);
+        when(h2.getProductId()).thenReturn(1001L);
+        when(h2.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(2_000_000));
+        when(h2.getQuantity()).thenReturn(new BigDecimal("7.0000"));
+
+        ProductBatchItem product = new ProductBatchItem(1001L, "SOL 미국배당다우존스", "ETF", "446720");
+
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), List.of(),
+                        List.of(h1, h2), Map.of(1001L, product)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.etfHoldings()).hasSize(1);
+        assertThat(response.etfHoldings().get(0).ticker()).isEqualTo("446720");
+        assertThat(response.etfHoldings().get(0).quantity()).isEqualByComparingTo("17.0000");
+    }
+
+    @Test
+    void ETF_보유가_없으면_etfHoldings는_빈_리스트다() {
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.etfHoldings()).isNotNull().isEmpty();
+        assertThat(response.etfSnapshotAmount()).isEqualByComparingTo("0");
+    }
+
     private Account account(String accountType, long balance) {
         return new Account(null, accountType, "신한은행", "MOCK-ACC", BigDecimal.valueOf(balance), true);
     }
@@ -284,7 +372,7 @@ class AssetHubServiceTest {
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
         return new HoldingAndProduct(holding, Map.of(productId,
-                new ProductBatchItem(productId, "상품" + productId, productType)));
+                new ProductBatchItem(productId, "상품" + productId, productType, null)));
     }
 
     private void stubSnapshot(List<Account> accounts, HoldingAndProduct holdingAndProduct) {

@@ -8,6 +8,7 @@ import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.holding.dto.HoldingWithQuantityAndType;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.user.entity.User;
@@ -58,7 +59,8 @@ class AssetIncomeServiceTest {
                 accountRepository,
                 productBatchClient,
                 depositDetailClient,
-                userRepository
+                userRepository,
+                new AssetMapper()
         );
         // 국민연금 수령 게이팅: 수령 중(true)일 때만 income에 국민연금이 포함된다.
         User user = mock(User.class);
