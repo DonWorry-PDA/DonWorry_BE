@@ -83,4 +83,17 @@ class SseEmitterRepositoryTest {
     void findByUserId_returnsEmptySetForUnknownUser() {
         assertThat(repository.findByUserId(999L)).isEmpty();
     }
+
+    @Test
+    @DisplayName("delete 중 동시에 save가 발생해도 새 emitter가 유실되지 않는다")
+    void delete_doesNotRemoveNewlyAddedEmitterOnConcurrentSave() {
+        SseEmitter oldEmitter = mock(SseEmitter.class);
+        SseEmitter newEmitter = mock(SseEmitter.class);
+        repository.save(1L, oldEmitter);
+
+        repository.delete(1L, oldEmitter);
+        repository.save(1L, newEmitter);
+
+        assertThat(repository.findByUserId(1L)).containsExactly(newEmitter);
+    }
 }
