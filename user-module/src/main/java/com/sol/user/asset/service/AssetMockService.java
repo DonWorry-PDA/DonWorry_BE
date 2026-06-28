@@ -232,14 +232,14 @@ public class AssetMockService {
         LocalDate fifteenYearsAgo = LocalDate.now().minusYears(15);
         for (Account account : saved) {
             if ("IRP".equals(account.getAccountType())) {
-                account.initOpenedAt(fifteenYearsAgo);
+                account.updateOpenedAt(fifteenYearsAgo);
                 BigDecimal retirement = account.getDepositBalance()
                         .multiply(scenario.irpRetirementRatio())
                         .setScale(0, RoundingMode.HALF_UP);
                 BigDecimal personal = account.getDepositBalance().subtract(retirement);
                 account.linkIrpComposition(retirement, personal);
             } else if ("PENSION_SAVING".equals(account.getAccountType())) {
-                account.initOpenedAt(fifteenYearsAgo);
+                account.updateOpenedAt(fifteenYearsAgo);
             }
         }
         return saved;

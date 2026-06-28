@@ -127,6 +127,18 @@ public class Account {
     }
 
     public void linkIrpComposition(BigDecimal retirementAmount, BigDecimal personalAmount) {
+        if (!"IRP".equals(this.accountType)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if ((retirementAmount == null) != (personalAmount == null)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if (retirementAmount != null && retirementAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if (personalAmount != null && personalAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
         this.irpRetirementAmount = retirementAmount;
         this.irpPersonalAmount = personalAmount;
     }
@@ -135,5 +147,9 @@ public class Account {
         if (this.openedAt == null) {
             this.openedAt = date;
         }
+    }
+
+    public void updateOpenedAt(LocalDate date) {
+        this.openedAt = date;
     }
 }
