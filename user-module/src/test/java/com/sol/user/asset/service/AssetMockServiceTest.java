@@ -277,6 +277,47 @@ class AssetMockServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void pensionCashflowEvent_notCreated_whenNationalPensionNotReceiving() {
+        User user = mock(User.class);
+        when(user.getNationalPensionReceiving()).thenReturn(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        assertThat(saved).noneMatch(e -> "PENSION".equals(e.getEventType()));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void pensionCashflowEvent_created_whenNationalPensionReceiving() {
+        User user = mock(User.class);
+        when(user.getNationalPensionReceiving()).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        List<CashFlowEvent> pensionEvents = saved.stream()
+                .filter(e -> "PENSION".equals(e.getEventType()))
+                .toList();
+        assertThat(pensionEvents).hasSize(6);
+        assertThat(pensionEvents).allSatisfy(e -> {
+            assertThat(e.getTitle()).isEqualTo("국민연금 입금");
+            assertThat(e.getAmount()).isEqualByComparingTo("1150000");
+        });
+    }
+
+    @Test
     void recalculatesLifeStabilityAfterSync() {
         User user = mock(User.class);
         when(userRepository.findById(3L)).thenReturn(Optional.of(user));
@@ -366,13 +407,15 @@ class AssetMockServiceTest {
         // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
         //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
         // cashflowEvents = 6개월치 buildMonthEvents 합산 (develop 머지 이후 시나리오 확장됨):
+        // cashflowEvents: nationalPensionReceiving=null(mock default) → no PENSION events.
+        // PENSION events (1/month × 6 months = 6) only appear when the flag is TRUE.
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
-                        InvestmentPropensity.ACTIVE, 228),
+                        InvestmentPropensity.ACTIVE, 222),
                 Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL, 186),
+                        InvestmentPropensity.NEUTRAL, 180),
                 Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
-                        InvestmentPropensity.STABLE, 168)
+                        InvestmentPropensity.STABLE, 162)
         );
     }
 

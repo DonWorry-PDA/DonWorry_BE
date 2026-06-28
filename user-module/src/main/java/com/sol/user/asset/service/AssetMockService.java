@@ -443,7 +443,8 @@ public class AssetMockService {
 
         List<CashFlowEvent> events = new ArrayList<>();
 
-        if (scenario.monthlyPensionIncome().signum() > 0) {
+        if (Boolean.TRUE.equals(user.getNationalPensionReceiving())
+                && scenario.monthlyPensionIncome().signum() > 0) {
             events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
                     scenario.monthlyPensionIncome(), "INCOME", status, recurring));
         }
