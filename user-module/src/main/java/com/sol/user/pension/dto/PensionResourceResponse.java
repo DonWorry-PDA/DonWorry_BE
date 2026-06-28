@@ -11,6 +11,7 @@ import java.util.List;
 public class PensionResourceResponse {
 
     private BigDecimal totalMonthlyPension;
+    private BigDecimal totalMonthlyPensionNet;
     private List<PensionItem> pensions;
 
     @Getter
@@ -21,8 +22,14 @@ public class PensionResourceResponse {
         private String institutionName;
         private Integer startAge;
         private BigDecimal currentBalance;
-        private BigDecimal expectedMonthly;
+        private BigDecimal retirementAmount;
+        private BigDecimal personalAmount;
+        private BigDecimal expectedMonthlyGross;
+        private BigDecimal expectedMonthlyNet;
+        private BigDecimal effectiveTaxRate;
         private BigDecimal taxBenefitLimit;
         private boolean estimated;
+        private Integer payoutMonths;
+        private Integer yearsEnrolled;
     }
 }

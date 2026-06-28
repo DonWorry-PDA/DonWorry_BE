@@ -54,6 +54,12 @@ public class Account {
     @Column(name = "product_id")
     private Long productId;
 
+    @Column(name = "irp_retirement_amount", precision = 15, scale = 0)
+    private BigDecimal irpRetirementAmount;
+
+    @Column(name = "irp_personal_amount", precision = 15, scale = 0)
+    private BigDecimal irpPersonalAmount;
+
     public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
         Account account = new Account();
         account.user = user;
@@ -120,9 +126,30 @@ public class Account {
         this.productId = productId;
     }
 
+    public void linkIrpComposition(BigDecimal retirementAmount, BigDecimal personalAmount) {
+        if (!"IRP".equals(this.accountType)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if ((retirementAmount == null) != (personalAmount == null)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if (retirementAmount != null && retirementAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        if (personalAmount != null && personalAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BaseException(ErrorCode.INVALID_INPUT);
+        }
+        this.irpRetirementAmount = retirementAmount;
+        this.irpPersonalAmount = personalAmount;
+    }
+
     public void initOpenedAt(LocalDate date) {
         if (this.openedAt == null) {
             this.openedAt = date;
         }
+    }
+
+    public void updateOpenedAt(LocalDate date) {
+        this.openedAt = date;
     }
 }
