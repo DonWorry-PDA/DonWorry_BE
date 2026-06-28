@@ -95,7 +95,7 @@ public class PortfolioAllocationCalculator {
                 .map(Holding::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
-        BigDecimal riskCapGainTaxableWeight = weightedCapGainTaxableWeight(riskHoldings);
+        BigDecimal riskCapGainTaxableWeight = weightedCapGainTaxableWeight(riskHoldings, byTicker);
 
         BigDecimal safeTarget = input.totalAsset()
                 .subtract(riskTarget)
@@ -221,22 +221,42 @@ public class PortfolioAllocationCalculator {
     }
 
     /**
-     * 위험버킷 자본차익 과세분 가중 = 과세(해외주식형) 금액 / 위험버킷 합. 국내주식형은 매매차익 비과세라 0으로 제외.
-     * 금액 기준이라 #118 슬롯 제외로 비중 합이 1.0 미만이어도 과세분율이 [0,1]로 정확. 위험버킷 없으면 1.0(전액 과세, 영향無).
+     * 위험버킷 자본차익 과세분 가중 = 과세(해외주식형) 자본차익 / 위험버킷 자본차익 합. 국내주식형은 매매차익 비과세라 제외.
+     *
+     * <p><b>금액가중이 아니라 자본차익가중</b>이다. 종목 총수익률 r은 동일가정(EXPECTED_TOTAL_RETURN)이나 배당률은
+     * 종목마다 달라, 1원당 자본차익(≈ r − 배당률ᵢ)도 다르다. 금액가중(Σ해외금액/Σ금액)은 고배당 해외종목의
+     * 과세분을 과대평가한다. 종목별 자본차익액 {@code 금액ᵢ × max(r − 배당률ᵢ, 0)}으로 가중해 과세분을 정밀화한다.
+     * 분모(Σ 자본차익액)는 다운스트림 {@code AlphaCoverageCalculator.netRiskAnnuity}의 capGainShare와 정합한다
+     * (Σ금액ᵢ(r−배당률ᵢ) = 총액×(r−블렌디드배당); 0클램프만 보수적 차이).
+     *
+     * <p>자본차익 합이 0(전 종목 배당률≥r)이거나 위험버킷이 비면 1.0 폴백 — 다운스트림 capGainShare도 0이라 영향無.
+     * 현 SLOT_TICKER는 위험코어를 전부 해외로 해소해 weight=1.0이므로 이 변경은 현재 출력 무변(국내주식형 위험편입 대비).
+     *
+     * <p>package-private — 혼합 국내/해외 경로는 현 SLOT_TICKER로 {@code calculate()}에서 도달 불가라 단위테스트로 직접 가드한다.
      */
-    private BigDecimal weightedCapGainTaxableWeight(List<Holding> holdings) {
-        BigDecimal total = BigDecimal.ZERO;
-        BigDecimal taxable = BigDecimal.ZERO;
+    BigDecimal weightedCapGainTaxableWeight(List<Holding> holdings, Map<String, EtfInfo> byTicker) {
+        BigDecimal totalCapGain = BigDecimal.ZERO;
+        BigDecimal taxableCapGain = BigDecimal.ZERO;
         for (Holding h : holdings) {
-            total = total.add(h.amount());
+            BigDecimal capGain = h.amount().multiply(capGainRate(byTicker.get(h.ticker())));
+            totalCapGain = totalCapGain.add(capGain);
             if (!PortfolioConstants.isCapitalGainExempt(h.ticker())) {
-                taxable = taxable.add(h.amount());
+                taxableCapGain = taxableCapGain.add(capGain);
             }
         }
-        if (total.compareTo(BigDecimal.ZERO) <= 0) {
+        if (totalCapGain.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ONE;
         }
-        return taxable.divide(total, RATE_SCALE, RoundingMode.HALF_UP);
+        return taxableCapGain.divide(totalCapGain, RATE_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /** 종목 자본차익률(분수) = max(기대총수익 − 배당률, 0). 배당률(%, 예 3.50)을 분수로 변환. null 배당률은 0(전액 자본차익). */
+    private BigDecimal capGainRate(EtfInfo etf) {
+        BigDecimal dividendPercent = etf == null ? null : etf.annualDividendRate();
+        BigDecimal dividendFrac = dividendPercent == null
+                ? BigDecimal.ZERO
+                : dividendPercent.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+        return PortfolioConstants.EXPECTED_TOTAL_RETURN.subtract(dividendFrac).max(BigDecimal.ZERO);
     }
 
     /** 위험버킷 가중평균 배당률 = Σ(비중 × 배당률). 배당률 null은 0으로. */
