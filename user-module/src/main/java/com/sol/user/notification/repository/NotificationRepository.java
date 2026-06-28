@@ -20,4 +20,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     @Query("SELECT n.user.userId, n.notificationType FROM Notification n WHERE n.createdAt >= :startOfDay")
     List<Object[]> findSentPairsToday(@Param("startOfDay") LocalDateTime startOfDay);
+
+    long countByUserUserIdAndReadFalse(Long userId);
 }

@@ -61,6 +61,11 @@ public class NotificationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public long getUnreadCount(Long userId) {
+        return notificationRepository.countByUserUserIdAndReadFalse(userId);
+    }
+
     @Transactional
     public void notify(Long userId, NotificationType type, String title, String content, String linkTarget) {
         User user = userRepository.findById(userId)
