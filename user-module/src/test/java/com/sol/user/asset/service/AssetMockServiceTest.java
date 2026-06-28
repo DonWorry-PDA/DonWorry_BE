@@ -177,6 +177,10 @@ class AssetMockServiceTest {
         // 온보딩 카운트 == 마이페이지 카운트(#204): 시드 5곳 + 수동 KB = 6곳
         // (신한은행 BANK/LOAN은 기관 단위 1곳으로 합산).
         assertThat(response.connectedInstitutionCount()).isEqualTo(6);
+
+        // generatedCounts.connections는 '생성/갱신한 시드 행 수'(6)만 의미한다.
+        // 전체 연결 행(시드 6 + 수동 KB = 7)이 새어 들어가지 않는다.
+        assertThat(response.generatedCounts().connections()).isEqualTo(6);
     }
 
     @Test
