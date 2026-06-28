@@ -4,9 +4,12 @@ import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.InvestmentCheckResponse;
 import com.sol.user.asset.dto.InvestmentCheckResponse.GrowthAsset;
 import com.sol.user.asset.dto.InvestmentCheckResponse.RoleContribution;
+import com.sol.user.asset.service.AssetAggregator.AssetSnapshot;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -91,14 +95,14 @@ class InvestmentCheckServiceTest {
     void 현금흐름_월배당은_보유ETF_실분배로_계산된다() {
         stubBreakdown(new AssetBreakdown(
                 won(20_000_000), BigDecimal.ZERO, won(30_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
-        // 100주×300원/월 + 50주×600원÷3개월 = 30,000 + 10,000 = 40,000원/월
+        // 100주×300원/월 + 50주×600원÷3개월 = 30,000 + 10,000 = 40,000원/월(gross)
         when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .thenReturn(List.of(etf(101L, 100, "300", 1), etf(102L, 50, "600", 3)));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        // 실분배가 있으므로 대표배당률 폴백(3천만×3.5%/12=87,500)이 아니라 실값 40,000.
-        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("40000");
+        // 실분배가 있으므로 폴백(3천만×3.5%/12)이 아니라 실값. net = 40,000 × (1−0.154) = 33,840.
+        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("33840");
     }
 
     @Test
@@ -109,21 +113,21 @@ class InvestmentCheckServiceTest {
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        // 3천만 × 0.035 / 12 = 87,500
-        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("87500");
+        // 3천만 × 0.035 / 12 = 87,500(gross) → net = 87,500 × 0.846 = 74,025
+        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("74025");
     }
 
     @Test
     void 성장_월배당은_개별주_실배당으로_계산된다() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // 1천만 × 6.00% / 12 = 50,000원/월
+        // 1천만 × 6.00% / 12 = 50,000원/월(gross) → net = 50,000 × 0.846 = 42,300
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(201L, "현대차", 10_000_000, "6.00")));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        assertThat(role(response, "GROWTH").monthlyCashflow()).isEqualByComparingTo("50000");
-        assertThat(response.growthAsset().currentMonthlyDividend()).isEqualByComparingTo("50000");
+        assertThat(role(response, "GROWTH").monthlyCashflow()).isEqualByComparingTo("42300");
+        assertThat(response.growthAsset().currentMonthlyDividend()).isEqualByComparingTo("42300");
     }
 
     @Test
@@ -177,35 +181,119 @@ class InvestmentCheckServiceTest {
     @Test
     void 저배당_성장주는_배당ETF로_옮기면_이득_멘트() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // 1.00% → 월 8,333. 배당ETF 전환 시 1천만×3.5%/12=29,167 → delta +양수
+        // gross 8,333(1천만×1%/12) → net 7,050. 배당ETF 전환 gross 29,167 → net 24,675 → delta +양수
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(1L, "삼성바이오로직스", 10_000_000, "1.00")));
 
         GrowthAsset growth = service.check(USER_ID).growthAsset();
 
-        assertThat(growth.currentMonthlyDividend()).isEqualByComparingTo("8333");
-        assertThat(growth.convertedMonthlyDividend()).isEqualByComparingTo("29167");
-        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("20834");
+        assertThat(growth.currentMonthlyDividend()).isEqualByComparingTo("7050");   // 8333×0.846=7049.7→7050
+        assertThat(growth.convertedMonthlyDividend()).isEqualByComparingTo("24675"); // 29167×0.846=24675.3→24675
+        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("17625");      // 24675−7050
         assertThat(growth.suggestion()).contains("옮기면").contains("더");
     }
 
     @Test
     void 고배당주는_옮기면_손해_멘트로_플립() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // 7.00% → 월 58,333 > 배당ETF 전환 29,167 → delta 음수
+        // gross 58,333(7%) → net 49,350 > 배당ETF 전환 net 24,675 → delta 음수
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(1L, "현대해상", 10_000_000, "7.00")));
 
         GrowthAsset growth = service.check(USER_ID).growthAsset();
 
-        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("-29166");
+        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("-24675"); // 24675−49350
         assertThat(growth.suggestion()).contains("오히려 줄");
+    }
+
+    // ── #193 분배 공백 경고 ──────────────────────────────────────────────────────
+
+    @Test
+    void 분배데이터가_있고_공백종목이_있으면_경고에_금액과_종목명이_담긴다() {
+        // 현금흐름 자산 5천 = 분배되는 ETF(101) 3천 + 분배없는 채권혼합(999) 2천
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, won(50_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+        stubSnapshot(breakdown,
+                List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),
+                        holding(2L, 999L, 20_000_000, "BROKERAGE")),
+                Map.of(101L, product(101L, "SOL 국고채3년", "ETF"),
+                        999L, product(999L, "SOL 코스피200채권혼합50", "FUND")));
+        // 101만 실분배 데이터 보유 → 999는 "재료>0 분배금 0"
+        when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
+                .thenReturn(List.of(etf(101L, 100, "300", 1)));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        assertThat(response.uncoveredCashflow()).isNotNull();
+        assertThat(response.uncoveredCashflow().amount()).isEqualByComparingTo("20000000");
+        assertThat(response.uncoveredCashflow().productNames()).containsExactly("SOL 코스피200채권혼합50");
+    }
+
+    @Test
+    void 분배데이터가_전무하면_폴백추정이라_경고는_null() {
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, won(20_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+        stubSnapshot(breakdown,
+                List.of(holding(1L, 999L, 20_000_000, "BROKERAGE")),
+                Map.of(999L, product(999L, "SOL 코스피200채권혼합50", "FUND")));
+        // findDividendCalendarInputsByUserId 미스텁 → 빈 리스트 → 전체 폴백추정(경고 아님)
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        assertThat(response.uncoveredCashflow()).isNull();
+    }
+
+    @Test
+    void 개별주와_연금보유는_현금흐름_공백경고_대상이_아니다() {
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, won(30_000_000), won(10_000_000), won(20_000_000));
+        stubSnapshot(breakdown,
+                List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),   // 커버됨
+                        holding(2L, 500L, 20_000_000, "BROKERAGE"),   // STOCK → 제외
+                        holding(3L, 600L, 10_000_000, "IRP")),        // 연금계좌 → 제외
+                Map.of(101L, product(101L, "SOL 국고채3년", "ETF"),
+                        500L, product(500L, "삼성전자", "STOCK"),
+                        600L, product(600L, "SOL 미국S&P500", "ETF")));
+        when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
+                .thenReturn(List.of(etf(101L, 100, "300", 1)));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        // 비커버 현금흐름 자산이 없음(주식·연금은 분류상 제외) → 경고 null
+        assertThat(response.uncoveredCashflow()).isNull();
+    }
+
+    @Test
+    void 같은_공백종목을_여러계좌로_보유하면_금액은_합산되고_종목명은_한_번만() {
+        // 분배없는 채권혼합(999)을 두 계좌에 각 2천·1천 보유 → amount 3천 합산, 종목명은 1회
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, won(60_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+        stubSnapshot(breakdown,
+                List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),
+                        holding(2L, 999L, 20_000_000, "BROKERAGE"),
+                        holding(3L, 999L, 10_000_000, "CMA")),
+                Map.of(101L, product(101L, "SOL 국고채3년", "ETF"),
+                        999L, product(999L, "SOL 코스피200채권혼합50", "FUND")));
+        when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
+                .thenReturn(List.of(etf(101L, 100, "300", 1)));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        assertThat(response.uncoveredCashflow().amount()).isEqualByComparingTo("30000000");
+        assertThat(response.uncoveredCashflow().productNames()).containsExactly("SOL 코스피200채권혼합50");
     }
 
     // ── helpers ──
 
     private void stubBreakdown(AssetBreakdown breakdown) {
-        when(assetAggregator.aggregate(USER_ID)).thenReturn(breakdown);
+        when(assetAggregator.aggregateSnapshot(USER_ID))
+                .thenReturn(new AssetSnapshot(breakdown, List.of(), List.of(), Map.of()));
+    }
+
+    private void stubSnapshot(AssetBreakdown breakdown, List<HoldingWithProduct> holdings,
+                             Map<Long, ProductBatchItem> products) {
+        when(assetAggregator.aggregateSnapshot(USER_ID))
+                .thenReturn(new AssetSnapshot(breakdown, List.of(), holdings, products));
     }
 
     private RoleContribution role(InvestmentCheckResponse response, String role) {
@@ -246,6 +334,20 @@ class InvestmentCheckServiceTest {
             public LocalDate getLatestPaymentDate() { return null; }
             public Integer getDistributionIntervalMonths() { return intervalMonths; }
         };
+    }
+
+    private HoldingWithProduct holding(long holdingId, long productId, long eval, String accountType) {
+        return new HoldingWithProduct() {
+            public Long getHoldingId() { return holdingId; }
+            public Long getAccountId() { return holdingId; }
+            public Long getProductId() { return productId; }
+            public BigDecimal getEvaluationAmount() { return BigDecimal.valueOf(eval); }
+            public String getAccountType() { return accountType; }
+        };
+    }
+
+    private ProductBatchItem product(long productId, String name, String type) {
+        return new ProductBatchItem(productId, name, type);
     }
 
     private BigDecimal won(long value) {

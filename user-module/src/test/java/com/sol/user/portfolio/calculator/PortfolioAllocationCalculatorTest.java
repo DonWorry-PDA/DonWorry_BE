@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -130,6 +133,53 @@ class PortfolioAllocationCalculatorTest {
         PlanAllocation stable = plan(result, PlanType.STABLE);
         assertThat(riskHoldings(stable)).isEmpty();
         assertThat(stable.getRiskCapGainTaxableWeight()).isEqualByComparingTo("1");
+    }
+
+    // ── #193 혼합 국내/해외: 금액가중이 아니라 자본차익가중(과대평가 방지) ────────────────
+    //    현 SLOT_TICKER로는 calculate()에서 국내주식형이 위험버킷에 들어오지 않으므로 헬퍼를 직접 검증.
+
+    @Test
+    void 혼합포트는_금액가중보다_낮은_자본차익가중_과세분율을_낸다() {
+        // 해외 446720(배당3.50%, 자본차익률 max(4.5−3.5)=1.0%) 5천 + 국내 292500(배당1.50%, 자본차익 3.0%) 5천
+        // 금액가중이면 해외 5천/1억 = 0.5. 자본차익가중 = (5천×0.01) / (5천×0.01 + 5천×0.03) = 50/200 = 0.25.
+        Map<String, EtfInfo> byTicker = byTicker(
+                new EtfInfo(1L, "446720", "SOL 미국배당다우존스", 3,
+                        new BigDecimal("3.50"), "MONTHLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
+                new EtfInfo(2L, "292500", "SOL KRX300", 2,
+                        new BigDecimal("1.50"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED));
+        List<Holding> holdings = List.of(
+                risk("446720", byTicker, 50_000_000),
+                risk("292500", byTicker, 50_000_000));
+
+        BigDecimal weight = calculator.weightedCapGainTaxableWeight(holdings, byTicker);
+
+        assertThat(weight).isEqualByComparingTo("0.2500");
+    }
+
+    @Test
+    void 전부_해외면_자본차익가중도_1로_금액가중과_동일하다() {
+        // 회귀: 모두 과세(해외)면 자본차익가중도 numerator=denominator → 1.0
+        Map<String, EtfInfo> byTicker = byTicker(
+                new EtfInfo(1L, "446720", "SOL 미국배당다우존스", 3,
+                        new BigDecimal("3.50"), "MONTHLY", BucketRole.RISK, CurrencyExposure.UNHEDGED),
+                new EtfInfo(3L, "476030", "SOL 미국나스닥100", 2,
+                        new BigDecimal("1.20"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED));
+        List<Holding> holdings = List.of(
+                risk("446720", byTicker, 40_000_000),
+                risk("476030", byTicker, 60_000_000));
+
+        assertThat(calculator.weightedCapGainTaxableWeight(holdings, byTicker)).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 배당률이_기대총수익_이상이면_자본차익_0이라_폴백1() {
+        // 전 종목 배당률 ≥ 4.5% → max(r−배당,0)=0 → 분모 0 → 1.0 폴백(다운스트림 capGainShare도 0)
+        Map<String, EtfInfo> byTicker = byTicker(
+                new EtfInfo(2L, "292500", "SOL KRX300", 2,
+                        new BigDecimal("5.00"), "QUARTERLY", BucketRole.RISK, CurrencyExposure.UNHEDGED));
+        List<Holding> holdings = List.of(risk("292500", byTicker, 50_000_000));
+
+        assertThat(calculator.weightedCapGainTaxableWeight(holdings, byTicker)).isEqualByComparingTo("1");
     }
 
     // ── 구조적 부족: 여유분<=0 → 트랙 전환, 3안 스킵 ──────────────────────────────
@@ -301,6 +351,17 @@ class PortfolioAllocationCalculatorTest {
                 new EtfInfo(6L, "497880", "SOL CD금리MMF", 5,
                         new BigDecimal("3.20"), "MONTHLY", BucketRole.SAFE, CurrencyExposure.UNHEDGED)
         );
+    }
+
+    private Map<String, EtfInfo> byTicker(EtfInfo... etfs) {
+        return List.of(etfs).stream().collect(Collectors.toMap(EtfInfo::ticker, Function.identity()));
+    }
+
+    /** 위험버킷 holding — weightedCapGainTaxableWeight는 amount·ticker만 보므로 나머지는 byTicker에서 채운다. */
+    private Holding risk(String ticker, Map<String, EtfInfo> byTicker, long amount) {
+        EtfInfo etf = byTicker.get(ticker);
+        return new Holding(etf.productId(), ticker, etf.productName(), BucketRole.RISK,
+                etf.currency(), BigDecimal.ZERO, BigDecimal.valueOf(amount));
     }
 
     private PlanAllocation plan(AllocationResult result, PlanType type) {
