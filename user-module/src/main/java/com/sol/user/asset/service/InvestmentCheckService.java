@@ -61,10 +61,10 @@ public class InvestmentCheckService {
 
     /** 성장 자산을 배당형으로 옮기면 현금흐름이 늘어나는 경우(저배당 성장주 위주). */
     private static final String SUGGESTION_MOVE =
-            "성장에 베팅한 자산이에요. 일부를 배당 중심 자산으로 옮기면 매달 들어오는 현금흐름을 더 만들 수 있어요.";
+            "직접 투자 중인 개별주는 대부분 시세차익을 노려요. 일부를 배당 중심으로 옮기면 매달 현금흐름이 더 생겨요.";
     /** 이미 종목 배당이 배당형 ETF 수준 이상이라 옮기면 오히려 손해인 경우(고배당 가치주 위주). */
     private static final String SUGGESTION_KEEP =
-            "이미 배당이 꾸준히 나오는 자산이에요. 배당 중심으로 옮기면 현금흐름이 오히려 줄 수 있어요.";
+            "직접 투자 중인 개별주에서 이미 배당이 꾸준히 나와요. 배당 중심으로 옮기면 현금흐름이 오히려 줄 수 있어요.";
 
     private final AssetAggregator assetAggregator;
     private final HoldingRepository holdingRepository;
