@@ -55,6 +55,10 @@ public class ProductService {
                                 EtfDetail::getTickerCode
                         ));
 
+        if (etfProductIds.stream().anyMatch(id -> !tickerByProductId.containsKey(id))) {
+            throw new BaseException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
         return products.stream()
                 .map(p -> new ProductBatchItem(
                         p.getProductId(),
