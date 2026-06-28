@@ -151,7 +151,7 @@ public class AssetMockService {
         List<Pension> pensions = savePensions(user, scenario);
         List<Debt> debts = saveDebts(user, scenario);
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
-        List<AssetConnection> connections = saveConnections(user, generatedAt);
+        SavedConnections connections = saveConnections(user, generatedAt);
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario);
 
         // 원천 데이터 저장 직후 생활 안정도를 재계산해 항상 최신 결과가 존재하도록 한다.
@@ -163,7 +163,7 @@ public class AssetMockService {
                 generatedAt,
                 createAssetSummary(accounts, holdings, scenario.debtBalance()),
                 new MockGeneratedCounts(
-                        connections.size(),
+                        connections.generatedRows().size(),
                         accounts.size(),
                         holdings.size(),
                         pensions.size(),
@@ -171,7 +171,7 @@ public class AssetMockService {
                         policies.size(),
                         events.size()
                 ),
-                (int) ConnectedInstitutions.count(connections)
+                (int) ConnectedInstitutions.count(connections.connectedRows())
         );
     }
 
@@ -361,7 +361,7 @@ public class AssetMockService {
                 insurancePolicyRepository::deleteAll, insurancePolicyRepository::saveAll);
     }
 
-    private List<AssetConnection> saveConnections(User user, LocalDateTime syncedAt) {
+    private SavedConnections saveConnections(User user, LocalDateTime syncedAt) {
         List<AssetConnection> desired = List.of(
                 new AssetConnection(user, "신한은행", "BANK", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한투자증권", "SECURITIES", "CONNECTED", syncedAt),
@@ -370,10 +370,50 @@ public class AssetMockService {
                 new AssetConnection(user, "신한카드", "CARD", "CONNECTED", syncedAt),
                 new AssetConnection(user, "신한은행", "LOAN", "CONNECTED", syncedAt)
         );
-        return upsertByKey(assetConnectionRepository.findByUserUserId(user.getUserId()), desired,
-                AssetConnection::getCategory,
-                (target, seed) -> target.updateMock(seed.getInstitutionName(), seed.getLastSyncedAt()),
-                assetConnectionRepository::deleteAll, assetConnectionRepository::saveAll);
+
+        // 재동기화는 mock 시드(신한 계열)만 추가/갱신한다(#223). 사용자가 마이페이지에서 직접
+        // 연결한 기관(예: KB·카카오)은 desired에 없어도 절대 삭제하지 않는다 — upsertByKey의
+        // '미매칭 행 삭제' 계약을 쓰면 수동 연결이 재동기화마다 사라진다(연결 테이블은 mock·수동
+        // 행이 섞여 있어 holding처럼 전량 재생성할 수 없다). 시드는 (기관명, category) 복합키로
+        // 매칭해 신한은행 BANK/LOAN 두 행을 각각 유지한다.
+        List<AssetConnection> existing = assetConnectionRepository.findByUserUserId(user.getUserId());
+        Map<String, AssetConnection> existingByKey = existing.stream()
+                .collect(Collectors.toMap(
+                        c -> connectionKey(c.getInstitutionName(), c.getCategory()),
+                        c -> c, (a, b) -> a, LinkedHashMap::new));
+
+        List<AssetConnection> result = new ArrayList<>(existing);
+        List<AssetConnection> toSave = new ArrayList<>();
+        for (AssetConnection seed : desired) {
+            AssetConnection found = existingByKey.get(connectionKey(seed.getInstitutionName(), seed.getCategory()));
+            if (found != null) {
+                found.updateMock(seed.getInstitutionName(), seed.getLastSyncedAt());
+                toSave.add(found);
+            } else {
+                toSave.add(seed);
+                result.add(seed);
+            }
+        }
+        List<AssetConnection> savedSeeds = assetConnectionRepository.saveAll(toSave);
+
+        // generatedCounts.connections는 '이번 동기화로 생성/갱신한 시드 행 수'만 의미한다.
+        // 반면 connectedInstitutionCount는 온보딩 카운트 == 마이페이지 카운트 불변식(#204)을 위해
+        // 사용자 수동 연결까지 포함한 전체 CONNECTED 집합으로 센다 — 두 집합을 분리해 전달한다.
+        List<AssetConnection> connectedRows = result.stream()
+                .filter(c -> "CONNECTED".equals(c.getConnectionStatus()))
+                .toList();
+        return new SavedConnections(savedSeeds, connectedRows);
+    }
+
+    private static String connectionKey(String institutionName, String category) {
+        return institutionName + "|" + category;
+    }
+
+    /** 재동기화 결과: generatedRows = 이번에 생성/갱신한 시드 행, connectedRows = 사용자 전체 CONNECTED 행. */
+    private record SavedConnections(
+            List<AssetConnection> generatedRows,
+            List<AssetConnection> connectedRows
+    ) {
     }
 
     private List<CashFlowEvent> buildMonthEvents(User user, LocalDate monthStart,
