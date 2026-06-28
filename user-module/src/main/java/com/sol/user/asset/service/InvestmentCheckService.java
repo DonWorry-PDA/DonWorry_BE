@@ -5,20 +5,27 @@ import com.sol.user.asset.dto.AssetBreakdown.AssetRole;
 import com.sol.user.asset.dto.InvestmentCheckResponse;
 import com.sol.user.asset.dto.InvestmentCheckResponse.GrowthAsset;
 import com.sol.user.asset.dto.InvestmentCheckResponse.RoleContribution;
+import com.sol.user.asset.dto.InvestmentCheckResponse.UncoveredCashflow;
+import com.sol.user.asset.service.AssetAggregator.AssetSnapshot;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
+import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 투자 건강검진(#2) 상세 산출. 자산을 4역할(현금흐름·성장·잠자는 돈·연금)로 분해하고, 개별주 성장 블록을 만든다.
@@ -30,6 +37,9 @@ import java.util.Map;
  * ({@link HoldingRepository#findDividendCalendarInputsByUserId}), 성장 역할은 개별주의 종목별 시가배당률
  * ({@link HoldingRepository#findStockDividendsByUserId})로 산출한다. ETF 실분배 데이터가 전혀 없을 때만
  * 대표배당률({@link PortfolioConstants#REPRESENTATIVE_DIVIDEND_RATE})로 폴백한다(풀 밖 종목 방어).
+ *
+ * <p>모든 월 현금흐름은 <b>net 실수령</b>이다(금융소득 원천징수 15.4% 차감) — STEP6 은퇴 월수령과 동일 기준이라
+ * 화면 간 정합하고, "매달 들어오는 현금흐름"이 실입금액이 된다. 실분배·개별주배당·폴백추정 전 경로에 적용한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +54,10 @@ public class InvestmentCheckService {
     private static final int CONCENTRATION_LOW_MAX = 40;   // < 40 → 낮음
     private static final int CONCENTRATION_MID_MAX = 70;   // < 70 → 보통, 이상 → 높음
 
+    /** 55세 인출제약 연금계좌 — 현금흐름 역할 분류 기준은 {@link AssetAggregator}와 동일(비STOCK·비연금). */
+    private static final Set<String> PENSION_ACCOUNT_TYPES = Set.of("PENSION_SAVING", "IRP");
+    private static final String STOCK_PRODUCT_TYPE = "STOCK";
+
     /** 성장 자산을 배당형으로 옮기면 현금흐름이 늘어나는 경우(저배당 성장주 위주). */
     private static final String SUGGESTION_MOVE =
             "성장에 베팅한 자산이에요. 일부를 배당 중심 자산으로 옮기면 매달 들어오는 현금흐름을 더 만들 수 있어요.";
@@ -55,7 +69,9 @@ public class InvestmentCheckService {
     private final HoldingRepository holdingRepository;
 
     public InvestmentCheckResponse check(Long userId) {
-        AssetBreakdown breakdown = assetAggregator.aggregate(userId);
+        // 분배 공백 경고(#193)는 종목별 평가액·productId가 필요해 snapshot(보유·상품 원본 포함)을 쓴다.
+        AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
+        AssetBreakdown breakdown = snapshot.breakdown();
 
         List<StockDividendProjection> stocks = holdingRepository.findStockDividendsByUserId(userId);
         List<HoldingDividendCalendarProjection> etfDividends =
@@ -71,6 +87,7 @@ public class InvestmentCheckService {
                 .totalAsset(breakdown.grossTotal())
                 .roles(buildRoles(breakdown, cashflowMonthly, stockMonthly))
                 .growthAsset(buildGrowthAsset(breakdown, stocks, stockMonthly))
+                .uncoveredCashflow(uncoveredCashflow(snapshot, etfDividends))
                 .build();
     }
 
@@ -135,8 +152,9 @@ public class InvestmentCheckService {
         Map.Entry<String, BigDecimal> topSector = topSectorByValue(stocks);
         int sectorConcentration = topSector == null ? 0 : percent(topSector.getValue(), stockTotal);
 
-        // 전액 배당형 ETF로 옮겼을 때의 월 배당(대표배당률) vs 현재 종목 실배당.
-        BigDecimal converted = monthlyByRate(stockTotal, PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE);
+        // 전액 배당형 ETF로 옮겼을 때의 월 배당(대표배당률, net) vs 현재 종목 실배당(net).
+        // 둘 다 같은 원천징수율로 스케일되므로 delta 부호·suggestion 분기는 불변(표시 숫자만 net).
+        BigDecimal converted = netFinancial(monthlyByRate(stockTotal, PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE));
         BigDecimal delta = converted.subtract(stockMonthly);
 
         return GrowthAsset.builder()
@@ -155,17 +173,19 @@ public class InvestmentCheckService {
     }
 
     /**
-     * 현금흐름 역할의 월 배당 = 보유 ETF 실분배 합(종목별 수량 × 분배/주 ÷ 배당주기).
-     * 실분배 데이터가 전혀 없으면(풀 밖 종목 등) 현금흐름 자산 전체를 대표배당률로 추정 폴백.
+     * 현금흐름 역할의 월 배당(net) = 보유 ETF 실분배 합(종목별 수량 × 분배/주 ÷ 배당주기)에 원천징수 차감.
+     * 실분배 데이터가 전혀 없으면(풀 밖 종목 등) 현금흐름 자산 전체를 대표배당률로 추정 폴백(역시 net).
      */
     private BigDecimal cashflowMonthlyDividend(AssetBreakdown breakdown,
                                               List<HoldingDividendCalendarProjection> etfDividends) {
         if (etfDividends.isEmpty()) {
-            return monthlyByRate(breakdown.nonStockHoldingValue(), PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE);
+            return netFinancial(
+                    monthlyByRate(breakdown.nonStockHoldingValue(), PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE));
         }
-        return etfDividends.stream()
+        BigDecimal gross = etfDividends.stream()
                 .map(this::monthlyFromDistribution)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return netFinancial(gross);
     }
 
     /** ETF 1종목 월 분배액 = 수량 × 분배/주 ÷ 배당주기(월). 주기는 쿼리에서 >0 보장. */
@@ -193,12 +213,13 @@ public class InvestmentCheckService {
                 .orElse(null);
     }
 
-    /** 성장 역할의 월 배당 = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합. */
+    /** 성장 역할의 월 배당(net) = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합에 원천징수 차감. */
     private BigDecimal stockMonthlyDividend(List<StockDividendProjection> stocks) {
-        return stocks.stream()
+        BigDecimal gross = stocks.stream()
                 .map(s -> nz(s.getEvaluationAmount()).multiply(nz(s.getDividendYield()))
                         .divide(PERCENT_MONTHS, 0, RoundingMode.HALF_UP))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return netFinancial(gross);
     }
 
     private String concentrationLevel(int concentration) {
@@ -209,6 +230,53 @@ public class InvestmentCheckService {
             return "보통";
         }
         return "높음";
+    }
+
+    /**
+     * 분배 데이터 공백 경고(#193) — "재료>0인데 분배금 0"인 현금흐름 자산 집계.
+     * 현금흐름 역할 보유(비STOCK·비연금) 중 실분배 데이터({@code etfDividends})에 productId가 없는 종목이 대상이다.
+     * 0192S0(분배 없음)·직접보유 채권/펀드처럼 분배가 없는 종목을 추정하지 않고(거짓 과대 방지) 현황으로만 알린다.
+     *
+     * <p>실분배 데이터가 전무하면(전체 폴백추정 경로) 신호가 없어 경고 대상이 아니다 — null.
+     * 일부라도 실분배가 잡힌 경우, 그 신호에 빠진 보유만 "분배 없음"으로 본다.
+     */
+    private UncoveredCashflow uncoveredCashflow(AssetSnapshot snapshot,
+                                               List<HoldingDividendCalendarProjection> etfDividends) {
+        if (etfDividends.isEmpty()) {
+            return null;
+        }
+        Set<Long> covered = etfDividends.stream()
+                .map(HoldingDividendCalendarProjection::getProductId)
+                .collect(Collectors.toSet());
+
+        BigDecimal amount = BigDecimal.ZERO;
+        List<String> names = new ArrayList<>();
+        for (HoldingWithProduct holding : snapshot.holdings()) {
+            if (!isCashflowHolding(holding, snapshot.products()) || covered.contains(holding.getProductId())) {
+                continue;
+            }
+            amount = amount.add(nz(holding.getEvaluationAmount()));
+            ProductBatchItem product = snapshot.products().get(holding.getProductId());
+            names.add(product == null ? String.valueOf(holding.getProductId()) : product.productName());
+        }
+        if (amount.signum() <= 0) {
+            return null;
+        }
+        return UncoveredCashflow.builder().amount(amount).productNames(names).build();
+    }
+
+    /** 현금흐름 역할 보유 = 비STOCK · 비연금계좌. {@link AssetAggregator}의 nonStockHoldingValue 분류와 동일. */
+    private boolean isCashflowHolding(HoldingWithProduct holding, Map<Long, ProductBatchItem> products) {
+        ProductBatchItem product = products.get(holding.getProductId());
+        boolean stock = product != null && STOCK_PRODUCT_TYPE.equals(product.productType());
+        boolean pension = PENSION_ACCOUNT_TYPES.contains(holding.getAccountType());
+        return !stock && !pension;
+    }
+
+    /** 금융소득 원천징수(15.4%) 차감 후 실수령(원, 정수). 월 현금흐름은 실입금 기준이라 net으로 표시. */
+    private BigDecimal netFinancial(BigDecimal grossMonthly) {
+        return grossMonthly.multiply(BigDecimal.ONE.subtract(PortfolioConstants.WITHHOLDING_FINANCIAL))
+                .setScale(0, RoundingMode.HALF_UP);
     }
 
     /** 연 배당률(분수) 기준 월 배당액(원, 정수). */

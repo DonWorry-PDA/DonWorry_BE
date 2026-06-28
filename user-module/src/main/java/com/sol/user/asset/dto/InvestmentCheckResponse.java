@@ -24,8 +24,24 @@ public record InvestmentCheckResponse(
         /** 4역할(현금흐름·성장·잠자는 돈·연금) 분해. 금액 0인 역할은 제외, ratio 합 = 100. */
         List<RoleContribution> roles,
         /** 개별주 성장 블록. 개별주 보유가 없으면 null. */
-        GrowthAsset growthAsset
+        GrowthAsset growthAsset,
+        /** 분배 데이터 공백 경고 — 현금흐름 자산이지만 분배금 0인 보유. 없으면 null. */
+        UncoveredCashflow uncoveredCashflow
 ) {
+
+    /**
+     * "재료>0인데 분배금 0"인 현금흐름 자산 경고. 화이트리스트 0192S0(분배 없음)·직접보유 채권/펀드처럼
+     * 현금흐름 역할 금액엔 잡히지만 실제 월 분배가 없어 {@code monthlyCashflow}에 반영되지 않은 보유를 모은다.
+     *
+     * <p>역할 금액·{@code cashflowAssetRatio}는 단일출처(도넛·허브 공유)라 건드리지 않고, 이 블록으로만
+     * "이 금액은 분배 데이터가 없어 현금흐름에 반영되지 않았어요"를 알린다(재료 제외·추정 대신 현황 경고).
+     */
+    @Builder
+    public record UncoveredCashflow(
+            BigDecimal amount,            // 분배 데이터 없는 현금흐름 자산 평가액 합
+            List<String> productNames     // 해당 보유 종목명
+    ) {
+    }
 
     /** 자산 역할별 기여. monthlyCashflow는 현금흐름 역할만 추정액, 그 외는 0. */
     @Builder
