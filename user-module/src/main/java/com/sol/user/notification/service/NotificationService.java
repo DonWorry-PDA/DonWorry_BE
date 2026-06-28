@@ -11,6 +11,7 @@ import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -105,6 +106,20 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(Long userId) {
         notificationRepository.markAllAsReadByUserId(userId);
+    }
+
+    @Scheduled(fixedDelay = 30000)
+    public void sendHeartbeat() {
+        sseEmitterRepository.findAll().forEach((userId, userEmitters) -> {
+            Set<SseEmitter> snapshot = Set.copyOf(userEmitters);
+            for (SseEmitter emitter : snapshot) {
+                try {
+                    emitter.send(SseEmitter.event().name("heartbeat").data("ping"));
+                } catch (IOException e) {
+                    sseEmitterRepository.delete(userId, emitter);
+                }
+            }
+        });
     }
 
     @Transactional

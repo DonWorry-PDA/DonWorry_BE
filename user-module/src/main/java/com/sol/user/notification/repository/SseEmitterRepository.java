@@ -30,4 +30,8 @@ public class SseEmitterRepository {
     public Set<SseEmitter> findByUserId(Long userId) {
         return emitters.getOrDefault(userId, Collections.emptySet());
     }
+
+    public ConcurrentHashMap<Long, Set<SseEmitter>> findAll() {
+        return emitters;
+    }
 }
