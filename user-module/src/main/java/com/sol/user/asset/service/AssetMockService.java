@@ -145,7 +145,7 @@ public class AssetMockService {
         // 증권 적합성진단(KYC) 성향 목업 — 연동 전까지 시나리오별로 다른 성향을 시드해 추천 차등을 시연한다.
         user.assignInvestmentPropensity(scenario.propensity());
 
-        List<Account> accounts = saveAssets(user, userId, scenario.assets());
+        List<Account> accounts = saveAssets(user, userId, scenario);
         linkDepositProductId(accounts);
         List<Holding> holdings = saveHoldings(accounts, scenario.holdings(), scenario.stocks());
         List<Pension> pensions = savePensions(user, scenario);
@@ -200,13 +200,13 @@ public class AssetMockService {
                 });
     }
 
-    private List<Account> saveAssets(User user, Long userId, List<AssetSeed> seeds) {
+    private List<Account> saveAssets(User user, Long userId, Scenario scenario) {
         List<Account> existing = accountRepository.findByUserUserId(userId).stream()
                 .filter(account -> account.getAccountNumber() != null
                         && account.getAccountNumber().startsWith("MOCK-"))
                 .toList();
         List<Account> desired = new ArrayList<>();
-        for (AssetSeed seed : seeds) {
+        for (AssetSeed seed : scenario.assets()) {
             // account_number를 accountType 기준으로 부여한다(#130).
             // 과거엔 시드 인덱스(MOCK-{userId}-{i+1}) 기반이라, 시나리오 자산 목록/순서가
             // 바뀐 레거시 데이터에서는 upsert 매칭 키(accountType)와 번호가 어긋났다.
@@ -219,7 +219,7 @@ public class AssetMockService {
             account.updateDisplayNumber(generateDisplayNumber());
             desired.add(account);
         }
-        return upsertByKey(existing, desired, Account::getAccountType,
+        List<Account> saved = upsertByKey(existing, desired, Account::getAccountType,
                 (target, seed) -> {
                     target.updateMock(seed.getInstitutionName(),
                             seed.getAccountNumber(), seed.getDepositBalance());
@@ -228,6 +228,21 @@ public class AssetMockService {
                     }
                 },
                 accountRepository::deleteAll, accountRepository::saveAll);
+
+        LocalDate fifteenYearsAgo = LocalDate.now().minusYears(15);
+        for (Account account : saved) {
+            if ("IRP".equals(account.getAccountType())) {
+                account.initOpenedAt(fifteenYearsAgo);
+                BigDecimal retirement = account.getDepositBalance()
+                        .multiply(scenario.irpRetirementRatio())
+                        .setScale(0, RoundingMode.HALF_UP);
+                BigDecimal personal = account.getDepositBalance().subtract(retirement);
+                account.linkIrpComposition(retirement, personal);
+            } else if ("PENSION_SAVING".equals(account.getAccountType())) {
+                account.initOpenedAt(fifteenYearsAgo);
+            }
+        }
+        return saved;
     }
 
     private String generateDisplayNumber() {
@@ -563,7 +578,8 @@ public class AssetMockService {
                     money(75_000_000), money(650_000), new BigDecimal("4.80"),
                     money(5_400_000), money(600_000), money(104_000),
                     money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
-                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
+                    new BigDecimal("0.6")
             );
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
@@ -587,7 +603,8 @@ public class AssetMockService {
                     money(30_000_000), money(300_000), new BigDecimal("4.10"),
                     money(4_200_000), money(1_150_000), money(148_000),
                     money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
-                    MockTransactionTemplates.NEED_COMPLEMENT_STOCKS
+                    MockTransactionTemplates.NEED_COMPLEMENT_STOCKS,
+                    new BigDecimal("0.6")
             );
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
@@ -613,7 +630,8 @@ public class AssetMockService {
                     // 6,000,000이면 17.1개월(11점)에 그쳐 총 79점으로 STABLE 문턱에서 1점 부족했다.
                     money(9_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), MockTransactionTemplates.STABLE,
-                    MockTransactionTemplates.STABLE_STOCKS
+                    MockTransactionTemplates.STABLE_STOCKS,
+                    new BigDecimal("0.6")
             );
         };
     }
@@ -659,7 +677,8 @@ public class AssetMockService {
             BigDecimal monthlyInsurancePremium,
             BigDecimal monthlyMaintenanceExpense,
             List<MockTransactionTemplates.TransactionTemplate> transactions,
-            List<MockTransactionTemplates.TransactionTemplate> stockTrades
+            List<MockTransactionTemplates.TransactionTemplate> stockTrades,
+            BigDecimal irpRetirementRatio
     ) {
     }
 }

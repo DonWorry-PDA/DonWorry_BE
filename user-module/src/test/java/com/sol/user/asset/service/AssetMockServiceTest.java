@@ -246,6 +246,50 @@ class AssetMockServiceTest {
         verify(lifeStabilityService).recalculateFromUserDataIfReady(3L);
     }
 
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void irpAccount_hasCompositionAndOpenedAt_afterCreate() {
+        User user = mock(User.class);
+        when(user.getUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(accountRepository).saveAll(captor.capture());
+        List<Account> saved = toList((Iterable<Account>) captor.getValue());
+
+        Account irp = saved.stream()
+                .filter(a -> "IRP".equals(a.getAccountType()))
+                .findFirst().orElseThrow();
+
+        assertThat(irp.getIrpRetirementAmount()).isEqualByComparingTo("39000000");
+        assertThat(irp.getIrpPersonalAmount()).isEqualByComparingTo("26000000");
+        assertThat(irp.getOpenedAt()).isEqualTo(LocalDate.now().minusYears(15));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void pensionSaving_hasOpenedAt_afterCreate() {
+        User user = mock(User.class);
+        when(user.getUserId()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(1L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(accountRepository).saveAll(captor.capture());
+        List<Account> saved = toList((Iterable<Account>) captor.getValue());
+
+        Account ps = saved.stream()
+                .filter(a -> "PENSION_SAVING".equals(a.getAccountType()))
+                .findFirst().orElseThrow();
+
+        assertThat(ps.getOpenedAt()).isEqualTo(LocalDate.now().minusYears(15));
+    }
+
     private void returnArgumentsFromSaveAll() {
         lenient().when(etfPoolProvider.getPool()).thenReturn(etfPool());
         lenient().when(holdingRepository.findStockProductIds(any())).thenReturn(stockPool());
