@@ -18,16 +18,17 @@ public class SseEmitterRepository {
     }
 
     public void delete(Long userId, SseEmitter emitter) {
-        Set<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters != null) {
+        emitters.computeIfPresent(userId, (id, userEmitters) -> {
             userEmitters.remove(emitter);
-            if (userEmitters.isEmpty()) {
-                emitters.remove(userId);
-            }
-        }
+            return userEmitters.isEmpty() ? null : userEmitters;
+        });
     }
 
     public Set<SseEmitter> findByUserId(Long userId) {
         return emitters.getOrDefault(userId, Collections.emptySet());
+    }
+
+    public ConcurrentHashMap<Long, Set<SseEmitter>> findAll() {
+        return emitters;
     }
 }
