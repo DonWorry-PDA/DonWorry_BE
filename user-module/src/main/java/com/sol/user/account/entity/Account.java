@@ -54,6 +54,12 @@ public class Account {
     @Column(name = "product_id")
     private Long productId;
 
+    @Column(name = "irp_retirement_amount", precision = 15, scale = 0)
+    private BigDecimal irpRetirementAmount;
+
+    @Column(name = "irp_personal_amount", precision = 15, scale = 0)
+    private BigDecimal irpPersonalAmount;
+
     public static Account createDonWorry(User user, String accountNumber, LocalDate openedAt) {
         Account account = new Account();
         account.user = user;
@@ -118,6 +124,11 @@ public class Account {
 
     public void linkDepositProduct(Long productId) {
         this.productId = productId;
+    }
+
+    public void linkIrpComposition(BigDecimal retirementAmount, BigDecimal personalAmount) {
+        this.irpRetirementAmount = retirementAmount;
+        this.irpPersonalAmount = personalAmount;
     }
 
     public void initOpenedAt(LocalDate date) {
