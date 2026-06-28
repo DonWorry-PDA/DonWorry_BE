@@ -5,6 +5,7 @@ import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetCompositionResponse;
 import com.sol.user.asset.dto.AssetCompositionResponse.AssetHoldingItem;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
@@ -20,7 +21,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -38,7 +41,7 @@ class AssetCompositionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AssetCompositionService(assetAggregator, depositDetailClient, debtRepository);
+        service = new AssetCompositionService(assetAggregator, depositDetailClient, debtRepository, new AssetMapper());
     }
 
     @Test
@@ -95,11 +98,12 @@ class AssetCompositionServiceTest {
         HoldingWithProduct holding = mockHolding(1L, 10L, "BROKERAGE",
                 new BigDecimal("300000"), new BigDecimal("10.0000"));
         ProductBatchItem product = new ProductBatchItem(10L, "SOL 미국배당다우존스", "ETF", "446720");
+        AssetAggregator.AssetSnapshot snapshot = snapshotWith(
+                new BigDecimal("300000"), List.of(holding), Map.of(10L, product));
 
-        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
-                snapshotWith(new BigDecimal("300000"), List.of(holding), Map.of(10L, product)));
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(snapshot);
         given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
-        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+        lenient().when(depositDetailClient.fetchDepositDetails(anyList())).thenReturn(Map.of());
 
         AssetCompositionResponse response = service.getComposition(1L);
 
@@ -120,11 +124,12 @@ class AssetCompositionServiceTest {
         HoldingWithProduct holding = mockHolding(1L, 20L, "PENSION_SAVING",
                 new BigDecimal("500000"), new BigDecimal("1.0000"));
         ProductBatchItem product = new ProductBatchItem(20L, "한국투자 TDF", "FUND", null);
+        AssetAggregator.AssetSnapshot snapshot = snapshotWith(
+                new BigDecimal("500000"), List.of(holding), Map.of(20L, product));
 
-        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
-                snapshotWith(new BigDecimal("500000"), List.of(holding), Map.of(20L, product)));
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(snapshot);
         given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
-        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+        lenient().when(depositDetailClient.fetchDepositDetails(anyList())).thenReturn(Map.of());
 
         AssetCompositionResponse response = service.getComposition(1L);
 
@@ -141,10 +146,10 @@ class AssetCompositionServiceTest {
     @Test
     @DisplayName("보유종목이 없는 계좌는 holdings 리스트가 비어있다")
     void getComposition_accountWithNoHoldings_emptyHoldingsList() {
-        given(assetAggregator.aggregateSnapshot(1L)).willReturn(
-                snapshotWith(new BigDecimal("1000000"), List.of(), Map.of()));
+        AssetAggregator.AssetSnapshot snapshot = snapshotWith(new BigDecimal("1000000"), List.of(), Map.of());
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(snapshot);
         given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
-        given(depositDetailClient.fetchDepositDetails(List.of())).willReturn(Map.of());
+        lenient().when(depositDetailClient.fetchDepositDetails(anyList())).thenReturn(Map.of());
 
         AssetCompositionResponse response = service.getComposition(1L);
 
@@ -181,11 +186,10 @@ class AssetCompositionServiceTest {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO
         );
+        String accountType = holdings.isEmpty() ? "DEPOSIT" : holdings.get(0).getAccountType();
         Account account = mock(Account.class);
         when(account.getAccountId()).thenReturn(1L);
-        when(account.getAccountType()).thenReturn(
-                holdings.isEmpty() ? "DEPOSIT"
-                        : holdings.get(0).getAccountType());
+        when(account.getAccountType()).thenReturn(accountType);
         when(account.getDepositBalance()).thenReturn(BigDecimal.ZERO);
         when(account.getInstitutionName()).thenReturn("신한투자증권");
         return new AssetAggregator.AssetSnapshot(breakdown, List.of(account), holdings, products);
@@ -194,7 +198,6 @@ class AssetCompositionServiceTest {
     private HoldingWithProduct mockHolding(Long holdingId, Long productId,
                                            String accountType, BigDecimal eval, BigDecimal quantity) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
-        when(holding.getHoldingId()).thenReturn(holdingId);
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getAccountId()).thenReturn(1L);
         when(holding.getAccountType()).thenReturn(accountType);

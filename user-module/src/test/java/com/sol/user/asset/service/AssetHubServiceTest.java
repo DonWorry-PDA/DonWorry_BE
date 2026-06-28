@@ -13,6 +13,7 @@ import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.monthlysalary.service.CashFlowDiagnosisService;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.stability.dto.LifeStabilityMetrics;
 import com.sol.user.stability.dto.LifeStabilityResponse;
 import com.sol.user.stability.service.LifeStabilityService;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -47,6 +49,7 @@ class AssetHubServiceTest {
     @Mock LifeStabilityService lifeStabilityService;
     @Mock AssetAggregator assetAggregator;
     @Mock SalaryPlanRepository salaryPlanRepository;
+    @Spy AssetMapper assetMapper = new AssetMapper();
 
     @InjectMocks AssetHubService assetHubService;
 
@@ -292,6 +295,7 @@ class AssetHubServiceTest {
         assertThat(response.etfHoldings()).hasSize(1);
         assertThat(response.etfHoldings().get(0).ticker()).isEqualTo("446720");
         assertThat(response.etfHoldings().get(0).quantity()).isEqualByComparingTo("15.0000");
+        assertThat(response.etfSnapshotAmount()).isEqualByComparingTo("5000000");
     }
 
     @Test
@@ -352,6 +356,7 @@ class AssetHubServiceTest {
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
         assertThat(response.etfHoldings()).isNotNull().isEmpty();
+        assertThat(response.etfSnapshotAmount()).isEqualByComparingTo("0");
     }
 
     private Account account(String accountType, long balance) {

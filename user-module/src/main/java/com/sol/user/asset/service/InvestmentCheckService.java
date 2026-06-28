@@ -1,11 +1,11 @@
 package com.sol.user.asset.service;
 
 import com.sol.user.asset.dto.AssetBreakdown;
-import com.sol.user.asset.dto.AssetBreakdown.AssetRole;
 import com.sol.user.asset.dto.InvestmentCheckResponse;
 import com.sol.user.asset.dto.InvestmentCheckResponse.GrowthAsset;
 import com.sol.user.asset.dto.InvestmentCheckResponse.RoleContribution;
 import com.sol.user.asset.dto.InvestmentCheckResponse.UncoveredCashflow;
+import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.asset.service.AssetAggregator.AssetSnapshot;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
 import com.sol.user.holding.dto.HoldingWithProduct;
@@ -68,6 +68,7 @@ public class InvestmentCheckService {
 
     private final AssetAggregator assetAggregator;
     private final HoldingRepository holdingRepository;
+    private final AssetMapper assetMapper;
 
     public InvestmentCheckResponse check(Long userId) {
         // 분배 공백 경고(#193)는 종목별 평가액·productId가 필요해 snapshot(보유·상품 원본 포함)을 쓴다.
@@ -86,51 +87,10 @@ public class InvestmentCheckService {
                 // 헤드라인은 도넛 조각(CASHFLOW 역할 ratio)과 동일 출처라 항상 일치한다. 자산 없으면 0.
                 .cashflowAssetRatio(cashflowRatio == null ? 0 : cashflowRatio)
                 .totalAsset(breakdown.grossTotal())
-                .roles(buildRoles(breakdown, cashflowMonthly, stockMonthly))
+                .roles(assetMapper.toRoleContributions(breakdown, cashflowMonthly, stockMonthly))
                 .growthAsset(buildGrowthAsset(breakdown, stocks, stockMonthly))
                 .uncoveredCashflow(uncoveredCashflow(snapshot, etfDividends))
                 .build();
-    }
-
-    /**
-     * 4역할 분해. 금액·비율은 {@link AssetBreakdown#roleAllocation()}(단일 출처)에서 그대로 받고,
-     * 라벨·설명·월 현금흐름만 표시 계층인 이곳에서 붙인다. 월 현금흐름은 현금흐름=ETF 실분배, 성장=개별주 실배당,
-     * 나머지(잠자는 돈·연금)는 0이다.
-     */
-    private List<RoleContribution> buildRoles(AssetBreakdown breakdown,
-                                              BigDecimal cashflowMonthly, BigDecimal stockMonthly) {
-        return breakdown.roleAllocation().stream()
-                .map(slice -> RoleContribution.builder()
-                        .role(slice.role().name())
-                        .label(label(slice.role()))
-                        .amount(slice.amount())
-                        .ratio(slice.ratio())
-                        .monthlyCashflow(switch (slice.role()) {
-                            case CASHFLOW -> cashflowMonthly;
-                            case GROWTH -> stockMonthly;
-                            case IDLE, PENSION -> BigDecimal.ZERO;
-                        })
-                        .note(note(slice.role()))
-                        .build())
-                .toList();
-    }
-
-    private String label(AssetRole role) {
-        return switch (role) {
-            case CASHFLOW -> "현금흐름";
-            case GROWTH -> "성장";
-            case IDLE -> "잠자는 돈";
-            case PENSION -> "연금";
-        };
-    }
-
-    private String note(AssetRole role) {
-        return switch (role) {
-            case CASHFLOW -> "매달 배당·이자가 들어오는 돈";
-            case GROWTH -> "자본차익을 노리는 돈 (배당이 나오면 함께 표시돼요)";
-            case IDLE -> "아직 일하지 않고 쉬고 있는 현금";
-            case PENSION -> "55세까지 묶인 노후 자금";
-        };
     }
 
     /**
