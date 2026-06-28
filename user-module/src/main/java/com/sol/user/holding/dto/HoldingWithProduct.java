@@ -7,5 +7,6 @@ public interface HoldingWithProduct {
     Long getAccountId();   // NEW
     Long getProductId();
     BigDecimal getEvaluationAmount();
+    BigDecimal getQuantity();
     String getAccountType();
 }
