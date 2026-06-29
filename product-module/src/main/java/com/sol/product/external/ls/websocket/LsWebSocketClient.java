@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
@@ -41,14 +42,20 @@ public class LsWebSocketClient extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
 
-    private WebSocketSession session;
+    private volatile WebSocketSession session;
+    private final AtomicBoolean connecting = new AtomicBoolean(false);
     private final Set<String> subscribedCodes = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
     public void connect() {
+        if (!connecting.compareAndSet(false, true)) {
+            log.debug("LS WebSocket 연결 이미 진행 중 - 중복 요청 무시");
+            return;
+        }
         try {
             StandardWebSocketClient client = new StandardWebSocketClient();
             client.execute(this, lsProperties.getWsUrl()).whenComplete((sess, ex) -> {
+                connecting.set(false);
                 if (ex != null) {
                     log.error("LS WebSocket 연결 실패", ex);
                     scheduleReconnect();
@@ -59,6 +66,7 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                 }
             });
         } catch (Exception e) {
+            connecting.set(false);
             log.error("LS WebSocket 연결 오류", e);
             scheduleReconnect();
         }
@@ -66,9 +74,10 @@ public class LsWebSocketClient extends TextWebSocketHandler {
 
     public void reconnect() {
         lsTokenService.clearToken();
+        WebSocketSession current = this.session;
         try {
-            if (session != null && session.isOpen()) {
-                session.close();
+            if (current != null && current.isOpen()) {
+                current.close();
             } else {
                 connect();
             }
@@ -117,13 +126,14 @@ public class LsWebSocketClient extends TextWebSocketHandler {
 
     @Scheduled(fixedDelay = 60000)
     public void sendKeepAlive() {
-        if (session == null || !session.isOpen()) {
+        WebSocketSession current = this.session;
+        if (current == null || !current.isOpen()) {
             log.warn("LS WebSocket keepalive: 세션 없음 - 재연결 시도");
             connect();
             return;
         }
         try {
-            session.sendMessage(new PingMessage());
+            current.sendMessage(new PingMessage());
         } catch (IOException e) {
             log.warn("LS WebSocket keepalive 실패 - 재연결 시도: {}", e.getMessage());
             this.session = null;
@@ -132,13 +142,14 @@ public class LsWebSocketClient extends TextWebSocketHandler {
     }
 
     private void sendMessage(LsWsRequest request) {
+        WebSocketSession current = this.session;
         try {
-            if (session == null || !session.isOpen()) {
+            if (current == null || !current.isOpen()) {
                 log.debug("LS WebSocket 세션 없음 - 재연결 후 재구독 예정");
                 return;
             }
             String json = objectMapper.writeValueAsString(request);
-            session.sendMessage(new TextMessage(json));
+            current.sendMessage(new TextMessage(json));
         } catch (IOException e) {
             log.error("LS WebSocket 메시지 전송 실패", e);
         }
