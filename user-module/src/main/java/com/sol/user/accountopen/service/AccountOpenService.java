@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
@@ -77,8 +79,7 @@ public class AccountOpenService {
             throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
         }
 
-        otpService.clearVerified(userId);
-        shinhanCertService.clearVerified(userId);
+        clearVerificationAfterCommit(userId);
 
         return AccountOpenResponse.builder()
                 .accountNumber(accountNumber)
@@ -88,6 +89,25 @@ public class AccountOpenService {
 
     private boolean isIdentityVerified(Long userId) {
         return otpService.isVerified(userId) || shinhanCertService.isVerified(userId);
+    }
+
+    private void clearVerificationAfterCommit(Long userId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            clearVerification(userId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearVerification(userId);
+            }
+        });
+    }
+
+    private void clearVerification(Long userId) {
+        otpService.clearVerified(userId);
+        shinhanCertService.clearVerified(userId);
     }
 
     private User findUser(Long userId) {
