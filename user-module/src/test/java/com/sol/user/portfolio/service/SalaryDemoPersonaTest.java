@@ -103,6 +103,15 @@ class SalaryDemoPersonaTest {
         assertThat(ratio).as("위험배분 ≥ 1.3배 확대").isGreaterThanOrEqualTo(1.3);
     }
 
+    @Test
+    void 설문을_다시_저장하면_추천_결과가_바뀐다() {
+        // 재진입 흐름의 핵심 보장: POST /survey 덮어쓰기 후 recommend가 새 설문을 반영한다.
+        BigDecimal before = recommended(recommendWithSurvey(USER_ID, 2, 1, 0)).getMonthlyIncome();
+        BigDecimal after = recommended(recommendWithSurvey(USER_ID, 2, 1, 2)).getMonthlyIncome();
+
+        assertThat(after).as("설문 변경 후 월수령이 달라짐").isNotEqualByComparingTo(before);
+    }
+
     // ── 공유 헬퍼 (이후 태스크에서 재사용) ────────────────────────────────────────
     void seedDemo(Long userId) {
         jdbc.update("INSERT INTO users (user_id, onboarding_completed, third_party_agreed, marketing_agreed) "
