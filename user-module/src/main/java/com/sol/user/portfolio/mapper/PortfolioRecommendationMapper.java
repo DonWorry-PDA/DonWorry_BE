@@ -246,7 +246,8 @@ public class PortfolioRecommendationMapper {
      * 독립 반올림 누적 오차는 버킷의 마지막 종목이 잔여를 흡수해 합계 정합(Σ = 버킷 net)을 보장한다.
      * 버킷 net이 0이거나 버킷 내 weight 합이 0이면 분배 불가라 0(원/월)으로 둔다(null 없음).
      *
-     * <p>Σ monthlyContribution = safeNet + riskNet = monthlyIncome − 국민연금 − 연금저축(사적연금).
+     * <p>Σ monthlyContribution = safeNet + riskNet ≈ monthlyIncome − 국민연금 − 연금저축(사적연금).
+     *   (버킷 net은 잔여흡수로 Σ 정확, 단 버킷 net과 monthlyIncome은 독립 반올림이라 ±0.01 근사)
      * 운용현황 헤드라인(expectedMonthlySalary = 총 monthlyIncome)과의 차액은 국민연금·연금저축(종목 비귀속)이다.
      */
     private List<Holding> withMonthlyContributions(List<Holding> holdings, PlanCoverage coverage) {
