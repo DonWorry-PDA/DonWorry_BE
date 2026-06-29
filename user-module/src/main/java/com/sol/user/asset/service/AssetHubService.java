@@ -83,7 +83,9 @@ public class AssetHubService {
             if (balance.signum() == 0) {
                 continue;
             }
-            map.merge(AssetCategory.fromAccountType(account.getAccountType()), balance, BigDecimal::add);
+            AssetCategory cat = AssetCategory.fromAccountType(account.getAccountType());
+            if (cat == AssetCategory.CMA) cat = AssetCategory.DEPOSIT;
+            map.merge(cat, balance, BigDecimal::add);
         }
 
         List<HoldingWithProduct> holdings = snapshot.holdings();

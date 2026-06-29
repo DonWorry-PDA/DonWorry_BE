@@ -13,6 +13,8 @@ import com.sol.user.monthlysalary.dto.SalaryAssetListResponse;
 import com.sol.user.monthlysalary.entity.SalaryAssetExclusion;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
+import com.sol.user.asset.infra.rest.DepositDetailClient;
+import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import com.sol.user.user.entity.User;
@@ -37,6 +39,7 @@ public class SalaryAssetService {
     private final UserRepository userRepository;
     private final SalaryAssetMapper salaryAssetMapper;
     private final ProductBatchClient productBatchClient;
+    private final DepositDetailClient depositDetailClient;
 
     @Transactional(readOnly = true)
     public SalaryAssetListResponse getAssets(Long userId) {
@@ -78,12 +81,27 @@ public class SalaryAssetService {
     private List<AssetGroupDto> buildAssetGroups(Long userId, Set<String> excludedKeys) {
         Map<String, List<AssetItemDto>> itemsByType = new LinkedHashMap<>();
 
+        List<Account> accounts = accountRepository.findByUserUserIdAndAccountTypeNot(userId, DON_WORRY_TYPE);
+
+        List<Long> depositProductIds = accounts.stream()
+                .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getProductId() != null)
+                .map(Account::getProductId)
+                .distinct()
+                .toList();
+
+        Map<Long, DepositDetailItem> depositDetails = depositProductIds.isEmpty()
+                ? Map.of()
+                : depositDetailClient.fetchDepositDetails(depositProductIds);
+
         // 계좌 (DON_WORRY 제외) → accountType별 그루핑
-        accountRepository.findByUserUserIdAndAccountTypeNot(userId, DON_WORRY_TYPE)
-                .forEach(account -> {
+        accounts.forEach(account -> {
                     String type = account.getAccountType();
+                    DepositDetailItem detail = "DEPOSIT".equals(type) && account.getProductId() != null
+                            ? depositDetails.get(account.getProductId())
+                            : null;
+                    String depositProductName = detail != null ? detail.productName() : null;
                     itemsByType.computeIfAbsent(type, k -> new ArrayList<>())
-                            .add(salaryAssetMapper.toAccountItem(account, excludedKeys));
+                            .add(salaryAssetMapper.toAccountItem(account, excludedKeys, depositProductName));
                 });
 
         // 보유 종목 (STOCK 제외) → account의 accountType별 그루핑

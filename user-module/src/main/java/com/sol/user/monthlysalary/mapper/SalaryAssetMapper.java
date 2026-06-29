@@ -16,12 +16,15 @@ public class SalaryAssetMapper {
     private static final String ACCOUNT_ASSET_KEY_PREFIX = "ACCOUNT_";
     private static final String HOLDING_ASSET_KEY_PREFIX = "HOLDING_";
 
-    public AssetItemDto toAccountItem(Account account, Set<String> excludedKeys) {
+    public AssetItemDto toAccountItem(Account account, Set<String> excludedKeys, String depositProductName) {
         String assetKey = createAccountAssetKey(account.getAccountId());
+        String name = (depositProductName != null)
+                ? depositProductName
+                : resolveAccountName(account.getAccountType());
 
         return AssetItemDto.builder()
                 .assetKey(assetKey)
-                .name(resolveAccountName(account.getAccountType()))
+                .name(name)
                 .description(resolveAccountDescription(account.getAccountType()))
                 .amount(account.getDepositBalance())
                 .excluded(excludedKeys.contains(assetKey))
