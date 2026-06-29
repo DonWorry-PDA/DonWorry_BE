@@ -21,6 +21,7 @@ import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
@@ -28,9 +29,17 @@ import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
+import com.sol.user.report.entity.MonthlyReport;
+import com.sol.user.report.repository.MonthlyReportRepository;
 import com.sol.user.stability.service.LifeStabilityService;
+import com.sol.user.survey.entity.SurveyResponse;
+import com.sol.user.survey.repository.SurveyResponseRepository;
+import com.sol.user.trade.entity.TradeHistory;
+import com.sol.user.trade.repository.TradeHistoryRepository;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
+import com.sol.user.usergoal.entity.UserGoal;
+import com.sol.user.usergoal.repository.UserGoalRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -66,6 +76,11 @@ public class AssetMockService {
     private final EtfPoolProvider etfPoolProvider;
     private final LifeStabilityService lifeStabilityService;
     private final DepositDetailClient depositDetailClient;
+    private final UserGoalRepository userGoalRepository;
+    private final SurveyResponseRepository surveyResponseRepository;
+    private final TradeHistoryRepository tradeHistoryRepository;
+    private final MonthlyReportRepository monthlyReportRepository;
+    private final EtfDividendCalculator etfDividendCalculator;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -96,7 +111,9 @@ public class AssetMockService {
      */
     @Transactional
     public MockAssetResponse sync(Long userId) {
-        return create(userId, SCENARIO_BY_USER.getOrDefault(userId, DEFAULT_SCENARIO));
+        // 실사용자 경로: 온보딩·설문은 비어있을 때만 채워, 사용자가 직접 입력한 값을 덮지 않는다.
+        // 성향은 시나리오 기본값(null override) — 실사용자 성향은 증권 KYC 연동 시 대체된다.
+        return create(userId, SCENARIO_BY_USER.getOrDefault(userId, DEFAULT_SCENARIO), false, null);
     }
 
     /**
@@ -105,13 +122,24 @@ public class AssetMockService {
      */
     @Transactional
     public MockAssetResponse seed(Long userId, MockType mockType) {
+        return seed(userId, mockType, null);
+    }
+
+    /**
+     * 개발/시연용 시드. 기존 목업 원천 데이터를 모두 지우고 지정한 시나리오로 새로 생성한다.
+     * 투자성향(KYC)은 자산 시나리오와 독립된 축이라 따로 지정할 수 있다 — null이면 시나리오 기본 성향을 쓴다.
+     * 같은 자산에 성향만 5단계로 바꿔, 운용등급(성향 상한)·권유가능등급 필터가 어떻게 달라지는지 시연하는 용도.
+     */
+    @Transactional
+    public MockAssetResponse seed(Long userId, MockType mockType, InvestmentPropensity propensity) {
         if (mockType == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
         deleteAllMockData(userId);
-        return create(userId, mockType);
+        // 개발/시연 경로: 온보딩·설문까지 시나리오 값으로 강제 세팅해 완전 결정적 페르소나를 만든다.
+        return create(userId, mockType, true, propensity);
     }
 
     private void deleteAllMockData(Long userId) {
@@ -123,6 +151,8 @@ public class AssetMockService {
         if (!mockAccountIds.isEmpty()) {
             holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
         }
+        // 거래내역은 BROKERAGE(mock) 계좌에만 시드되므로 계좌 삭제 전 먼저 정리한다(FK 참조 해소).
+        tradeHistoryRepository.deleteByAccountUserUserId(userId);
         accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
@@ -133,8 +163,19 @@ public class AssetMockService {
                 .toList());
     }
 
+    /** 완전 결정적 빌드(온보딩·설문 강제 세팅 포함). 개발/테스트 진입점. 성향은 시나리오 기본값. */
     @Transactional
     public MockAssetResponse create(Long userId, MockType mockType) {
+        return create(userId, mockType, true, null);
+    }
+
+    /**
+     * @param propensityOverride 투자성향(KYC) 강제 지정. null이면 자산 시나리오의 기본 성향을 쓴다.
+     *                           자산 시나리오와 독립된 축이라, 같은 자산에 성향만 바꿔 운용등급 차등을 시연할 수 있다.
+     */
+    @Transactional
+    public MockAssetResponse create(Long userId, MockType mockType, boolean force,
+                                    InvestmentPropensity propensityOverride) {
         if (mockType == null) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
@@ -144,8 +185,15 @@ public class AssetMockService {
         Scenario scenario = scenarioOf(mockType);
         LocalDateTime generatedAt = LocalDateTime.now();
 
-        // 증권 적합성진단(KYC) 성향 목업 — 연동 전까지 시나리오별로 다른 성향을 시드해 추천 차등을 시연한다.
-        user.assignInvestmentPropensity(scenario.propensity());
+        // 투자성향(KYC) — 자산 시나리오와 독립. override가 있으면 그것을, 없으면 시나리오 기본 성향을 시드한다.
+        // #118 권유가능등급 필터·운용등급 상한(gradeLimit)의 입력.
+        InvestmentPropensity propensity = propensityOverride != null
+                ? propensityOverride : scenario.propensity();
+        user.assignInvestmentPropensity(propensity);
+        // 온보딩(나이·은퇴·국민연금수령·목표생활비)과 월급설문은 cashflow보다 먼저 시드한다.
+        // buildMonthEvents가 user.getNationalPensionReceiving()으로 연금 입금 이벤트 여부를 판단하기 때문.
+        saveOnboarding(user, scenario, force);
+        saveSurvey(user, scenario, force);
 
         List<Account> accounts = saveAssets(user, userId, scenario);
         linkDepositProductId(accounts);
@@ -155,6 +203,13 @@ public class AssetMockService {
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
         SavedConnections connections = saveConnections(user, generatedAt);
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario, accounts);
+        saveTradeHistory(accounts, holdings);
+
+        // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
+        AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
+        // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름"에서 역산해 백필 —
+        // 월간 리포트의 자산 변화가 그 달 수입·지출과 정합한다(임의 성장곡선 아님).
+        saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), events);
 
         // 원천 데이터 저장 직후 생활 안정도를 재계산해 항상 최신 결과가 존재하도록 한다.
         // 온보딩(UserGoal) 전 사용자는 내부에서 스킵된다.
@@ -163,7 +218,7 @@ public class AssetMockService {
         return new MockAssetResponse(
                 mockType,
                 generatedAt,
-                createAssetSummary(accounts, holdings, scenario.debtBalance()),
+                assetSummary,
                 new MockGeneratedCounts(
                         connections.generatedRows().size(),
                         accounts.size(),
@@ -518,7 +573,8 @@ public class AssetMockService {
         List<CashFlowEvent> events = new ArrayList<>();
         events.addAll(buildMonthEvents(user, currentMonth, scenario, true, interestAmount, interestDay));
         events.addAll(buildMonthStockEvents(user, currentMonth, scenario));
-        for (int i = 1; i <= 5; i++) {
+        // 현재월 + 과거 11개월 = 약 1년치 소비·수입·매매 내역을 시드한다.
+        for (int i = 1; i <= 11; i++) {
             LocalDate pastMonth = currentMonth.minusMonths(i);
             events.addAll(buildMonthEvents(user, pastMonth, scenario, false, interestAmount, interestDay));
             events.addAll(buildMonthStockEvents(user, pastMonth, scenario));
@@ -554,6 +610,156 @@ public class AssetMockService {
                 .findFirst()
                 .map(a -> a.getOpenedAt().getDayOfMonth())
                 .orElse(20);
+    }
+
+    /**
+     * 온보딩 산출물(프로필 + 목표) 시드. 마이데이터로 알 수 없는 직접입력값이므로
+     * force=false(실사용자 동기화)일 때는 비어있는 경우에만 채워 실제 온보딩을 덮지 않는다.
+     * force=true(개발 시드)일 때는 시나리오 값으로 강제 세팅한다.
+     */
+    private void saveOnboarding(User user, Scenario scenario, boolean force) {
+        LocalDateTime now = LocalDateTime.now();
+        if (force || user.getAge() == null) {
+            user.updateProfile(scenario.age(), scenario.retired(),
+                    scenario.nationalPensionReceiving(), now);
+        }
+        Optional<UserGoal> existing = userGoalRepository.findByUserUserId(user.getUserId());
+        if (existing.isPresent()) {
+            if (force) {
+                existing.get().updateMock(scenario.targetLivingCost(), scenario.expectedMedicalCost(), now);
+                userGoalRepository.save(existing.get());
+            }
+        } else {
+            userGoalRepository.save(new UserGoal(user,
+                    scenario.targetLivingCost(), scenario.expectedMedicalCost(), now));
+        }
+    }
+
+    /**
+     * 월급만들기 설문(Q1~Q3) 시드. 추천 파이프라인 필수 입력이다.
+     * force=false면 기존 응답이 있을 때 건드리지 않는다(사용자 실제 응답 보존).
+     */
+    private void saveSurvey(User user, Scenario scenario, boolean force) {
+        List<SurveyResponse> existing = surveyResponseRepository.findByUser(user);
+        if (!existing.isEmpty() && !force) {
+            return;
+        }
+        if (!existing.isEmpty()) {
+            surveyResponseRepository.deleteAllByUser(user);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        surveyResponseRepository.saveAll(List.of(
+                surveyResponse(user, "MONTHLY_SALARY_Q1", scenario.q1(), now),
+                surveyResponse(user, "MONTHLY_SALARY_Q2", scenario.q2(), now),
+                surveyResponse(user, "MONTHLY_SALARY_Q3", scenario.q3(), now)
+        ));
+    }
+
+    private SurveyResponse surveyResponse(User user, String questionCode, int answerValue, LocalDateTime now) {
+        return SurveyResponse.builder()
+                .user(user)
+                .questionCode(questionCode)
+                .answerValue(String.valueOf(answerValue))
+                .answeredAt(now)
+                .build();
+    }
+
+    /**
+     * 마이데이터 거래내역 시드. BROKERAGE 계좌의 보유종목별로 과거 12개월 적립식 매수 내역을 만든다.
+     * 거래내역은 mock BROKERAGE 계좌 전용이므로, 이미 존재하면(재동기화·실거래 이후) 건드리지 않아
+     * 멱등하고 사용자 실거래를 덮지 않는다.
+     */
+    private void saveTradeHistory(List<Account> accounts, List<Holding> holdings) {
+        Account brokerage = accounts.stream()
+                .filter(a -> "BROKERAGE".equals(a.getAccountType()))
+                .findFirst().orElse(null);
+        if (brokerage == null || brokerage.getAccountId() == null || holdings.isEmpty()) {
+            return;
+        }
+        if (tradeHistoryRepository.existsByAccountAccountId(brokerage.getAccountId())) {
+            return;
+        }
+        LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
+        List<TradeHistory> rows = new ArrayList<>();
+        for (Holding holding : holdings) {
+            BigDecimal quantity = holding.getQuantity();
+            if (quantity == null || quantity.signum() <= 0) {
+                continue;
+            }
+            BigDecimal unitPrice = nz(holding.getEvaluationAmount())
+                    .divide(quantity, 2, RoundingMode.HALF_UP);
+            BigDecimal perMonthQty = quantity.divide(BigDecimal.valueOf(12), 4, RoundingMode.HALF_UP);
+            if (unitPrice.signum() <= 0 || perMonthQty.signum() <= 0) {
+                continue;
+            }
+            for (int i = 11; i >= 0; i--) {
+                LocalDateTime tradedAt = currentMonth.minusMonths(i).withDayOfMonth(12).atTime(10, 0);
+                rows.add(TradeHistory.ofMock(brokerage, holding.getProductId(),
+                        "BUY", perMonthQty, unitPrice, tradedAt));
+            }
+        }
+        if (!rows.isEmpty()) {
+            tradeHistoryRepository.saveAll(rows);
+        }
+    }
+
+    /**
+     * 월별 총자산 스냅샷(과거 12개월) 백필 — "자산 변화"의 정합성 핵심.
+     *
+     * <p>월간 리포트는 (이번달 총자산 − 전월 스냅샷)으로 자산 변화를 보여준다. 임의 성장곡선이 아니라
+     * 그 달의 <b>실제 순현금흐름</b>에서 역산해, 자산 변화가 그 달 수입·지출과 정확히 맞물리게 한다:
+     * <pre>순현금흐름(월) = (연금 + 이자 + 배당) − (소비 + 관리비 + 보험 + 대출상환)</pre>
+     * 주식 매수/매도는 현금↔보유종목 전환이라 순자산 중립 → 제외한다(평가손익은 현 모델에서 미반영).
+     * 현재 총자산에서 최근 달부터 순현금흐름을 한 달씩 빼며 거슬러 올라가므로,
+     * {@code snapshot(M-1) = currentTotal − netCashFlow(M)} 가 성립한다. 현재월 스냅샷은
+     * 스냅샷 스케줄러가 소유하므로 건드리지 않는다(과거 12개월만 쓴다).
+     */
+    private void saveMonthlyReportSnapshots(User user, Long userId,
+                                            BigDecimal currentTotal, List<CashFlowEvent> events) {
+        if (currentTotal == null || currentTotal.signum() <= 0) {
+            return;
+        }
+        Map<YearMonth, BigDecimal> netCashFlowByMonth = netCashFlowByMonth(events);
+        // 배당은 시드 이벤트가 아니라 보유 ETF 단일 출처(#216)다. 보유가 12개월 내내 고정이므로 매월 동일액으로 가산한다.
+        BigDecimal monthlyDividend = nz(etfDividendCalculator.monthlyDividend(userId));
+
+        LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
+        BigDecimal running = currentTotal;
+        for (int i = 1; i <= 12; i++) {
+            // i번째 거슬러가기: (i-1)개월 전 달의 순현금흐름만큼 빼면 i개월 전 말 잔액이 된다.
+            YearMonth changedMonth = YearMonth.from(currentMonth.minusMonths(i - 1));
+            BigDecimal delta = netCashFlowByMonth.getOrDefault(changedMonth, BigDecimal.ZERO)
+                    .add(monthlyDividend);
+            running = running.subtract(delta);
+
+            String month = YearMonth.from(currentMonth.minusMonths(i)).toString();
+            BigDecimal total = running;
+            monthlyReportRepository.findByUserUserIdAndCurrentMonth(userId, month)
+                    .ifPresentOrElse(
+                            existing -> existing.updateTotalAsset(total),
+                            () -> monthlyReportRepository.save(MonthlyReport.snapshot(user, month, total))
+                    );
+        }
+    }
+
+    /**
+     * 월별 순현금흐름 = Σ(INCOME) − Σ(EXPENSE). 단, 주식 매수/매도(STOCK_BUY/STOCK_SELL)는
+     * 현금↔보유종목 전환이라 순자산에 영향이 없으므로 제외한다.
+     */
+    private Map<YearMonth, BigDecimal> netCashFlowByMonth(List<CashFlowEvent> events) {
+        Map<YearMonth, BigDecimal> netByMonth = new LinkedHashMap<>();
+        for (CashFlowEvent event : events) {
+            if (event.getEventDate() == null
+                    || "STOCK_BUY".equals(event.getEventType())
+                    || "STOCK_SELL".equals(event.getEventType())) {
+                continue;
+            }
+            YearMonth month = YearMonth.from(event.getEventDate());
+            BigDecimal amount = nz(event.getAmount());
+            BigDecimal signed = "INCOME".equals(event.getFlowType()) ? amount : amount.negate();
+            netByMonth.merge(month, signed, BigDecimal::add);
+        }
+        return netByMonth;
     }
 
     /**
@@ -657,7 +863,9 @@ public class AssetMockService {
                     money(5_400_000), money(600_000), money(104_000),
                     money(250_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
                     MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
-                    new BigDecimal("0.6")
+                    new BigDecimal("0.6"),
+                    // 개선필요(공격투자·고소비) — 60세 은퇴·연금수령, 생활비 350만·의료 60만, 위험선호 설문, 월성장 0.6%
+                    60, true, true, money(3_500_000), money(600_000), 3, 1, 1
             );
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
@@ -682,7 +890,9 @@ public class AssetMockService {
                     money(4_200_000), money(1_150_000), money(148_000),
                     money(200_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
                     MockTransactionTemplates.NEED_COMPLEMENT_STOCKS,
-                    new BigDecimal("0.6")
+                    new BigDecimal("0.6"),
+                    // 보완필요(중립투자) — 64세 은퇴·연금수령, 생활비 300만·의료 50만, 중립 설문, 월성장 0.4%
+                    64, true, true, money(3_000_000), money(500_000), 2, 1, 1
             );
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
@@ -709,7 +919,9 @@ public class AssetMockService {
                     money(9_000_000), money(2_000_000), money(464_000),
                     money(180_000), money(180_000), MockTransactionTemplates.STABLE,
                     MockTransactionTemplates.STABLE_STOCKS,
-                    new BigDecimal("0.6")
+                    new BigDecimal("0.6"),
+                    // 안정(안정형) — 68세 은퇴·연금수령, 생활비 250만·의료 40만, 안정 설문, 월성장 0.3%
+                    68, true, true, money(2_500_000), money(400_000), 1, 1, 1
             );
         };
     }
@@ -756,7 +968,16 @@ public class AssetMockService {
             BigDecimal monthlyMaintenanceExpense,
             List<MockTransactionTemplates.TransactionTemplate> transactions,
             List<MockTransactionTemplates.TransactionTemplate> stockTrades,
-            BigDecimal irpRetirementRatio
+            BigDecimal irpRetirementRatio,
+            // ── 온보딩·설문·자산변화 페르소나 입력(#256) ──
+            int age,
+            boolean retired,
+            boolean nationalPensionReceiving,
+            BigDecimal targetLivingCost,
+            BigDecimal expectedMedicalCost,
+            int q1,
+            int q2,
+            int q3
     ) {
     }
 }

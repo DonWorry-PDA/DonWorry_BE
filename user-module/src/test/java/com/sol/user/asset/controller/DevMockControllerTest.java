@@ -55,7 +55,7 @@ class DevMockControllerTest {
                 new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7),
                 5
         );
-        when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT)).thenReturn(response);
+        when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT, null)).thenReturn(response);
 
         mockMvc.perform(post("/api/dev/mydata/mock-seed")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -65,6 +65,6 @@ class DevMockControllerTest {
                 .andExpect(jsonPath("$.data.mockType").value("NEED_COMPLEMENT"))
                 .andExpect(jsonPath("$.data.assetSummary.netAsset").value(178_000_000));
 
-        verify(assetMockService).seed(2L, MockType.NEED_COMPLEMENT);
+        verify(assetMockService).seed(2L, MockType.NEED_COMPLEMENT, null);
     }
 }

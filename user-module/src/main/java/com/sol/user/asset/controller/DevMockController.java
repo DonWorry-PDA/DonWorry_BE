@@ -32,7 +32,7 @@ public class DevMockController {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         return ResponseEntity.ok(ApiResponse.ok(
-                assetMockService.seed(request.userId(), request.scenario())
+                assetMockService.seed(request.userId(), request.scenario(), request.propensity())
         ));
     }
 }
