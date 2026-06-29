@@ -10,6 +10,10 @@ import java.util.List;
 public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long> {
     void deleteByAccountUserUserId(Long userId);
 
+    void deleteByAccountAccountIdIn(List<Long> accountIds);
+
+    boolean existsByAccountAccountId(Long accountId);
+
     @EntityGraph(attributePaths = "account")
     List<TradeHistory> findByAccountUserUserIdAndTradedAtGreaterThanEqualAndTradedAtLessThanOrderByTradedAtDescOrderIdDesc(
             Long userId,

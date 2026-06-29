@@ -12,6 +12,7 @@ import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
@@ -19,9 +20,14 @@ import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
+import com.sol.user.report.entity.MonthlyReport;
+import com.sol.user.report.repository.MonthlyReportRepository;
 import com.sol.user.stability.service.LifeStabilityService;
+import com.sol.user.survey.repository.SurveyResponseRepository;
+import com.sol.user.trade.repository.TradeHistoryRepository;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
+import com.sol.user.usergoal.repository.UserGoalRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,15 +43,18 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,6 +75,11 @@ class AssetMockServiceTest {
     @Mock EtfPoolProvider etfPoolProvider;
     @Mock LifeStabilityService lifeStabilityService;
     @Mock DepositDetailClient depositDetailClient;
+    @Mock UserGoalRepository userGoalRepository;
+    @Mock SurveyResponseRepository surveyResponseRepository;
+    @Mock TradeHistoryRepository tradeHistoryRepository;
+    @Mock MonthlyReportRepository monthlyReportRepository;
+    @Mock EtfDividendCalculator etfDividendCalculator;
 
     @InjectMocks AssetMockService assetMockService;
 
@@ -312,11 +326,88 @@ class AssetMockServiceTest {
         List<CashFlowEvent> pensionEvents = saved.stream()
                 .filter(e -> "PENSION".equals(e.getEventType()))
                 .toList();
-        assertThat(pensionEvents).hasSize(6);
+        assertThat(pensionEvents).hasSize(12);
         assertThat(pensionEvents).allSatisfy(e -> {
             assertThat(e.getTitle()).isEqualTo("국민연금 입금");
             assertThat(e.getAmount()).isEqualByComparingTo("1150000");
         });
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void monthlyReportSnapshotsReconcileWithNetCashFlow() {
+        // 정합성 핵심(#256): 월별 총자산 스냅샷의 달간 증감 == 그 달 실제 순현금흐름
+        // (연금+이자 − 소비·보험·대출). 주식 매수/매도는 순자산 중립이라 제외. 배당은 mock 0.
+        User user = mock(User.class);
+        when(user.getNationalPensionReceiving()).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        MockAssetResponse response = assetMockService.create(1L, MockType.STABLE);
+
+        // 저장된 현금흐름에서 월별 순현금흐름(주식 제외) 재계산
+        ArgumentCaptor<Iterable> cfCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(cfCaptor.capture());
+        List<CashFlowEvent> events = toList((Iterable<CashFlowEvent>) cfCaptor.getValue());
+        Map<YearMonth, BigDecimal> netByMonth = new HashMap<>();
+        for (CashFlowEvent e : events) {
+            if (e.getEventDate() == null
+                    || "STOCK_BUY".equals(e.getEventType())
+                    || "STOCK_SELL".equals(e.getEventType())) {
+                continue;
+            }
+            YearMonth m = YearMonth.from(e.getEventDate());
+            BigDecimal signed = "INCOME".equals(e.getFlowType()) ? e.getAmount() : e.getAmount().negate();
+            netByMonth.merge(m, signed, BigDecimal::add);
+        }
+
+        // 저장된 12개월 스냅샷 수집
+        ArgumentCaptor<MonthlyReport> snapCaptor = ArgumentCaptor.forClass(MonthlyReport.class);
+        verify(monthlyReportRepository, atLeastOnce()).save(snapCaptor.capture());
+        Map<String, BigDecimal> snapByMonth = snapCaptor.getAllValues().stream()
+                .collect(Collectors.toMap(MonthlyReport::getCurrentMonth, MonthlyReport::getTotalAsset));
+
+        YearMonth current = YearMonth.now();
+        BigDecimal currentTotal = response.assetSummary().totalAsset();
+
+        // 현재월: 현재 총자산 − 전월 스냅샷 == 이번달 순현금흐름
+        BigDecimal prevSnap = snapByMonth.get(current.minusMonths(1).toString());
+        assertThat(prevSnap).isNotNull();
+        assertThat(currentTotal.subtract(prevSnap))
+                .isEqualByComparingTo(netByMonth.getOrDefault(current, BigDecimal.ZERO));
+
+        // 과거 연속 달도 동일하게 정합
+        for (int i = 1; i <= 11; i++) {
+            BigDecimal newer = snapByMonth.get(current.minusMonths(i).toString());
+            BigDecimal older = snapByMonth.get(current.minusMonths(i + 1).toString());
+            assertThat(newer.subtract(older))
+                    .isEqualByComparingTo(netByMonth.getOrDefault(current.minusMonths(i), BigDecimal.ZERO));
+        }
+    }
+
+    @Test
+    void seedWithExplicitPropensityOverridesScenarioDefault() {
+        // 옵션2: 투자성향은 자산 시나리오와 독립 축. STABLE 자산(기본 성향 STABLE)에 공격투자형을 강제 지정하면
+        // 시나리오 기본 성향 대신 override가 시드된다(같은 자산에 성향만 바꿔 운용등급 차등 시연).
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.seed(1L, MockType.STABLE, InvestmentPropensity.AGGRESSIVE);
+
+        verify(user).assignInvestmentPropensity(InvestmentPropensity.AGGRESSIVE);
+    }
+
+    @Test
+    void seedWithoutPropensityUsesScenarioDefault() {
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.seed(1L, MockType.STABLE, null);
+
+        // override가 없으면 STABLE 시나리오 기본 성향(STABLE)을 그대로 쓴다.
+        verify(user).assignInvestmentPropensity(InvestmentPropensity.STABLE);
     }
 
     @Test
@@ -412,16 +503,16 @@ class AssetMockServiceTest {
     private static Stream<Arguments> scenarios() {
         // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
         //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
-        // cashflowEvents = 6개월치 buildMonthEvents 합산 (develop 머지 이후 시나리오 확장됨):
-        // cashflowEvents: nationalPensionReceiving=null(mock default) → no PENSION events.
-        // PENSION events (1/month × 6 months = 6) only appear when the flag is TRUE.
+        // cashflowEvents = 12개월치(현재월 + 과거 11개월) buildMonthEvents 합산 (#256: 6→12개월 확장).
+        // cashflowEvents: nationalPensionReceiving=null(mock default, User mock 미스텁) → no PENSION events.
+        // PENSION events (1/month × 12 months = 12) only appear when the flag is TRUE.
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
-                        InvestmentPropensity.ACTIVE, 222),
+                        InvestmentPropensity.ACTIVE, 444),
                 Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL, 180),
+                        InvestmentPropensity.NEUTRAL, 360),
                 Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
-                        InvestmentPropensity.STABLE, 162)
+                        InvestmentPropensity.STABLE, 324)
         );
     }
 
