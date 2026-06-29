@@ -637,7 +637,7 @@ public class AssetMockService {
             case NEED_IMPROVEMENT -> new Scenario(
                     InvestmentPropensity.ACTIVE,
                     List.of(
-                            asset("CMA", "신한은행", 6_000_000),
+                            asset("CMA", "신한투자증권", 6_000_000),
                             asset("DEPOSIT", "신한은행", 12_000_000),
                             // 예수금만 계약: BROKERAGE 잔액=예수금(현금). 종목 가치(8천만)는 holdings가 보유 → 예수금 0(완전투자).
                             asset("BROKERAGE", "신한투자증권", 0),
@@ -662,7 +662,7 @@ public class AssetMockService {
             case NEED_COMPLEMENT -> new Scenario(
                     InvestmentPropensity.NEUTRAL,
                     List.of(
-                            asset("CMA", "신한은행", 18_000_000),
+                            asset("CMA", "신한투자증권", 18_000_000),
                             asset("DEPOSIT", "신한은행", 45_000_000),
                             // 예수금만 계약: 종목 가치(5천5백만)는 holdings 보유 → BROKERAGE 예수금 0.
                             asset("BROKERAGE", "신한투자증권", 0),
@@ -687,7 +687,7 @@ public class AssetMockService {
             case STABLE -> new Scenario(
                     InvestmentPropensity.STABLE,
                     List.of(
-                            asset("CMA", "신한은행", 35_000_000),
+                            asset("CMA", "신한투자증권", 35_000_000),
                             asset("DEPOSIT", "신한은행", 90_000_000),
                             // 예수금만 계약: 종목 가치(1억3천만)는 holdings 보유 → BROKERAGE 예수금 0.
                             asset("BROKERAGE", "신한투자증권", 0),
