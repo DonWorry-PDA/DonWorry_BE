@@ -94,6 +94,10 @@ public class AssetMockService {
     );
     private static final MockType DEFAULT_SCENARIO = MockType.NEED_COMPLEMENT;
 
+    // 월급만들기 설문 문항 코드. 시드/정리는 이 세 문항으로만 한정해 다른 설문 응답을 건드리지 않는다.
+    private static final List<String> SALARY_SURVEY_CODES =
+            List.of("MONTHLY_SALARY_Q1", "MONTHLY_SALARY_Q2", "MONTHLY_SALARY_Q3");
+
     // Days 1-28 excluding fixed-event days (5=pension, 10=maintenance, 15=insurance, 20=interest, 27=loan, 28=dividend)
     private static final int[] TEMPLATE_DAYS = {
             1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14,
@@ -149,10 +153,11 @@ public class AssetMockService {
                 .toList();
         List<Long> mockAccountIds = mockAccounts.stream().map(Account::getAccountId).toList();
         if (!mockAccountIds.isEmpty()) {
+            // 거래내역·보유종목은 mock 계좌에만 시드되므로 계좌 삭제 전 mock 범위로만 정리한다.
+            // userId 전체로 지우면 실계좌에 남은 비목업 거래내역까지 사라지므로 mockAccountIds로 한정한다(FK 해소).
+            tradeHistoryRepository.deleteByAccountAccountIdIn(mockAccountIds);
             holdingRepository.deleteAllByAccountIdIn(mockAccountIds);
         }
-        // 거래내역은 BROKERAGE(mock) 계좌에만 시드되므로 계좌 삭제 전 먼저 정리한다(FK 참조 해소).
-        tradeHistoryRepository.deleteByAccountUserUserId(userId);
         accountRepository.deleteAll(mockAccounts);
         pensionRepository.deleteAll(pensionRepository.findByUserUserId(userId));
         debtRepository.deleteAll(debtRepository.findByUserUserId(userId));
@@ -185,11 +190,14 @@ public class AssetMockService {
         Scenario scenario = scenarioOf(mockType);
         LocalDateTime generatedAt = LocalDateTime.now();
 
-        // 투자성향(KYC) — 자산 시나리오와 독립. override가 있으면 그것을, 없으면 시나리오 기본 성향을 시드한다.
-        // #118 권유가능등급 필터·운용등급 상한(gradeLimit)의 입력.
-        InvestmentPropensity propensity = propensityOverride != null
-                ? propensityOverride : scenario.propensity();
-        user.assignInvestmentPropensity(propensity);
+        // 투자성향(KYC) — 자산 시나리오와 독립. #118 권유가능등급 필터·운용등급 상한(gradeLimit)의 입력.
+        // override가 있으면 항상 적용(명시적 시드 의도)하고, 없으면 시나리오 기본 성향을 쓰되
+        // 실사용자 재동기화(force=false)에서는 이미 저장된 KYC 성향을 덮지 않는다(온보딩·설문과 동일 가드).
+        if (propensityOverride != null) {
+            user.assignInvestmentPropensity(propensityOverride);
+        } else if (force || user.getInvestmentPropensity() == null) {
+            user.assignInvestmentPropensity(scenario.propensity());
+        }
         // 온보딩(나이·은퇴·국민연금수령·목표생활비)과 월급설문은 cashflow보다 먼저 시드한다.
         // buildMonthEvents가 user.getNationalPensionReceiving()으로 연금 입금 이벤트 여부를 판단하기 때문.
         saveOnboarding(user, scenario, force);
@@ -640,12 +648,14 @@ public class AssetMockService {
      * force=false면 기존 응답이 있을 때 건드리지 않는다(사용자 실제 응답 보존).
      */
     private void saveSurvey(User user, Scenario scenario, boolean force) {
-        List<SurveyResponse> existing = surveyResponseRepository.findByUser(user);
-        if (!existing.isEmpty() && !force) {
+        List<SurveyResponse> existing =
+                surveyResponseRepository.findByUserAndQuestionCodeIn(user, SALARY_SURVEY_CODES);
+        // 실사용자(force=false)는 Q1~Q3가 모두 존재할 때만 보존하고 끝낸다 — 일부만 있는 불완전 상태는 다시 채운다.
+        if (!force && existing.size() == SALARY_SURVEY_CODES.size()) {
             return;
         }
         if (!existing.isEmpty()) {
-            surveyResponseRepository.deleteAllByUser(user);
+            surveyResponseRepository.deleteAll(existing);
         }
         LocalDateTime now = LocalDateTime.now();
         surveyResponseRepository.saveAll(List.of(
@@ -692,10 +702,14 @@ public class AssetMockService {
             if (unitPrice.signum() <= 0 || perMonthQty.signum() <= 0) {
                 continue;
             }
+            // 11개월은 균등 수량, 마지막(최근, i==0) 달이 잔여를 흡수해 12개월 합계가 보유수량과 정확히 일치하게 한다.
+            // (12로 나누어떨어지지 않으면 반올림 누적으로 합계가 어긋나는 문제 방지)
+            BigDecimal lastMonthQty = quantity.subtract(perMonthQty.multiply(BigDecimal.valueOf(11)));
             for (int i = 11; i >= 0; i--) {
                 LocalDateTime tradedAt = currentMonth.minusMonths(i).withDayOfMonth(12).atTime(10, 0);
+                BigDecimal monthQty = (i == 0) ? lastMonthQty : perMonthQty;
                 rows.add(TradeHistory.ofMock(brokerage, holding.getProductId(),
-                        "BUY", perMonthQty, unitPrice, tradedAt));
+                        "BUY", monthQty, unitPrice, tradedAt));
             }
         }
         if (!rows.isEmpty()) {

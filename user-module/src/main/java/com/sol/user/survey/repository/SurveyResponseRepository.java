@@ -13,6 +13,8 @@ public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, 
 
     List<SurveyResponse> findByUser(User user);
 
+    List<SurveyResponse> findByUserAndQuestionCodeIn(User user, List<String> questionCodes);
+
     @Modifying
     @Query("DELETE FROM SurveyResponse s WHERE s.user = :user")
     void deleteAllByUser(@Param("user") User user);
