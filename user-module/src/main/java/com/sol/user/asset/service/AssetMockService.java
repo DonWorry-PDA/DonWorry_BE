@@ -941,10 +941,10 @@ public class AssetMockService {
                     InvestmentPropensity.AGGRESSIVE,
                     List.of(
                             asset("CMA", "신한투자증권", 50_000_000),
-                            asset("DEPOSIT", "신한은행", 100_000_000),
+                            asset("DEPOSIT", "신한은행", 50_000_000),
                             // 예수금만 계약: 종목 가치는 holdings 보유 → BROKERAGE 예수금 0.
                             asset("BROKERAGE", "신한투자증권", 0),
-                            asset("IRP", "신한투자증권", 150_000_000),
+                            asset("IRP", "신한투자증권", 200_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 80_000_000)
                     ),
                     List.of(
@@ -959,8 +959,10 @@ public class AssetMockService {
                     money(150_000), money(200_000), MockTransactionTemplates.NEED_IMPROVEMENT,
                     MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
                     new BigDecimal("0.6"),
-                    // Target X: 운용총자산 6.8억·연금저축 2.3억·가용 4.5억·바닥 3.6억·여유분 0.9억 → 과충당 NORMAL.
-                    58, true, true, money(2_500_000), money(500_000), 2, 1, 1
+                    // Target X: 운용총자산 6.8억·연금저축 2.8억·가용 4.0억·바닥 3.1억·여유분 0.9억 → 과충당 NORMAL.
+                    // 연금 비중 확대(IRP 2억·PENSION_SAVING 8천만)로 q3 소진비율 스윙(0.3↔1.0) 확대.
+                    // 생활비 하향(250만→185만)으로 바닥자산↓ → 여유분(소진레버)↑·바닥이자↓ → q3 스윙 20%+ 확보.
+                    58, true, true, money(1_850_000), money(500_000), 2, 1, 1
             );
         };
     }
