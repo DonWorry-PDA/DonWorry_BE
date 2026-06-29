@@ -9,6 +9,8 @@ import com.sol.user.monthlysalary.dto.SalaryPlanStatusResponse;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.entity.SalaryPlanItem;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
+import com.sol.user.monthlysalary.type.GuidanceAction;
+import com.sol.user.monthlysalary.type.ReentryEmphasis;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.stability.service.LifeStabilityService;
@@ -121,7 +123,21 @@ public class SalaryPlanService {
                 .totalAchievedRate(progressRate(achievedTowardTarget, totalTarget))
                 .createdAt(plan.getCreatedAt())
                 .holdings(holdings)
+                .reentryGuidance(buildReentryGuidance(plan.getLivingCostCoverageRate()))
                 .build();
+    }
+
+    /**
+     * 재진입 안내 — 저장된 충족률(확정 당시 값)로 강조만 결정한다. 두 선택지는 항상 제시.
+     * 충족률 ≥ 100%면 생활비 상향을 강조, 그 외엔 중립. 정밀 충족은 "다시 설계하기→재추천"에서 확정된다.
+     */
+    private SalaryPlanStatusResponse.ReentryGuidance buildReentryGuidance(BigDecimal coverageRate) {
+        ReentryEmphasis emphasis = coverageRate != null && coverageRate.compareTo(HUNDRED) >= 0
+                ? ReentryEmphasis.INCREASE_LIVING_COST
+                : ReentryEmphasis.NEUTRAL;
+        return new SalaryPlanStatusResponse.ReentryGuidance(emphasis, List.of(
+                SalaryPlanStatusResponse.GuidanceOption.of(GuidanceAction.INCREASE_LIVING_COST),
+                SalaryPlanStatusResponse.GuidanceOption.of(GuidanceAction.RETAKE_SURVEY)));
     }
 
     private SalaryPlanStatusResponse.HoldingStatus toHoldingStatus(

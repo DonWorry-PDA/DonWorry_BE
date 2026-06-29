@@ -9,6 +9,8 @@ import com.sol.user.monthlysalary.dto.SalaryPlanStatusResponse;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.entity.SalaryPlanItem;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
+import com.sol.user.monthlysalary.type.GuidanceAction;
+import com.sol.user.monthlysalary.type.ReentryEmphasis;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.stability.service.LifeStabilityService;
@@ -160,6 +162,55 @@ class SalaryPlanServiceTest {
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    void 최초진입은_재진입안내가_없다() {
+        when(salaryPlanRepository.findWithItemsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.empty());
+        when(salaryPlanRepository.findTopByUserUserIdOrderByCreatedAtDesc(USER_ID))
+                .thenReturn(Optional.empty());
+
+        SalaryPlanStatusResponse response = salaryPlanService.getStatus(USER_ID);
+
+        assertThat(response.reentryGuidance()).isNull();
+    }
+
+    @Test
+    void 재진입_생활비_충족시_생활비상향_강조() {
+        // coverageRate 120(>=100) → 충족 → 생활비 상향 강조. options는 항상 2개.
+        SalaryPlan plan = SalaryPlan.active(mock(User.class), "STABLE",
+                new BigDecimal("3000000"), new BigDecimal("120.00"), new BigDecimal("2500000"));
+        when(salaryPlanRepository.findWithItemsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.of(plan));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
+                .thenReturn(List.of());
+
+        SalaryPlanStatusResponse response = salaryPlanService.getStatus(USER_ID);
+
+        assertThat(response.reentryGuidance()).isNotNull();
+        assertThat(response.reentryGuidance().emphasis())
+                .isEqualTo(ReentryEmphasis.INCREASE_LIVING_COST);
+        assertThat(response.reentryGuidance().options())
+                .extracting(SalaryPlanStatusResponse.GuidanceOption::action)
+                .containsExactly(GuidanceAction.INCREASE_LIVING_COST, GuidanceAction.RETAKE_SURVEY);
+    }
+
+    @Test
+    void 재진입_생활비_미충족시_중립강조() {
+        // coverageRate 84(<100) → 미충족 → NEUTRAL. options는 그대로 2개, route 계약 고정.
+        SalaryPlan plan = SalaryPlan.active(mock(User.class), "STABLE",
+                new BigDecimal("1680000"), new BigDecimal("84.00"), new BigDecimal("2000000"));
+        when(salaryPlanRepository.findWithItemsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.of(plan));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
+                .thenReturn(List.of());
+
+        SalaryPlanStatusResponse response = salaryPlanService.getStatus(USER_ID);
+
+        assertThat(response.reentryGuidance().emphasis()).isEqualTo(ReentryEmphasis.NEUTRAL);
+        assertThat(response.reentryGuidance().options()).hasSize(2);
+        assertThat(response.reentryGuidance().options().get(0).route()).isEqualTo("/mypage/profile-edit");
     }
 
     @Test
