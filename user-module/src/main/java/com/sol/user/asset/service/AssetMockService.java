@@ -1000,6 +1000,139 @@ public class AssetMockService {
                     // 생활비 하향(250만→185만)으로 바닥자산↓ → 여유분(소진레버)↑·바닥이자↓ → q3 스윙 20%+ 확보.
                     58, true, true, money(1_850_000), money(500_000), 2, 1, 1
             );
+            // ── 현실 케이스 확장(realistic) ──
+            case GROWTH_CONCENTRATED -> new Scenario(
+                    InvestmentPropensity.ACTIVE,
+                    List.of(
+                            asset("CMA", "신한은행", 10_000_000),
+                            asset("DEPOSIT", "신한은행", 20_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    // ETF는 최소(쏠림 강조) — 1종
+                    List.of(
+                            holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
+                    ),
+                    // 개별주 6종 1.4억(70% 쏠림) — 투자검진 성장자산 쏠림·배당공백·역할불균형 시연
+                    List.of(
+                            stock("005930", 40_000_000, 570),   // 삼성전자
+                            stock("000660", 30_000_000, 150),   // SK하이닉스
+                            stock("005380", 25_000_000, 100),   // 현대차
+                            stock("373220", 20_000_000, 50),    // LG에너지솔루션
+                            stock("035420", 15_000_000, 80),    // NAVER
+                            stock("035720", 10_000_000, 250)    // 카카오
+                    ),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(5_000_000), money(900_000), money(0),
+                    money(150_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
+                    new BigDecimal("0.6"),
+                    // 개별주 몰빵 — 60세 은퇴·연금수령, 생활비 300만·의료 50만, 위험선호 설문
+                    60, true, true, money(3_000_000), money(500_000), 3, 1, 1
+            );
+            case PRE_RETIREMENT -> new Scenario(
+                    InvestmentPropensity.NEUTRAL,
+                    List.of(
+                            asset("DEPOSIT", "신한은행", 100_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 100_000_000)
+                    ),
+                    List.of(
+                            holding("433330", 50_000_000, 2_500),  // SOL 미국S&P500
+                            holding("446720", 50_000_000, 4_500)   // SOL 미국배당다우존스
+                    ),
+                    List.of(),
+                    money(100_000_000), money(500_000), new BigDecimal("3.50"),
+                    money(4_000_000), money(1_200_000), money(0),
+                    money(150_000), money(200_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 은퇴 임박 — 59세 미은퇴·국민연금 미수령(기대 120만), 생활비 350만·의료 50만, 중립 설문
+                    59, false, false, money(3_500_000), money(500_000), 2, 1, 1
+            );
+            case STRUCTURAL_SHORTAGE -> new Scenario(
+                    InvestmentPropensity.STABLE,
+                    List.of(
+                            asset("DEPOSIT", "신한은행", 40_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    List.of(
+                            holding("446720", 12_000_000, 1_000),  // SOL 미국배당다우존스
+                            holding("438560", 8_000_000, 70)       // SOL 국고채3년
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(3_000_000), money(700_000), money(0),
+                    money(100_000), money(150_000), MockTransactionTemplates.STABLE,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 구조적 부족 — 67세 은퇴·연금수령(70만), 생활비 200만·의료 40만 → 충당률<100%, 안정 설문
+                    67, true, true, money(2_000_000), money(400_000), 1, 1, 1
+            );
+            case PENSION_SUFFICIENT -> new Scenario(
+                    InvestmentPropensity.STABLE_SEEKING,
+                    List.of(
+                            asset("CMA", "신한은행", 30_000_000),
+                            asset("DEPOSIT", "신한은행", 90_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 80_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 40_000_000)
+                    ),
+                    List.of(
+                            holding("446720", 30_000_000, 2_500),  // SOL 미국배당다우존스
+                            holding("438560", 20_000_000, 180),    // SOL 국고채3년
+                            holding("433330", 10_000_000, 500)     // SOL 미국S&P500
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(7_000_000), money(1_800_000), money(0),
+                    money(180_000), money(180_000), MockTransactionTemplates.STABLE,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 연금 충분 여유 — 70세 은퇴·연금수령(180만)으로 생활비(200만) 충당, 의료 40만, 안정추구 설문
+                    70, true, true, money(2_000_000), money(400_000), 1, 2, 1
+            );
+            case HIGH_DEBT -> new Scenario(
+                    InvestmentPropensity.ACTIVE,
+                    List.of(
+                            asset("CMA", "신한은행", 10_000_000),
+                            asset("DEPOSIT", "신한은행", 10_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    List.of(
+                            holding("433330", 12_000_000, 600),    // SOL 미국S&P500
+                            holding("476030", 8_000_000, 400)      // SOL 미국나스닥100
+                    ),
+                    List.of(),
+                    money(200_000_000), money(1_200_000), new BigDecimal("5.50"),
+                    money(2_000_000), money(1_000_000), money(0),
+                    money(120_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 고부채 위기 — 58세 미은퇴·국민연금 미수령(기대 100만), 부채 2억, 생활비 300만·의료 50만, 위험선호 설문
+                    58, false, false, money(3_000_000), money(500_000), 3, 1, 1
+            );
+            case PRIVATE_PENSION_RICH -> new Scenario(
+                    InvestmentPropensity.NEUTRAL,
+                    List.of(
+                            asset("CMA", "신한은행", 20_000_000),
+                            asset("DEPOSIT", "신한은행", 10_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 120_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 80_000_000)
+                    ),
+                    List.of(
+                            holding("446720", 12_000_000, 1_000),  // SOL 미국배당다우존스
+                            holding("433330", 8_000_000, 400)      // SOL 미국S&P500
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(5_000_000), money(1_200_000), money(0),
+                    money(150_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 사적연금 빵빵 — 63세 은퇴·연금수령(120만), IRP·연금저축 비중↑, 생활비 250만·의료 40만, 중립 설문
+                    63, true, true, money(2_500_000), money(400_000), 2, 1, 1
+            );
         };
     }
 
