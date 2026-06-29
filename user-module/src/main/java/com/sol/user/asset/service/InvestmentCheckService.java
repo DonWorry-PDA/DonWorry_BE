@@ -12,6 +12,7 @@ import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -69,15 +70,19 @@ public class InvestmentCheckService {
     private final AssetAggregator assetAggregator;
     private final HoldingRepository holdingRepository;
     private final AssetMapper assetMapper;
+    private final ProductBatchClient productBatchClient;
 
     public InvestmentCheckResponse check(Long userId) {
         // 분배 공백 경고(#193)는 종목별 평가액·productId가 필요해 snapshot(보유·상품 원본 포함)을 쓴다.
         AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
         AssetBreakdown breakdown = snapshot.breakdown();
 
-        List<StockDividendProjection> stocks = holdingRepository.findStockDividendsByUserId(userId);
+        List<StockDividendProjection> rawStocks = holdingRepository.findStockDividendsByUserId(userId);
         List<HoldingDividendCalendarProjection> etfDividends =
                 holdingRepository.findDividendCalendarInputsByUserId(userId);
+
+        // quantity × 실시간 현재가 → 종목별 평가액 산출
+        List<EnrichedStock> stocks = enrichWithPrices(rawStocks);
 
         BigDecimal cashflowMonthly = cashflowMonthlyDividend(breakdown, etfDividends);
         BigDecimal stockMonthly = stockMonthlyDividend(stocks);
@@ -93,21 +98,45 @@ public class InvestmentCheckService {
                 .build();
     }
 
+    /** quantity × 현재가 조회로 평가액을 산출한 enriched 레코드. */
+    private record EnrichedStock(
+            Long productId,
+            String productName,
+            BigDecimal evaluationAmount,
+            BigDecimal dividendYield,
+            String sector
+    ) {}
+
+    private List<EnrichedStock> enrichWithPrices(List<StockDividendProjection> rawStocks) {
+        if (rawStocks.isEmpty()) return List.of();
+        List<Long> ids = rawStocks.stream().map(StockDividendProjection::getProductId).toList();
+        Map<Long, Long> prices = productBatchClient.fetchStockPrices(ids);
+        return rawStocks.stream()
+                .map(s -> {
+                    long price = prices.getOrDefault(s.getProductId(), 0L);
+                    BigDecimal qty = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+                    BigDecimal eval = qty.multiply(BigDecimal.valueOf(price));
+                    return new EnrichedStock(s.getProductId(), s.getProductName(), eval,
+                            s.getDividendYield(), s.getSector());
+                })
+                .toList();
+    }
+
     /**
      * 개별주 성장 블록. 개별주 보유가 없으면 null. 현재 배당(종목 실배당) vs 배당형 ETF로 옮겼을 때의 배당을
      * 비교해, 옮기는 게 이득이면 이동 유도, 손해면 보유 유지 멘트로 분기한다.
      */
     private GrowthAsset buildGrowthAsset(AssetBreakdown breakdown,
-                                         List<StockDividendProjection> stocks, BigDecimal stockMonthly) {
+                                         List<EnrichedStock> stocks, BigDecimal stockMonthly) {
         BigDecimal stockTotal = breakdown.stockHoldingValue();
         if (stockTotal.signum() <= 0) {
             return null;
         }
 
-        StockDividendProjection top = stocks.stream()
-                .max(Comparator.comparing(s -> nz(s.getEvaluationAmount())))
+        EnrichedStock top = stocks.stream()
+                .max(Comparator.comparing(s -> nz(s.evaluationAmount())))
                 .orElse(null);
-        int concentration = top == null ? 0 : percent(top.getEvaluationAmount(), stockTotal);
+        int concentration = top == null ? 0 : percent(top.evaluationAmount(), stockTotal);
 
         // 섹터 쏠림 — 단일종목 쏠림이 낮아도(예: 삼성전자·SK하이닉스·삼성SDI 분산) 같은 섹터면 위험은 집중.
         Map.Entry<String, BigDecimal> topSector = topSectorByValue(stocks);
@@ -120,7 +149,7 @@ public class InvestmentCheckService {
 
         return GrowthAsset.builder()
                 .amount(stockTotal)
-                .topStockName(top == null ? null : top.getProductName())
+                .topStockName(top == null ? null : top.productName())
                 .concentrationRatio(concentration)
                 .concentrationLevel(concentrationLevel(concentration))
                 .topSector(topSector == null ? null : topSector.getKey())
@@ -160,14 +189,14 @@ public class InvestmentCheckService {
     }
 
     /** 섹터별 평가액 합 중 최대 항목. 섹터 미적재(NULL/공백) 종목은 제외. 없으면 null. */
-    private Map.Entry<String, BigDecimal> topSectorByValue(List<StockDividendProjection> stocks) {
+    private Map.Entry<String, BigDecimal> topSectorByValue(List<EnrichedStock> stocks) {
         Map<String, BigDecimal> bySector = new HashMap<>();
-        for (StockDividendProjection s : stocks) {
-            String sector = s.getSector();
+        for (EnrichedStock s : stocks) {
+            String sector = s.sector();
             if (sector == null || sector.isBlank()) {
                 continue;
             }
-            bySector.merge(sector, nz(s.getEvaluationAmount()), BigDecimal::add);
+            bySector.merge(sector, nz(s.evaluationAmount()), BigDecimal::add);
         }
         return bySector.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
@@ -175,9 +204,9 @@ public class InvestmentCheckService {
     }
 
     /** 성장 역할의 월 배당(net) = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합에 원천징수 차감. */
-    private BigDecimal stockMonthlyDividend(List<StockDividendProjection> stocks) {
+    private BigDecimal stockMonthlyDividend(List<EnrichedStock> stocks) {
         BigDecimal gross = stocks.stream()
-                .map(s -> nz(s.getEvaluationAmount()).multiply(nz(s.getDividendYield()))
+                .map(s -> nz(s.evaluationAmount()).multiply(nz(s.dividendYield()))
                         .divide(PERCENT_MONTHS, 0, RoundingMode.HALF_UP))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return netFinancial(gross);
