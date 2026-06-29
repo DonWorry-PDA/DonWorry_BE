@@ -175,6 +175,17 @@ class LifeStabilityServiceTest {
     }
 
     @Test
+    void recalculateFromUserDataIfReadySkipsWhenRequiredGoalDataIsIncomplete() {
+        User user = mock(User.class);
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), null, LocalDateTime.now())));
+
+        service.recalculateFromUserDataIfReady(1L);
+
+        verify(stabilityScoreRepository, never()).save(any());
+    }
+
+    @Test
     void recalculateFromUserDataIfReadySavesWhenOnboardingDone() {
         User user = mock(User.class);
         when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
