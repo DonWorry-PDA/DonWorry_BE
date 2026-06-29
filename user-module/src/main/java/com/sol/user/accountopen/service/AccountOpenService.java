@@ -10,6 +10,7 @@ import com.sol.user.accountopen.dto.IdentityResponse;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AccountOpenService {
 
     private static final List<String> REQUIRED_TERM_IDS = List.of(
@@ -93,21 +95,30 @@ public class AccountOpenService {
 
     private void clearVerificationAfterCommit(Long userId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            clearVerification(userId);
+            clearVerificationSafely(userId);
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                clearVerification(userId);
+                clearVerificationSafely(userId);
             }
         });
     }
 
-    private void clearVerification(Long userId) {
-        otpService.clearVerified(userId);
-        shinhanCertService.clearVerified(userId);
+    private void clearVerificationSafely(Long userId) {
+        try {
+            otpService.clearVerified(userId);
+        } catch (RuntimeException e) {
+            log.warn("OTP 인증 상태 정리 실패 userId={}", userId, e);
+        }
+
+        try {
+            shinhanCertService.clearVerified(userId);
+        } catch (RuntimeException e) {
+            log.warn("신한인증서 인증 상태 정리 실패 userId={}", userId, e);
+        }
     }
 
     private User findUser(Long userId) {

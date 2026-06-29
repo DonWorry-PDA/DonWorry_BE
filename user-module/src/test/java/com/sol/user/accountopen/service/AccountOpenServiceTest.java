@@ -138,6 +138,27 @@ class AccountOpenServiceTest {
     }
 
     @Test
+    @DisplayName("인증 상태 정리 실패 시에도 계좌 개설 결과를 반환한다")
+    void openAccount_clearVerificationFails_returnsAccountInfo() {
+        User user = mock(User.class);
+        AccountOpenRequest request = mock(AccountOpenRequest.class);
+        when(request.getAgreedTermIds()).thenReturn(VALID_TERMS);
+        when(otpService.isVerified(USER_ID)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(accountRepository.existsByAccountNumber(anyString())).thenReturn(false);
+        doThrow(new RuntimeException("redis unavailable")).when(otpService).clearVerified(USER_ID);
+
+        AccountOpenResponse response = accountOpenService.openAccount(USER_ID, request);
+
+        assertThat(response.getAccountNumber()).matches("110-\\d{3}-\\d{6}");
+        assertThat(response.getOpenedAt()).isNotNull();
+        verify(accountRepository).save(any(Account.class));
+        verify(otpService).clearVerified(USER_ID);
+        verify(shinhanCertService).clearVerified(USER_ID);
+    }
+
+    @Test
     @DisplayName("본인 인증 미완료 시 OTP_NOT_VERIFIED 예외를 던진다")
     void openAccount_notVerified_throwsOtpNotVerified() {
         AccountOpenRequest request = mock(AccountOpenRequest.class);
