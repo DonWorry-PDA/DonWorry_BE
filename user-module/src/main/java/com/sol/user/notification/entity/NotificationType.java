@@ -6,5 +6,6 @@ public enum NotificationType {
     DIVIDEND,
     MONTHLY_REPORT,
     CONSULT_RESERVED,
-    IRP_DUE
+    IRP_DUE,
+    MARKET_OPEN_REMINDER
 }

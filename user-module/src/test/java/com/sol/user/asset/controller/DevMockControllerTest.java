@@ -5,6 +5,7 @@ import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.dto.MockGeneratedCounts;
 import com.sol.user.asset.service.AssetMockService;
 import com.sol.user.asset.type.MockType;
+import com.sol.user.portfolio.type.InvestmentPropensity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,7 +56,7 @@ class DevMockControllerTest {
                 new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7),
                 5
         );
-        when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT)).thenReturn(response);
+        when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT, null)).thenReturn(response);
 
         mockMvc.perform(post("/api/dev/mydata/mock-seed")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -65,6 +66,32 @@ class DevMockControllerTest {
                 .andExpect(jsonPath("$.data.mockType").value("NEED_COMPLEMENT"))
                 .andExpect(jsonPath("$.data.assetSummary.netAsset").value(178_000_000));
 
-        verify(assetMockService).seed(2L, MockType.NEED_COMPLEMENT);
+        verify(assetMockService).seed(2L, MockType.NEED_COMPLEMENT, null);
+    }
+
+    @Test
+    void seedForwardsPropensityOverrideToService() throws Exception {
+        MockAssetResponse response = new MockAssetResponse(
+                MockType.NEED_COMPLEMENT,
+                LocalDateTime.of(2026, 6, 22, 9, 41),
+                new AssetSummaryResponse(
+                        BigDecimal.valueOf(208_000_000),
+                        BigDecimal.valueOf(30_000_000),
+                        BigDecimal.valueOf(178_000_000),
+                        List.of()
+                ),
+                new MockGeneratedCounts(6, 5, 0, 3, 1, 3, 7),
+                5
+        );
+        when(assetMockService.seed(2L, MockType.NEED_COMPLEMENT, InvestmentPropensity.AGGRESSIVE))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/dev/mydata/mock-seed")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":2,\"scenario\":\"NEED_COMPLEMENT\",\"propensity\":\"AGGRESSIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+        verify(assetMockService).seed(2L, MockType.NEED_COMPLEMENT, InvestmentPropensity.AGGRESSIVE);
     }
 }

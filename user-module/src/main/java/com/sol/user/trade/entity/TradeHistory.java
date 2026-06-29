@@ -59,4 +59,22 @@ public class TradeHistory {
         t.fee = BigDecimal.ZERO;
         return t;
     }
+
+    /**
+     * 목업 페르소나용 거래내역. {@link #ofBuy}와 달리 거래 유형·체결시각을 명시해
+     * 과거 매수/매도 내역을 임의 시점으로 시드할 수 있다(마이데이터 거래내역 조회 시연용).
+     */
+    public static TradeHistory ofMock(Account account, Long productId, String tradeType,
+                                      BigDecimal quantity, BigDecimal avgPrice, LocalDateTime tradedAt) {
+        TradeHistory t = new TradeHistory();
+        t.account = account;
+        t.productId = productId;
+        t.tradeType = tradeType;
+        t.tradedAt = tradedAt;
+        t.quantity = quantity;
+        t.avgPrice = avgPrice;
+        t.tradeAmount = quantity.multiply(avgPrice).setScale(0, RoundingMode.HALF_UP);
+        t.fee = BigDecimal.ZERO;
+        return t;
+    }
 }

@@ -32,6 +32,9 @@ public class NotificationSetting {
     @Column(name = "report_enabled", nullable = false)
     private boolean reportEnabled = true;
 
+    @Column(name = "market_open_reminder", nullable = false)
+    private boolean marketOpenReminder = false;
+
     public static NotificationSetting defaultFor(User user) {
         NotificationSetting setting = new NotificationSetting();
         setting.user = user;
@@ -45,5 +48,13 @@ public class NotificationSetting {
             case "dividend" -> this.dividendEnabled = enabled;
             case "report" -> this.reportEnabled = enabled;
         }
+    }
+
+    public void subscribeMarketOpenReminder() {
+        this.marketOpenReminder = true;
+    }
+
+    public void clearMarketOpenReminder() {
+        this.marketOpenReminder = false;
     }
 }
