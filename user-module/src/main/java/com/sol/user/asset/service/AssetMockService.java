@@ -937,6 +937,31 @@ public class AssetMockService {
                     // 안정(안정형) — 68세 은퇴·연금수령, 생활비 250만·의료 40만, 안정 설문, 월성장 0.3%
                     68, true, true, money(2_500_000), money(400_000), 1, 1, 1
             );
+            case SALARY_DEMO -> new Scenario(
+                    InvestmentPropensity.AGGRESSIVE,
+                    List.of(
+                            asset("CMA", "신한투자증권", 50_000_000),
+                            asset("DEPOSIT", "신한은행", 100_000_000),
+                            // 예수금만 계약: 종목 가치는 holdings 보유 → BROKERAGE 예수금 0.
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 150_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 80_000_000)
+                    ),
+                    List.of(
+                            holding("433330", 150_000_000, 7_500),   // SOL 미국S&P500
+                            holding("446720", 150_000_000, 12_500)   // SOL 미국배당다우존스
+                    ),
+                    List.of(
+                            stock("005930", 20_000_000, 300)         // 삼성전자(월급 재료 제외, 순자산만)
+                    ),
+                    money(0), money(0), BigDecimal.ZERO,
+                    money(9_000_000), money(800_000), money(0),
+                    money(150_000), money(200_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
+                    new BigDecimal("0.6"),
+                    // Target X: 운용총자산 6.8억·연금저축 2.3억·가용 4.5억·바닥 3.6억·여유분 0.9억 → 과충당 NORMAL.
+                    58, true, true, money(2_500_000), money(500_000), 2, 1, 1
+            );
         };
     }
 
