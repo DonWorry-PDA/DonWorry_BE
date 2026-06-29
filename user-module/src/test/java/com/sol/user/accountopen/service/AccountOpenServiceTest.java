@@ -255,4 +255,22 @@ class AccountOpenServiceTest {
 
         verify(accountRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("신한은행과 신한투자증권 계좌가 모두 있으면 ACCOUNT_ALREADY_EXISTS 예외를 던진다")
+    void openAccount_hasBothShinhan_throwsAlreadyExists() {
+        AccountOpenRequest request = mock(AccountOpenRequest.class);
+        when(request.getAgreedTermIds()).thenReturn(VALID_TERMS);
+        when(otpService.isVerified(USER_ID)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(true);
+
+        assertThatThrownBy(() -> accountOpenService.openAccount(USER_ID, request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_ALREADY_EXISTS);
+
+        verify(accountRepository, never()).save(any());
+    }
 }

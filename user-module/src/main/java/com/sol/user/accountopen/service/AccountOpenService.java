@@ -43,6 +43,10 @@ public class AccountOpenService {
 
     @Transactional(readOnly = true)
     public AccountNeedCheckResponse checkAccountNeed(Long userId) {
+        return evaluateAccountNeed(userId);
+    }
+
+    private AccountNeedCheckResponse evaluateAccountNeed(Long userId) {
         if (accountRepository.existsByUserUserIdAndAccountType(userId, Account.TYPE_DON_WORRY)) {
             return AccountNeedCheckResponse.noNeedDonWorry();
         }
@@ -80,7 +84,7 @@ public class AccountOpenService {
             throw new BaseException(ErrorCode.OTP_NOT_VERIFIED);
         }
 
-        if (accountRepository.existsByUserUserIdAndAccountType(userId, Account.TYPE_DON_WORRY)) {
+        if (!evaluateAccountNeed(userId).isNeedsAccount()) {
             throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
         }
 
