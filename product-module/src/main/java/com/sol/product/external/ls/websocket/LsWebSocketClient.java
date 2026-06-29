@@ -13,8 +13,10 @@ import com.sol.product.external.ls.service.LsTokenService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -26,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
@@ -39,14 +42,20 @@ public class LsWebSocketClient extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
 
-    private WebSocketSession session;
+    private volatile WebSocketSession session;
+    private final AtomicBoolean connecting = new AtomicBoolean(false);
     private final Set<String> subscribedCodes = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
     public void connect() {
+        if (!connecting.compareAndSet(false, true)) {
+            log.debug("LS WebSocket 연결 이미 진행 중 - 중복 요청 무시");
+            return;
+        }
         try {
             StandardWebSocketClient client = new StandardWebSocketClient();
             client.execute(this, lsProperties.getWsUrl()).whenComplete((sess, ex) -> {
+                connecting.set(false);
                 if (ex != null) {
                     log.error("LS WebSocket 연결 실패", ex);
                     scheduleReconnect();
@@ -57,6 +66,7 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                 }
             });
         } catch (Exception e) {
+            connecting.set(false);
             log.error("LS WebSocket 연결 오류", e);
             scheduleReconnect();
         }
@@ -64,9 +74,10 @@ public class LsWebSocketClient extends TextWebSocketHandler {
 
     public void reconnect() {
         lsTokenService.clearToken();
+        WebSocketSession current = this.session;
         try {
-            if (session != null && session.isOpen()) {
-                session.close();
+            if (current != null && current.isOpen()) {
+                current.close();
             } else {
                 connect();
             }
@@ -113,14 +124,32 @@ public class LsWebSocketClient extends TextWebSocketHandler {
         log.debug("ETF 구독 해제: {}", ticker);
     }
 
-    private void sendMessage(LsWsRequest request) {
+    @Scheduled(fixedDelay = 60000)
+    public void sendKeepAlive() {
+        WebSocketSession current = this.session;
+        if (current == null || !current.isOpen()) {
+            log.warn("LS WebSocket keepalive: 세션 없음 - 재연결 시도");
+            connect();
+            return;
+        }
         try {
-            if (session == null || !session.isOpen()) {
-                log.warn("LS WebSocket 세션이 열려있지 않습니다.");
+            current.sendMessage(new PingMessage());
+        } catch (IOException e) {
+            log.warn("LS WebSocket keepalive 실패 - 재연결 시도: {}", e.getMessage());
+            this.session = null;
+            scheduleReconnect();
+        }
+    }
+
+    private void sendMessage(LsWsRequest request) {
+        WebSocketSession current = this.session;
+        try {
+            if (current == null || !current.isOpen()) {
+                log.debug("LS WebSocket 세션 없음 - 재연결 후 재구독 예정");
                 return;
             }
             String json = objectMapper.writeValueAsString(request);
-            session.sendMessage(new TextMessage(json));
+            current.sendMessage(new TextMessage(json));
         } catch (IOException e) {
             log.error("LS WebSocket 메시지 전송 실패", e);
         }
