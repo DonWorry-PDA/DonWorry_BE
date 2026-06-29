@@ -253,6 +253,7 @@ class AssetHubServiceTest {
         assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("3280000");
         assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("3000000");
         assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(109);
+        assertThat(response.menus().lifeStability().coverageRate()).isEqualTo(109);
         verify(salaryPlanRepository).findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE);
     }
 

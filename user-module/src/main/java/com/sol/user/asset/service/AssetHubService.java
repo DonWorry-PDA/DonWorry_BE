@@ -112,7 +112,7 @@ public class AssetHubService {
 
         return AssetHubMenus.builder()
                 .salaryMaking(salaryMaking)
-                .lifeStability(buildLifeStabilityPreview(userId))
+                .lifeStability(buildLifeStabilityPreview(userId, salaryMaking.achievementRate()))
                 .investmentCheck(buildInvestmentCheckPreview(snapshot))
                 // 후속 이슈에서 채움: 국민연금 연기(#5) / 월간 리포트(#6)
                 .pensionDefer(AssetHubMenus.PensionDefer.builder().build())
@@ -139,12 +139,9 @@ public class AssetHubService {
                 .build();
     }
 
-    private AssetHubMenus.LifeStability buildLifeStabilityPreview(Long userId) {
+    private AssetHubMenus.LifeStability buildLifeStabilityPreview(Long userId, Integer coverageRate) {
         try {
             LifeStabilityResponse latest = lifeStabilityService.getLatest(userId);
-            Integer coverageRate = latest.metrics() == null
-                    ? null
-                    : toInt(latest.metrics().cashflowCoverageRate());
             return AssetHubMenus.LifeStability.builder()
                     .grade(latest.grade())
                     .gradeLabel(latest.gradeLabel())
