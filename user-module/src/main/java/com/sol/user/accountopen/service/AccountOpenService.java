@@ -34,6 +34,7 @@ public class AccountOpenService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final OtpService otpService;
+    private final ShinhanCertService shinhanCertService;
 
     public void validateTerms(List<String> agreedTermIds) {
         Set<String> agreed = Set.copyOf(agreedTermIds);
@@ -57,7 +58,7 @@ public class AccountOpenService {
     public AccountOpenResponse openAccount(Long userId, AccountOpenRequest request) {
         validateTerms(request.getAgreedTermIds());
 
-        if (!otpService.isVerified(userId)) {
+        if (!isIdentityVerified(userId)) {
             throw new BaseException(ErrorCode.OTP_NOT_VERIFIED);
         }
 
@@ -77,11 +78,16 @@ public class AccountOpenService {
         }
 
         otpService.clearVerified(userId);
+        shinhanCertService.clearVerified(userId);
 
         return AccountOpenResponse.builder()
                 .accountNumber(accountNumber)
                 .openedAt(today.format(DATE_FORMATTER))
                 .build();
+    }
+
+    private boolean isIdentityVerified(Long userId) {
+        return otpService.isVerified(userId) || shinhanCertService.isVerified(userId);
     }
 
     private User findUser(Long userId) {
