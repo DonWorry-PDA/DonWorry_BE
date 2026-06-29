@@ -110,7 +110,10 @@ public class AssetHubService {
                 .findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE);
         AssetHubMenus.SalaryMaking salaryMaking = activePlan
                 .map(this::toSalaryMaking)
-                .orElseGet(() -> toSalaryMaking(cashFlowDiagnosisService.diagnose(userId)));
+                .orElseGet(() -> toSalaryMaking(
+                        cashFlowDiagnosisService.diagnose(userId),
+                        salaryPlanRepository.existsByUserUserId(userId)
+                ));
 
         return AssetHubMenus.builder()
                 .salaryMaking(salaryMaking)
@@ -133,11 +136,15 @@ public class AssetHubService {
     }
 
     private AssetHubMenus.SalaryMaking toSalaryMaking(CashFlowDiagnosisResponse cashFlow) {
+        return toSalaryMaking(cashFlow, false);
+    }
+
+    private AssetHubMenus.SalaryMaking toSalaryMaking(CashFlowDiagnosisResponse cashFlow, boolean hasPlanHistory) {
         return AssetHubMenus.SalaryMaking.builder()
                 .achievementRate(ratePercent(cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost()))
                 .targetAmount(cashFlow.getTargetMonthlyLivingCost())
                 .currentAmount(cashFlow.getMonthlyCashFlow())
-                .hasActivePlan(false)
+                .hasActivePlan(hasPlanHistory)
                 .build();
     }
 

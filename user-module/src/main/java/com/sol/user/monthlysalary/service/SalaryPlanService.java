@@ -86,6 +86,7 @@ public class SalaryPlanService {
     public SalaryPlanStatusResponse getStatus(Long userId) {
         SalaryPlan plan = salaryPlanRepository
                 .findWithItemsByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
+                .or(() -> salaryPlanRepository.findTopByUserUserIdOrderByCreatedAtDesc(userId))
                 .orElse(null);
         if (plan == null) {
             return SalaryPlanStatusResponse.empty();

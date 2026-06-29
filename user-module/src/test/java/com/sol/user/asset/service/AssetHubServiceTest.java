@@ -272,6 +272,22 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void salaryPlanHistoryExistsWithoutActivePlanKeepsCurrentCashflowAndOpensStatusCta() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        when(salaryPlanRepository.existsByUserUserId(USER_ID)).thenReturn(true);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().salaryMaking().hasActivePlan()).isTrue();
+        assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("1300000");
+        assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("2200000");
+        assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(59);
+        assertThat(response.menus().lifeStability().coverageRate()).isEqualTo(59);
+    }
+
+    @Test
     void 후속이슈_의존_메뉴는_null_또는_기본값() {
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
