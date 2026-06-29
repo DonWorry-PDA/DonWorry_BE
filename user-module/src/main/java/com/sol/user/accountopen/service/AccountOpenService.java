@@ -4,6 +4,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.accountopen.dto.AccountNeedCheckResponse;
 import com.sol.user.accountopen.dto.AccountOpenRequest;
 import com.sol.user.accountopen.dto.AccountOpenResponse;
 import com.sol.user.accountopen.dto.IdentityResponse;
@@ -40,6 +41,23 @@ public class AccountOpenService {
     private final OtpService otpService;
     private final ShinhanCertService shinhanCertService;
 
+    @Transactional(readOnly = true)
+    public AccountNeedCheckResponse checkAccountNeed(Long userId) {
+        return evaluateAccountNeed(userId);
+    }
+
+    private AccountNeedCheckResponse evaluateAccountNeed(Long userId) {
+        if (accountRepository.existsByUserUserIdAndAccountType(userId, Account.TYPE_DON_WORRY)) {
+            return AccountNeedCheckResponse.noNeedDonWorry();
+        }
+        boolean hasShinhanBank = accountRepository.existsByUserUserIdAndInstitutionName(userId, Account.INSTITUTION_SHINHAN);
+        boolean hasShinhanInvest = accountRepository.existsByUserUserIdAndInstitutionName(userId, Account.INSTITUTION_SHINHAN_INVEST);
+        if (hasShinhanBank && hasShinhanInvest) {
+            return AccountNeedCheckResponse.noNeedShinhanBoth();
+        }
+        return AccountNeedCheckResponse.needsAccount();
+    }
+
     public void validateTerms(List<String> agreedTermIds) {
         Set<String> agreed = Set.copyOf(agreedTermIds);
         boolean allAgreed = REQUIRED_TERM_IDS.stream().allMatch(agreed::contains);
@@ -66,7 +84,7 @@ public class AccountOpenService {
             throw new BaseException(ErrorCode.OTP_NOT_VERIFIED);
         }
 
-        if (accountRepository.existsByUserUserIdAndAccountType(userId, Account.TYPE_DON_WORRY)) {
+        if (!evaluateAccountNeed(userId).isNeedsAccount()) {
             throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
         }
 
