@@ -6,6 +6,7 @@ import com.sol.user.monthlysalary.entity.SalaryPlanItem;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,10 +45,14 @@ class SalaryPlanIntegrationTest {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     @MockBean private EtfPoolProvider etfPoolProvider;
+    @MockBean private LifeStabilityService lifeStabilityService;
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.update("INSERT INTO users (user_id, onboarding_completed) VALUES (?, ?)", USER_ID, true);
+        jdbcTemplate.update("""
+                INSERT INTO users (user_id, onboarding_completed, third_party_agreed, marketing_agreed)
+                VALUES (?, ?, ?, ?)
+                """, USER_ID, true, false, false);
         given(etfPoolProvider.getPool()).willReturn(List.of(etf(101L), etf(102L)));
     }
 

@@ -9,6 +9,8 @@ import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
+import com.sol.user.monthlysalary.entity.SalaryPlan;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.stability.calculator.LifeStabilityCalculator;
@@ -46,6 +48,7 @@ class LifeStabilityServiceTest {
     private InsurancePolicyRepository insurancePolicyRepository;
     private CashFlowEventRepository cashFlowEventRepository;
     private EtfDividendCalculator etfDividendCalculator;
+    private SalaryPlanRepository salaryPlanRepository;
     private LifeStabilityService service;
 
     @BeforeEach
@@ -58,8 +61,11 @@ class LifeStabilityServiceTest {
         insurancePolicyRepository = mock(InsurancePolicyRepository.class);
         cashFlowEventRepository = mock(CashFlowEventRepository.class);
         etfDividendCalculator = mock(EtfDividendCalculator.class);
+        salaryPlanRepository = mock(SalaryPlanRepository.class);
         // 배당은 보유ETF 기반 단일 출처(#216). 기본 0, 충당률 검증 테스트에서 개별 stub.
         lenient().when(etfDividendCalculator.monthlyDividend(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(1L, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.empty());
         service = new LifeStabilityService(
                 new LifeStabilityCalculator(),
                 new LifeStabilityMessageGenerator(),
@@ -70,7 +76,8 @@ class LifeStabilityServiceTest {
                 debtRepository,
                 insurancePolicyRepository,
                 cashFlowEventRepository,
-                etfDividendCalculator
+                etfDividendCalculator,
+                salaryPlanRepository
         );
     }
 
@@ -113,6 +120,48 @@ class LifeStabilityServiceTest {
         assertThat(response.indicators().debtBurdenStatus()).isEqualTo("안정");
         assertThat(response.indicators().medicalPreparednessStatus()).isEqualTo("보완 필요");
         assertThat(response.indicators().liquidityStatus()).isEqualTo("안정");
+    }
+
+    @Test
+    void recalculatesFromActiveSalaryPlanWhenPlanExists() {
+        User user = mock(User.class);
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(1L))
+                .thenReturn(Optional.of(new UserGoal(user, money(2_200_000), money(350_000), LocalDateTime.now())));
+        when(accountRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Account(user, "CMA", "SHINHAN_BANK", "MOCK-1", money(18_000_000), true)
+        ));
+        when(pensionRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Pension(user, "NATIONAL", money(1_150_000), false, 65)
+        ));
+        when(debtRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new Debt(user, "SHINHAN_BANK", "CREDIT_LOAN", money(30_000_000), money(300_000),
+                        new BigDecimal("4.10"), LocalDate.now().plusYears(10))
+        ));
+        when(insurancePolicyRepository.findByUserUserId(1L)).thenReturn(List.of(
+                new InsurancePolicy(user, "SHINHAN_LIFE", "INDEMNITY", money(70_000), true, money(1_400_000)),
+                new InsurancePolicy(user, "SHINHAN_LIFE", "CANCER", money(70_000), true, money(1_400_000)),
+                new InsurancePolicy(user, "SHINHAN_LIFE", "NURSING", money(60_000), true, money(1_400_000))
+        ));
+        when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
+                event(user, "INTEREST", "INCOME", 48_000),
+                event(user, "RISK_ASSET_WITHDRAWAL", "INCOME", 600_000),
+                event(user, "MAINTENANCE", "EXPENSE", 180_000),
+                event(user, "INSURANCE", "EXPENSE", 200_000),
+                event(user, "CARD", "EXPENSE", 1_400_000)
+        ));
+        SalaryPlan activePlan = SalaryPlan.active(user, "STABLE",
+                money(3_280_000), new BigDecimal("109.33"), money(3_000_000));
+        when(salaryPlanRepository.findByUserUserIdAndStatus(1L, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.of(activePlan));
+        when(stabilityScoreRepository.save(any(StabilityScore.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LifeStabilityResponse response = service.recalculateFromUserData(1L);
+
+        assertThat(response.grade()).isEqualTo("STABLE");
+        assertThat(response.metrics().cashflowCoverageRate()).isEqualByComparingTo("109.33");
+        assertThat(response.metrics().riskAssetDependencyRate()).isEqualByComparingTo("0.00");
+        assertThat(response.indicators().cashflowStatus()).isEqualTo("안정");
     }
 
     @Test
