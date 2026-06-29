@@ -10,9 +10,12 @@ import com.sol.user.accountopen.dto.IdentityResponse;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
@@ -22,6 +25,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AccountOpenService {
 
     private static final List<String> REQUIRED_TERM_IDS = List.of(
@@ -34,6 +38,7 @@ public class AccountOpenService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final OtpService otpService;
+    private final ShinhanCertService shinhanCertService;
 
     public void validateTerms(List<String> agreedTermIds) {
         Set<String> agreed = Set.copyOf(agreedTermIds);
@@ -57,7 +62,7 @@ public class AccountOpenService {
     public AccountOpenResponse openAccount(Long userId, AccountOpenRequest request) {
         validateTerms(request.getAgreedTermIds());
 
-        if (!otpService.isVerified(userId)) {
+        if (!isIdentityVerified(userId)) {
             throw new BaseException(ErrorCode.OTP_NOT_VERIFIED);
         }
 
@@ -76,12 +81,44 @@ public class AccountOpenService {
             throw new BaseException(ErrorCode.ACCOUNT_ALREADY_EXISTS);
         }
 
-        otpService.clearVerified(userId);
+        clearVerificationAfterCommit(userId);
 
         return AccountOpenResponse.builder()
                 .accountNumber(accountNumber)
                 .openedAt(today.format(DATE_FORMATTER))
                 .build();
+    }
+
+    private boolean isIdentityVerified(Long userId) {
+        return otpService.isVerified(userId) || shinhanCertService.isVerified(userId);
+    }
+
+    private void clearVerificationAfterCommit(Long userId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            clearVerificationSafely(userId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearVerificationSafely(userId);
+            }
+        });
+    }
+
+    private void clearVerificationSafely(Long userId) {
+        try {
+            otpService.clearVerified(userId);
+        } catch (RuntimeException e) {
+            log.warn("OTP 인증 상태 정리 실패 userId={}", userId, e);
+        }
+
+        try {
+            shinhanCertService.clearVerified(userId);
+        } catch (RuntimeException e) {
+            log.warn("신한인증서 인증 상태 정리 실패 userId={}", userId, e);
+        }
     }
 
     private User findUser(Long userId) {
