@@ -150,7 +150,7 @@ public class PortfolioAllocationCalculator {
             if (!PortfolioConstants.isRecommendable(propensity, etf.riskGrade())) {
                 continue;
             }
-            holdings.add(new Holding(
+            holdings.add(Holding.of(
                     etf.productId(),
                     etf.ticker(),
                     etf.productName(),
@@ -207,7 +207,7 @@ public class PortfolioAllocationCalculator {
                 throw new BaseException(ErrorCode.INVALID_INPUT); // 풀에 안전/단기 필수 종목 누락
             }
             BigDecimal weight = entry.getValue().divide(bucketTotal, RATE_SCALE, RoundingMode.HALF_UP);
-            holdings.add(new Holding(
+            holdings.add(Holding.of(
                     etf.productId(),
                     etf.ticker(),
                     etf.productName(),

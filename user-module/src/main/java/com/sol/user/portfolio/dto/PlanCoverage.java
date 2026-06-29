@@ -19,4 +19,10 @@ public class PlanCoverage {
     private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
     private BigDecimal inheritanceAmount;          // 상속분
     private BigDecimal shortTermLumpSum;           // 단기 목돈 (유동성안이 따로 확보한 일회성 인출분, 원금 그대로)
+
+    // 버킷별 net 운용수입 (표시 monthlyIncome과 동일 q3·과세기준). 종목별 monthlyContribution 분배 재료.
+    // 국민연금·연금저축(사적연금)은 종목 귀속에서 제외 → safeNet+riskNet ≈ monthlyIncome − 국민연금 − 연금저축.
+    //   (세 값을 각각 원단위 반올림하므로 경계값에서 ±0.01 근사 오차 가능 — KRW 정수표시상 무시 가능)
+    private BigDecimal safeNetIncome;              // SAFE 버킷(floor+여유안전) net 월수입
+    private BigDecimal riskNetIncome;              // RISK 버킷 net 월수입
 }
