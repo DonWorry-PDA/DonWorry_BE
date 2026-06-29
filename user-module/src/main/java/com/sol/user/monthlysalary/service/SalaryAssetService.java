@@ -89,16 +89,18 @@ public class SalaryAssetService {
                 .distinct()
                 .toList();
 
-        Map<Long, DepositDetailItem> depositDetails = Map.of();
+        Map<Long, DepositDetailItem> fetchedDepositDetails = Map.of();
         if (!depositProductIds.isEmpty()) {
             try {
-                depositDetails = depositDetailClient.fetchDepositDetails(depositProductIds);
+                fetchedDepositDetails = depositDetailClient.fetchDepositDetails(depositProductIds);
             } catch (BaseException ignored) {
                 // 상품명 보강 실패 시 기본 계좌명으로 폴백
             }
         }
 
         // 계좌 (DON_WORRY 제외) → accountType별 그루핑
+        Map<Long, DepositDetailItem> depositDetails = fetchedDepositDetails;
+
         accounts.forEach(account -> {
                     String type = account.getAccountType();
                     DepositDetailItem detail = "DEPOSIT".equals(type) && account.getProductId() != null
