@@ -10,6 +10,8 @@ import com.sol.product.external.ls.LsProperties;
 import com.sol.product.external.ls.dto.LsWsRequest;
 import com.sol.product.external.ls.dto.LsWsStockResponse;
 import com.sol.product.external.ls.service.LsTokenService;
+import com.sol.product.stock.realtime.StockRealtimeCache;
+import com.sol.product.stock.realtime.StockTickerRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,8 @@ public class LsWebSocketClient extends TextWebSocketHandler {
     private final LsTokenService lsTokenService;
     private final EtfRealtimeCache etfRealtimeCache;
     private final EtfPriceWebSocketHandler etfPriceWebSocketHandler;
+    private final StockRealtimeCache stockRealtimeCache;
+    private final StockTickerRegistry stockTickerRegistry;
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
 
@@ -94,7 +98,7 @@ public class LsWebSocketClient extends TextWebSocketHandler {
 
     private void resubscribeAll() {
         if (subscribedCodes.isEmpty()) return;
-        log.info("LS WebSocket 재구독: {}개 ETF", subscribedCodes.size());
+        log.info("LS WebSocket 재구독: {}개 종목", subscribedCodes.size());
         String token = lsTokenService.getToken();
         for (String code : subscribedCodes) {
             sendMessage(LsWsRequest.subscribe(token, code));
@@ -169,16 +173,18 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                 LsWsStockResponse response = objectMapper.treeToValue(node, LsWsStockResponse.class);
                 if (response.body() == null) return;
                 String ticker = response.body().shcode().trim();
+                String price = response.body().price();
+                String change = response.body().change();
+                String drate = response.body().drate();
+                String sign = response.body().sign();
                 if (EtfTickerWhitelist.contains(ticker)) {
-                    String price = response.body().price();
-                    String change = response.body().change();
-                    String drate = response.body().drate();
-                    String sign = response.body().sign();
                     etfRealtimeCache.save(ticker, price, change, drate, sign);
                     EtfPricePayload pricePayload = EtfPricePayload.of(ticker, price, change, drate, sign);
                     if (pricePayload != null) {
                         etfPriceWebSocketHandler.broadcast(pricePayload);
                     }
+                } else if (stockTickerRegistry.contains(ticker)) {
+                    stockRealtimeCache.save(ticker, price, change, drate, sign);
                 }
             }
         } catch (Exception e) {

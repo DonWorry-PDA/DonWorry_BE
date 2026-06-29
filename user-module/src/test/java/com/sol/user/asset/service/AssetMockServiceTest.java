@@ -123,13 +123,13 @@ class AssetMockServiceTest {
         assertThat(holdings)
                 .extracting(Holding::getProductId, Holding::getEvaluationAmount, Holding::getQuantity)
                 .containsExactly(
-                        // ETF(화이트리스트) 먼저
+                        // ETF(화이트리스트): evaluationAmount 저장
                         tuple(1001L, new BigDecimal("40000000"), new BigDecimal("2000")),
                         tuple(1002L, new BigDecimal("40000000"), new BigDecimal("2500")),
-                        // 개별주
-                        tuple(2001L, new BigDecimal("12000000"), new BigDecimal("180")),
-                        tuple(2002L, new BigDecimal("8000000"), new BigDecimal("40")),
-                        tuple(2003L, new BigDecimal("6000000"), new BigDecimal("25"))
+                        // 개별주: evaluationAmount=null (현재가×수량으로 산출, DB 미저장)
+                        tuple(2001L, null, new BigDecimal("180")),
+                        tuple(2002L, null, new BigDecimal("40")),
+                        tuple(2003L, null, new BigDecimal("25"))
                 );
     }
 
@@ -214,7 +214,8 @@ class AssetMockServiceTest {
         MockAssetResponse response = assetMockService.create(1L, MockType.STABLE);
 
         assertThat(checking.getDepositBalance()).isEqualByComparingTo("35000000");
-        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("440000000");
+        // 개별주 evaluationAmount=null → createAssetSummary 합산에서 제외. STABLE: 계좌 305M + ETF 130M = 435M
+        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("435000000");
     }
 
     @Test
@@ -225,8 +226,8 @@ class AssetMockServiceTest {
 
         MockAssetResponse response = assetMockService.sync(3L);
 
-        // userId 3 → STABLE (총자산 4억 4,000만 = 기존 4억 3,500만 + 개별주 500만, 무부채)
-        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("440000000");
+        // userId 3 → STABLE. 개별주 evaluationAmount=null이므로 총자산 = 계좌 305M + ETF 130M = 435M
+        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("435000000");
         assertThat(response.assetSummary().totalDebt()).isEqualByComparingTo("0");
     }
 
@@ -501,17 +502,20 @@ class AssetMockServiceTest {
     }
 
     private static Stream<Arguments> scenarios() {
-        // 개별주 시드 추가분이 순자산/보유종목수에 반영됨:
-        //  NEED_IMPROVEMENT +26M(3종), NEED_COMPLEMENT +13M(2종), STABLE +5M(1종)
+        // 개별주 evaluationAmount=null(현재가 기반 산출)이므로 createAssetSummary의 totalAsset에 포함되지 않는다.
+        // totalAsset = 계좌 예수금 합 + ETF 평가액 합 (개별주 제외).
+        //   NEED_IMPROVEMENT: 계좌 43M + ETF 80M = 123M (stock 26M 제외)
+        //   NEED_COMPLEMENT:  계좌 153M + ETF 55M = 208M (stock 13M 제외)
+        //   STABLE:           계좌 305M + ETF 130M = 435M (stock 5M 제외)
+        // holdingCount = ETF + 개별주 보유행 수 (개별주도 DB에 저장되므로 총 카운트에 포함).
         // cashflowEvents = 12개월치(현재월 + 과거 11개월) buildMonthEvents 합산 (#256: 6→12개월 확장).
-        // cashflowEvents: nationalPensionReceiving=null(mock default, User mock 미스텁) → no PENSION events.
         // PENSION events (1/month × 12 months = 12) only appear when the flag is TRUE.
         return Stream.of(
-                Arguments.of(MockType.NEED_IMPROVEMENT, 149_000_000L, 75_000_000L, 74_000_000L, 5,
+                Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 5,
                         InvestmentPropensity.ACTIVE, 444),
-                Arguments.of(MockType.NEED_COMPLEMENT, 221_000_000L, 30_000_000L, 191_000_000L, 4,
+                Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 4,
                         InvestmentPropensity.NEUTRAL, 360),
-                Arguments.of(MockType.STABLE, 440_000_000L, 0L, 440_000_000L, 4,
+                Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 4,
                         InvestmentPropensity.STABLE, 324)
         );
     }
