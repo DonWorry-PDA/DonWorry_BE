@@ -26,6 +26,15 @@ class BranchNearbyResponseTest {
     }
 
     @Test
+    void km는_미터_반올림이_아닌_원본_거리로_환산된다() {
+        // 149.5m: 미터 반올림(150) 기준이면 0.2km로 부풀지만, 원본 기준이면 0.1km다.
+        BranchNearbyResponse res = BranchNearbyResponse.from(projection(149.5));
+
+        assertThat(res.distanceMeters()).isEqualTo(150);
+        assertThat(res.distanceKm()).isEqualTo(0.1);
+    }
+
+    @Test
     void 백미터_미만은_0_0km다() {
         BranchNearbyResponse res = BranchNearbyResponse.from(projection(49));
 

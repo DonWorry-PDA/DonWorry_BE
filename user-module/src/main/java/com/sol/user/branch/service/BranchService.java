@@ -35,7 +35,9 @@ public class BranchService {
     }
 
     private void validateCoordinate(double lat, double lng) {
-        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        // NaN은 모든 비교가 false라 범위 검사를 통과하므로 isFinite로 먼저 걸러낸다.
+        if (!Double.isFinite(lat) || !Double.isFinite(lng)
+                || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
     }

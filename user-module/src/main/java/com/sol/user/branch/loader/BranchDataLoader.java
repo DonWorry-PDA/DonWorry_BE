@@ -67,7 +67,9 @@ public class BranchDataLoader implements ApplicationRunner {
             branchRepository.saveAll(branches);
             log.info("[BranchDataLoader] 신한은행 영업점 {}건 적재 완료", branches.size());
         } catch (Exception e) {
+            // 영업점은 조회 API의 전제 데이터라, 적재 실패를 삼키면 빈 결과만 반환된다. 부팅을 실패시킨다.
             log.error("[BranchDataLoader] 신한은행 영업점 적재 실패", e);
+            throw new IllegalStateException("신한은행 영업점 초기 적재에 실패했습니다.", e);
         }
     }
 
