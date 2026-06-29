@@ -6,6 +6,9 @@ import com.sol.user.consultation.dto.ConsultationCreateRequest;
 import com.sol.user.consultation.dto.ConsultationMemoUpdateRequest;
 import com.sol.user.consultation.dto.ConsultationResponse;
 import com.sol.user.consultation.dto.ConsultationScheduleUpdateRequest;
+import com.sol.user.branch.entity.Branch;
+import com.sol.user.branch.repository.BranchRepository;
+import com.sol.user.branch.type.Institution;
 import com.sol.user.consultation.entity.Consultation;
 import com.sol.user.consultation.repository.ConsultationRepository;
 import com.sol.user.consultation.repository.ConsultationSummaryRepository;
@@ -36,6 +39,7 @@ class ConsultationServiceTest {
     private ConsultationRepository consultationRepository;
     private ConsultationSummaryRepository summaryRepository;
     private SalaryPlanRepository salaryPlanRepository;
+    private BranchRepository branchRepository;
     private ConsultationService service;
 
     @BeforeEach
@@ -43,7 +47,9 @@ class ConsultationServiceTest {
         consultationRepository = mock(ConsultationRepository.class);
         summaryRepository = mock(ConsultationSummaryRepository.class);
         salaryPlanRepository = mock(SalaryPlanRepository.class);
-        service = new ConsultationService(consultationRepository, summaryRepository, salaryPlanRepository);
+        branchRepository = mock(BranchRepository.class);
+        service = new ConsultationService(consultationRepository, summaryRepository,
+                salaryPlanRepository, branchRepository);
     }
 
     @Test
@@ -53,7 +59,8 @@ class ConsultationServiceTest {
         when(salaryPlanRepository.existsByPlanIdAndUserUserId(7L, 1L)).thenReturn(true);
 
         ConsultationResponse response = service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 7L, null, null));
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 7L, null, null,
+                        null, null));
 
         ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
         verify(consultationRepository).save(captor.capture());
@@ -74,7 +81,8 @@ class ConsultationServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null));
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null,
+                        null, null));
 
         ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
         verify(consultationRepository).save(captor.capture());
@@ -89,7 +97,7 @@ class ConsultationServiceTest {
         ConsultationResponse response = service.create(1L,
                 new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null,
                         "국민연금 연기 비교 상담",
-                        List.of("연기율별 수령액 비교", "연기 시 손익분기 시점")));
+                        List.of("연기율별 수령액 비교", "연기 시 손익분기 시점"), null, null));
 
         ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
         verify(consultationRepository).save(captor.capture());
@@ -106,7 +114,7 @@ class ConsultationServiceTest {
 
         service.create(1L,
                 new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null,
-                        Arrays.asList("연기율별 수령액 비교", "  ", null)));
+                        Arrays.asList("연기율별 수령액 비교", "  ", null), null, null));
 
         ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
         verify(consultationRepository).save(captor.capture());
@@ -117,7 +125,7 @@ class ConsultationServiceTest {
     void createWithTooLongTopicThrows() {
         assertThatThrownBy(() -> service.create(1L,
                 new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null,
-                        "a".repeat(101), null)))
+                        "a".repeat(101), null, null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -127,7 +135,8 @@ class ConsultationServiceTest {
         List<String> tooMany = java.util.stream.IntStream.rangeClosed(1, 11)
                 .mapToObj(i -> "주제" + i).toList();
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, tooMany)))
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, tooMany,
+                        null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -136,7 +145,7 @@ class ConsultationServiceTest {
     void createWithTooLongContextTopicThrows() {
         assertThatThrownBy(() -> service.create(1L,
                 new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null,
-                        List.of("a".repeat(201)))))
+                        List.of("a".repeat(201)), null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -146,7 +155,65 @@ class ConsultationServiceTest {
         when(salaryPlanRepository.existsByPlanIdAndUserUserId(99L, 1L)).thenReturn(false);
 
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 99L, null, null)))
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), 99L, null, null,
+                        null, null)))
+                .isInstanceOf(BaseException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        verify(consultationRepository, never()).save(any(Consultation.class));
+    }
+
+    @Test
+    void createWithBranchIdSavesSelectedBranch() {
+        when(consultationRepository.save(any(Consultation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Branch branch = Branch.builder()
+                .institution(Institution.SHINHAN_SECURITIES)
+                .name("신한투자증권 강남금융센터")
+                .latitude(37.5).longitude(127.0).build();
+        when(branchRepository.findById(42L)).thenReturn(Optional.of(branch));
+
+        ConsultationResponse response = service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null,
+                        42L, ConsultMethod.PHONE));
+
+        ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
+        verify(consultationRepository).save(captor.capture());
+        Consultation saved = captor.getValue();
+        assertThat(saved.getBranchId()).isEqualTo(42L);
+        assertThat(saved.getBranchName()).isEqualTo("신한투자증권 강남금융센터");
+        assertThat(saved.getMethod()).isEqualTo(ConsultMethod.PHONE);
+        // 전화 상담이라도 지점을 골랐으면 location은 지점명으로 내려간다.
+        assertThat(response.location()).isEqualTo("신한투자증권 강남금융센터");
+    }
+
+    @Test
+    void createWithBankBranchPrefixesInstitutionInStoredName() {
+        when(consultationRepository.save(any(Consultation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        // 은행 원본 지점명엔 '신한은행' 접두어가 없다.
+        Branch branch = Branch.builder()
+                .institution(Institution.SHINHAN_BANK)
+                .name("가락동금융센터")
+                .latitude(37.5).longitude(127.0).build();
+        when(branchRepository.findById(7L)).thenReturn(Optional.of(branch));
+
+        service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null,
+                        7L, ConsultMethod.FACE_TO_FACE));
+
+        ArgumentCaptor<Consultation> captor = ArgumentCaptor.forClass(Consultation.class);
+        verify(consultationRepository).save(captor.capture());
+        // 내역 표시명이 FE 지점 선택 화면과 일치하도록 '신한은행 …'으로 저장된다.
+        assertThat(captor.getValue().getBranchName()).isEqualTo("신한은행 가락동금융센터");
+    }
+
+    @Test
+    void createWithUnknownBranchIdThrows() {
+        when(branchRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(1L,
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().plusDays(3), null, null, null,
+                        404L, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
         verify(consultationRepository, never()).save(any(Consultation.class));
@@ -155,7 +222,7 @@ class ConsultationServiceTest {
     @Test
     void createWithNullTypeThrows() {
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(null, LocalDateTime.now(), null, null, null)))
+                new ConsultationCreateRequest(null, LocalDateTime.now(), null, null, null, null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -163,7 +230,8 @@ class ConsultationServiceTest {
     @Test
     void createWithPastScheduleThrows() {
         assertThatThrownBy(() -> service.create(1L,
-                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().minusDays(1), null, null, null)))
+                new ConsultationCreateRequest(ConsultType.PB, LocalDateTime.now().minusDays(1), null, null, null,
+                        null, null)))
                 .isInstanceOf(BaseException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
     }
@@ -212,7 +280,7 @@ class ConsultationServiceTest {
         Consultation completed = Consultation.builder()
                 .userId(1L).title("완료 상담").consultType(ConsultType.PB)
                 .status(ConsultStatus.COMPLETED).scheduledAt(LocalDateTime.now().minusDays(1))
-                .method(ConsultMethod.ONLINE).build();
+                .method(ConsultMethod.PHONE).build();
         when(consultationRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(completed));
 
         assertThatThrownBy(() -> service.cancel(1L, 10L))
@@ -234,7 +302,7 @@ class ConsultationServiceTest {
         Consultation completed = Consultation.builder()
                 .userId(1L).title("완료 상담").consultType(ConsultType.PB)
                 .status(ConsultStatus.COMPLETED).scheduledAt(LocalDateTime.now().minusDays(1))
-                .method(ConsultMethod.ONLINE).build();
+                .method(ConsultMethod.PHONE).build();
         when(consultationRepository.findByIdAndUserId(10L, 1L)).thenReturn(Optional.of(completed));
         when(summaryRepository.findByConsultationId(10L)).thenReturn(Optional.empty());
 

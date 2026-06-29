@@ -2,6 +2,9 @@ package com.sol.user.consultation.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.branch.entity.Branch;
+import com.sol.user.branch.repository.BranchRepository;
+import com.sol.user.branch.type.Institution;
 import com.sol.user.consultation.dto.ConsultationCreateRequest;
 import com.sol.user.consultation.dto.ConsultationMemoUpdateRequest;
 import com.sol.user.consultation.dto.ConsultationResponse;
@@ -38,8 +41,9 @@ public class ConsultationService {
     private final ConsultationRepository consultationRepository;
     private final ConsultationSummaryRepository consultationSummaryRepository;
     private final SalaryPlanRepository salaryPlanRepository;
+    private final BranchRepository branchRepository;
 
-    /** 예약 생성 — 유형별 기본 방식/지점/상담원을 배정한다. */
+    /** 예약 생성 — 방식/지점은 요청값(branchId·method)을 우선 쓰고, 없으면 유형별 기본값으로 폴백한다. */
     @Transactional
     public ConsultationResponse create(Long userId, ConsultationCreateRequest request) {
         if (request == null || request.consultType() == null) {
@@ -48,9 +52,12 @@ public class ConsultationService {
         requireFutureSchedule(request.scheduledAt());
         requireOwnedPlan(userId, request.planId());
         ConsultType type = request.consultType();
-        ConsultMethod method = defaultMethod(type);
+        ConsultMethod method = request.method() != null ? request.method() : defaultMethod(type);
         String title = resolveTitle(type, request.topic());
         List<String> contextTopics = sanitizeContextTopics(request.contextTopics());
+        Branch branch = resolveBranch(request.branchId());
+        // 사용자가 고른 지점을 우선 저장하고, 없을 때만 유형별 기본 지점으로 폴백한다.
+        String branchName = branch != null ? displayBranchName(branch) : defaultBranch(type);
 
         Consultation saved = consultationRepository.save(Consultation.builder()
                 .userId(userId)
@@ -59,13 +66,36 @@ public class ConsultationService {
                 .status(ConsultStatus.RESERVED)
                 .scheduledAt(request.scheduledAt())
                 .method(method)
-                .branchName(method == ConsultMethod.FACE_TO_FACE ? defaultBranch(type) : null)
+                .branchId(branch != null ? request.branchId() : null)
+                .branchName(branchName)
                 .counselorName(defaultCounselor(type))
                 .planId(request.planId())
                 .contextTopics(contextTopics)
                 .build());
 
         return ConsultationResponse.from(saved, false);
+    }
+
+    /**
+     * 상담 내역에 보여줄 지점 표시명 — FE 지점 선택 화면과 동일 규칙으로 정규화한다.
+     * 은행 원본 지점명엔 기관 접두어가 없어 '신한은행'을 붙이고(이미 있으면 유지),
+     * 증권은 원본이 '신한 프리미어 …' 브랜드명을 담고 있어 그대로 둔다.
+     */
+    private static String displayBranchName(Branch branch) {
+        String name = branch.getName();
+        if (branch.getInstitution() == Institution.SHINHAN_BANK) {
+            return name.startsWith("신한은행") ? name : "신한은행 " + name;
+        }
+        return name;
+    }
+
+    /** branchId가 있으면 본인 진입점에서 고른 영업점을 조회한다. 없는 id면 거부. */
+    private Branch resolveBranch(Long branchId) {
+        if (branchId == null) {
+            return null;
+        }
+        return branchRepository.findById(branchId)
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT));
     }
 
     /** planId가 있으면 본인 소유 plan인지 검증. null이면 통과(아직 plan 미연동 호출 호환). */
@@ -181,7 +211,7 @@ public class ConsultationService {
                 .consultType(ConsultType.PB)
                 .status(ConsultStatus.COMPLETED)
                 .scheduledAt(now.minusDays(34).with(LocalTime.of(10, 30)))
-                .method(ConsultMethod.ONLINE)
+                .method(ConsultMethod.PHONE)
                 .counselorName("김신한 PB팀장")
                 .build());
 
@@ -203,7 +233,7 @@ public class ConsultationService {
                 .consultType(ConsultType.PB)
                 .status(ConsultStatus.COMPLETED)
                 .scheduledAt(now.minusDays(78).with(LocalTime.of(15, 0)))
-                .method(ConsultMethod.ONLINE)
+                .method(ConsultMethod.PHONE)
                 .counselorName("김신한 PB팀장")
                 .build());
 
@@ -247,7 +277,7 @@ public class ConsultationService {
     }
 
     private ConsultMethod defaultMethod(ConsultType type) {
-        return type == ConsultType.PB ? ConsultMethod.FACE_TO_FACE : ConsultMethod.ONLINE;
+        return type == ConsultType.PB ? ConsultMethod.FACE_TO_FACE : ConsultMethod.PHONE;
     }
 
     private String defaultBranch(ConsultType type) {
