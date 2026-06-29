@@ -177,6 +177,11 @@ public class LifeStabilityService {
                 "INCOME",
                 List.of("RISK_ASSET_WITHDRAWAL")
         );
+        if (activePlan != null) {
+            riskAssetWithdrawal = targetMonthlyLivingExpense
+                    .subtract(activePlan.getExpectedMonthlySalary())
+                    .max(BigDecimal.ZERO);
+        }
 
         return recalculateAndSave(userId, LifeStabilityCalculationInput.builder()
                 .targetMonthlyLivingExpense(targetMonthlyLivingExpense)

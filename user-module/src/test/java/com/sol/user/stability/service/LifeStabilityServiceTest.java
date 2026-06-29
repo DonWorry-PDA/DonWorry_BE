@@ -144,6 +144,7 @@ class LifeStabilityServiceTest {
         ));
         when(cashFlowEventRepository.findByUserUserId(1L)).thenReturn(List.of(
                 event(user, "INTEREST", "INCOME", 48_000),
+                event(user, "RISK_ASSET_WITHDRAWAL", "INCOME", 600_000),
                 event(user, "MAINTENANCE", "EXPENSE", 180_000),
                 event(user, "INSURANCE", "EXPENSE", 200_000),
                 event(user, "CARD", "EXPENSE", 1_400_000)
@@ -159,6 +160,7 @@ class LifeStabilityServiceTest {
 
         assertThat(response.grade()).isEqualTo("STABLE");
         assertThat(response.metrics().cashflowCoverageRate()).isEqualByComparingTo("109.33");
+        assertThat(response.metrics().riskAssetDependencyRate()).isEqualByComparingTo("0.00");
         assertThat(response.indicators().cashflowStatus()).isEqualTo("안정");
     }
 
