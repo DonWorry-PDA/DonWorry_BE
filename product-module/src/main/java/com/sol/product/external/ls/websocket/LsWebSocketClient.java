@@ -13,8 +13,10 @@ import com.sol.product.external.ls.service.LsTokenService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -113,10 +115,26 @@ public class LsWebSocketClient extends TextWebSocketHandler {
         log.debug("ETF 구독 해제: {}", ticker);
     }
 
+    @Scheduled(fixedDelay = 60000)
+    public void sendKeepAlive() {
+        if (session == null || !session.isOpen()) {
+            log.warn("LS WebSocket keepalive: 세션 없음 - 재연결 시도");
+            connect();
+            return;
+        }
+        try {
+            session.sendMessage(new PingMessage());
+        } catch (IOException e) {
+            log.warn("LS WebSocket keepalive 실패 - 재연결 시도: {}", e.getMessage());
+            this.session = null;
+            scheduleReconnect();
+        }
+    }
+
     private void sendMessage(LsWsRequest request) {
         try {
             if (session == null || !session.isOpen()) {
-                log.warn("LS WebSocket 세션이 열려있지 않습니다.");
+                log.debug("LS WebSocket 세션 없음 - 재연결 후 재구독 예정");
                 return;
             }
             String json = objectMapper.writeValueAsString(request);
