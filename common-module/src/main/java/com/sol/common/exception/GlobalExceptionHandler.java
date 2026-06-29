@@ -52,12 +52,15 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IOException.class)
-    public void handleIOException(IOException e) {
+    public ResponseEntity<ApiResponse<Void>> handleIOException(IOException e) {
         if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
             log.debug("Client disconnected (broken pipe)");
-            return;
+            return ResponseEntity.ok().<ApiResponse<Void>>build();
         }
         log.error("[IO Error]", e);
+        return ResponseEntity
+                .internalServerError()
+                .body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR));
     }
 
     @ExceptionHandler(Exception.class)

@@ -43,7 +43,11 @@ public class NotificationService {
             emitter.complete();
         });
         emitter.onError(e -> {
-            log.debug("SSE 연결 종료 userId={}: {}", userId, e.getMessage());
+            if (e instanceof java.io.IOException && e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
+                log.debug("SSE 연결 종료 userId={}: {}", userId, e.getMessage());
+            } else {
+                log.warn("SSE 오류 userId={}: {}", userId, e.getMessage());
+            }
             sseEmitterRepository.delete(userId, emitter);
         });
 
