@@ -38,9 +38,16 @@ public class NotificationService {
         sseEmitterRepository.save(userId, emitter);
 
         emitter.onCompletion(() -> sseEmitterRepository.delete(userId, emitter));
-        emitter.onTimeout(() -> sseEmitterRepository.delete(userId, emitter));
+        emitter.onTimeout(() -> {
+            sseEmitterRepository.delete(userId, emitter);
+            emitter.complete();
+        });
         emitter.onError(e -> {
-            log.warn("SSE 연결 오류 userId={}: {}", userId, e.getMessage());
+            if (e instanceof java.io.IOException && e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
+                log.debug("SSE 연결 종료 userId={}: {}", userId, e.getMessage());
+            } else {
+                log.warn("SSE 오류 userId={}: {}", userId, e.getMessage());
+            }
             sseEmitterRepository.delete(userId, emitter);
         });
 

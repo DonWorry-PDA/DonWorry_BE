@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
+
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -47,6 +49,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIOException(IOException e) {
+        if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
+            log.debug("Client disconnected (broken pipe)");
+            return ResponseEntity.ok().<ApiResponse<Void>>build();
+        }
+        log.error("[IO Error]", e);
+        return ResponseEntity
+                .internalServerError()
+                .body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR));
     }
 
     @ExceptionHandler(Exception.class)
