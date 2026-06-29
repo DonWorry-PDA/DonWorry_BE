@@ -3,6 +3,7 @@ package com.sol.user.accountopen.controller;
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.common.exception.GlobalExceptionHandler;
+import com.sol.user.accountopen.dto.AccountNeedCheckResponse;
 import com.sol.user.accountopen.dto.AccountOpenResponse;
 import com.sol.user.accountopen.dto.IdentityResponse;
 import com.sol.user.accountopen.service.AccountOpenService;
@@ -43,6 +44,44 @@ class AccountOpenControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(accountOpenController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    // ── 계좌 개설 필요 여부 ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("DON_WORRY 계좌가 있으면 needsAccount=false, reason=HAS_DON_WORRY를 반환한다")
+    void checkAccountNeed_hasDonWorry_returnsFalse() throws Exception {
+        when(accountOpenService.checkAccountNeed(1L)).thenReturn(AccountNeedCheckResponse.noNeedDonWorry());
+
+        mockMvc.perform(get("/api/user/account-open/check")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.needsAccount").value(false))
+                .andExpect(jsonPath("$.data.reason").value("HAS_DON_WORRY"));
+    }
+
+    @Test
+    @DisplayName("신한은행+신한투자증권 둘 다 있으면 needsAccount=false, reason=HAS_SHINHAN_BOTH를 반환한다")
+    void checkAccountNeed_hasBothShinhan_returnsFalse() throws Exception {
+        when(accountOpenService.checkAccountNeed(1L)).thenReturn(AccountNeedCheckResponse.noNeedShinhanBoth());
+
+        mockMvc.perform(get("/api/user/account-open/check")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.needsAccount").value(false))
+                .andExpect(jsonPath("$.data.reason").value("HAS_SHINHAN_BOTH"));
+    }
+
+    @Test
+    @DisplayName("계좌 개설이 필요하면 needsAccount=true, reason=NEEDS_ACCOUNT를 반환한다")
+    void checkAccountNeed_needsAccount_returnsTrue() throws Exception {
+        when(accountOpenService.checkAccountNeed(1L)).thenReturn(AccountNeedCheckResponse.needsAccount());
+
+        mockMvc.perform(get("/api/user/account-open/check")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.needsAccount").value(true))
+                .andExpect(jsonPath("$.data.reason").value("NEEDS_ACCOUNT"));
     }
 
     // ── 약관 동의 ──────────────────────────────────────────────────────────────

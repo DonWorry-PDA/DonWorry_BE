@@ -5,14 +5,12 @@ import com.sol.user.accountopen.service.ShinhanCertService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Profile({"local", "dev"})
 @Tag(name = "Account Open", description = "계좌 개설 API")
 @RestController
 @RequestMapping("/api/user/account-open")

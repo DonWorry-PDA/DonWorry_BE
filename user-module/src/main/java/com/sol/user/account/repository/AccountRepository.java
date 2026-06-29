@@ -39,4 +39,6 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Account a WHERE a.accountId IN :ids AND a.user.userId = :userId ORDER BY a.accountId ASC")
     List<Account> findAllByIdAndUserIdForUpdate(@Param("ids") List<Long> ids, @Param("userId") Long userId);
+
+    boolean existsByUserUserIdAndInstitutionName(Long userId, String institutionName);
 }

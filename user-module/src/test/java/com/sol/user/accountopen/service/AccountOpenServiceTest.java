@@ -4,6 +4,7 @@ import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
+import com.sol.user.accountopen.dto.AccountNeedCheckResponse;
 import com.sol.user.accountopen.dto.AccountOpenRequest;
 import com.sol.user.accountopen.dto.AccountOpenResponse;
 import com.sol.user.accountopen.dto.IdentityResponse;
@@ -44,6 +45,71 @@ class AccountOpenServiceTest {
     private static final Long USER_ID = 1L;
     private static final List<String> VALID_TERMS =
             List.of("account", "deposit", "account-privacy", "account-third-party");
+
+    // ── checkAccountNeed ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("DON_WORRY 계좌가 있으면 needsAccount=false, reason=HAS_DON_WORRY를 반환한다")
+    void checkAccountNeed_hasDonWorry_returnsFalse() {
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(true);
+
+        AccountNeedCheckResponse response = accountOpenService.checkAccountNeed(USER_ID);
+
+        assertThat(response.isNeedsAccount()).isFalse();
+        assertThat(response.getReason()).isEqualTo("HAS_DON_WORRY");
+    }
+
+    @Test
+    @DisplayName("신한은행과 신한투자증권 계좌가 모두 있으면 needsAccount=false, reason=HAS_SHINHAN_BOTH를 반환한다")
+    void checkAccountNeed_hasBothShinhan_returnsFalse() {
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(true);
+
+        AccountNeedCheckResponse response = accountOpenService.checkAccountNeed(USER_ID);
+
+        assertThat(response.isNeedsAccount()).isFalse();
+        assertThat(response.getReason()).isEqualTo("HAS_SHINHAN_BOTH");
+    }
+
+    @Test
+    @DisplayName("신한은행만 있으면 needsAccount=true, reason=NEEDS_ACCOUNT를 반환한다")
+    void checkAccountNeed_onlyShinhanBank_returnsTrue() {
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(false);
+
+        AccountNeedCheckResponse response = accountOpenService.checkAccountNeed(USER_ID);
+
+        assertThat(response.isNeedsAccount()).isTrue();
+        assertThat(response.getReason()).isEqualTo("NEEDS_ACCOUNT");
+    }
+
+    @Test
+    @DisplayName("신한투자증권만 있으면 needsAccount=true, reason=NEEDS_ACCOUNT를 반환한다")
+    void checkAccountNeed_onlyShinhanInvest_returnsTrue() {
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(true);
+
+        AccountNeedCheckResponse response = accountOpenService.checkAccountNeed(USER_ID);
+
+        assertThat(response.isNeedsAccount()).isTrue();
+        assertThat(response.getReason()).isEqualTo("NEEDS_ACCOUNT");
+    }
+
+    @Test
+    @DisplayName("신한 계좌가 하나도 없으면 needsAccount=true, reason=NEEDS_ACCOUNT를 반환한다")
+    void checkAccountNeed_noShinhan_returnsTrue() {
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(false);
+
+        AccountNeedCheckResponse response = accountOpenService.checkAccountNeed(USER_ID);
+
+        assertThat(response.isNeedsAccount()).isTrue();
+        assertThat(response.getReason()).isEqualTo("NEEDS_ACCOUNT");
+    }
 
     // ── validateTerms ────────────────────────────────────────────────────────────
 
@@ -181,6 +247,24 @@ class AccountOpenServiceTest {
         when(request.getAgreedTermIds()).thenReturn(VALID_TERMS);
         when(otpService.isVerified(USER_ID)).thenReturn(true);
         when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(true);
+
+        assertThatThrownBy(() -> accountOpenService.openAccount(USER_ID, request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCOUNT_ALREADY_EXISTS);
+
+        verify(accountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("신한은행과 신한투자증권 계좌가 모두 있으면 ACCOUNT_ALREADY_EXISTS 예외를 던진다")
+    void openAccount_hasBothShinhan_throwsAlreadyExists() {
+        AccountOpenRequest request = mock(AccountOpenRequest.class);
+        when(request.getAgreedTermIds()).thenReturn(VALID_TERMS);
+        when(otpService.isVerified(USER_ID)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndAccountType(USER_ID, Account.TYPE_DON_WORRY)).thenReturn(false);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN)).thenReturn(true);
+        when(accountRepository.existsByUserUserIdAndInstitutionName(USER_ID, Account.INSTITUTION_SHINHAN_INVEST)).thenReturn(true);
 
         assertThatThrownBy(() -> accountOpenService.openAccount(USER_ID, request))
                 .isInstanceOf(BaseException.class)
