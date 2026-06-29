@@ -17,7 +17,7 @@ import java.util.List;
 
 @Tag(name = "영업점", description = "위치 기반 근처 영업점 조회 API")
 @RestController
-@RequestMapping("/api/branches")
+@RequestMapping("/api/user/branches")
 @RequiredArgsConstructor
 public class BranchController {
 
