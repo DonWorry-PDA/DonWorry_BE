@@ -11,6 +11,7 @@ import com.sol.user.monthlysalary.entity.SalaryPlanItem;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +41,7 @@ class SalaryPlanServiceTest {
     @Mock UserRepository userRepository;
     @Mock HoldingRepository holdingRepository;
     @Mock EtfPoolProvider etfPoolProvider;
+    @Mock LifeStabilityService lifeStabilityService;
 
     @InjectMocks SalaryPlanService salaryPlanService;
 
@@ -146,6 +149,18 @@ class SalaryPlanServiceTest {
                 .isInstanceOf(BaseException.class)
                 .extracting(e -> ((BaseException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    void confirmRecalculatesLifeStabilityAfterSavingActivePlan() {
+        User user = mock(User.class);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(etfPoolProvider.getPool()).thenReturn(List.of(etf(101L)));
+        SalaryPlanConfirmRequest request = request(holdingItem(101L, new BigDecimal("1000000")));
+
+        salaryPlanService.confirm(USER_ID, request);
+
+        verify(lifeStabilityService).recalculateFromUserData(USER_ID);
     }
 
     private SalaryPlanItem item(Long productId, String name, String role, BigDecimal target) {

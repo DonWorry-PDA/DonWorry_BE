@@ -10,6 +10,8 @@ import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.insurance.entity.InsurancePolicy;
 import com.sol.user.insurance.repository.InsurancePolicyRepository;
+import com.sol.user.monthlysalary.entity.SalaryPlan;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.stability.calculator.LifeStabilityCalculator;
 import com.sol.user.stability.dto.LifeStabilityCalculatedResult;
@@ -49,6 +51,7 @@ public class LifeStabilityService {
     private final InsurancePolicyRepository insurancePolicyRepository;
     private final CashFlowEventRepository cashFlowEventRepository;
     private final EtfDividendCalculator etfDividendCalculator;
+    private final SalaryPlanRepository salaryPlanRepository;
 
     public LifeStabilityResponse preview() {
         LifeStabilityCalculationInput input = createMockInput();
@@ -140,9 +143,18 @@ public class LifeStabilityService {
         // 배당은 시드 이벤트가 아니라 보유 ETF 기반 단일 출처로 합산한다(#216).
         BigDecimal financialIncome = sumEvents(events, "INCOME", List.of("INTEREST"))
                 .add(etfDividendCalculator.monthlyDividend(userId));
+        SalaryPlan activePlan = salaryPlanRepository
+                .findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
+                .orElse(null);
+        BigDecimal targetMonthlyLivingExpense = goal.getMonthlyTargetLivingCost();
+        if (activePlan != null) {
+            targetMonthlyLivingExpense = activePlan.getTargetMonthlyLivingCost();
+            pensionIncome = activePlan.getExpectedMonthlySalary();
+            financialIncome = BigDecimal.ZERO;
+        }
         BigDecimal essentialExpense = sumEvents(events, "EXPENSE", List.of("MAINTENANCE", "INSURANCE", "CARD"));
         if (essentialExpense.signum() == 0) {
-            essentialExpense = goal.getMonthlyTargetLivingCost();
+            essentialExpense = targetMonthlyLivingExpense;
         }
         BigDecimal liquidAsset = accounts.stream()
                 .filter(account -> "CMA".equals(account.getAccountType()))
@@ -167,7 +179,7 @@ public class LifeStabilityService {
         );
 
         return recalculateAndSave(userId, LifeStabilityCalculationInput.builder()
-                .targetMonthlyLivingExpense(goal.getMonthlyTargetLivingCost())
+                .targetMonthlyLivingExpense(targetMonthlyLivingExpense)
                 .monthlyIncome(pensionIncome)
                 .monthlyFixedExpense(BigDecimal.ZERO)
                 .monthlyEssentialExpense(essentialExpense)

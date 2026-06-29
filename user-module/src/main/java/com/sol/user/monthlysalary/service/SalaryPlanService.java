@@ -11,6 +11,7 @@ import com.sol.user.monthlysalary.entity.SalaryPlanItem;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class SalaryPlanService {
     private final UserRepository userRepository;
     private final HoldingRepository holdingRepository;
     private final EtfPoolProvider etfPoolProvider;
+    private final LifeStabilityService lifeStabilityService;
 
     /**
      * 확정 — 기존 ACTIVE를 SUPERSEDED 처리 후 신규 ACTIVE INSERT(1트랜잭션).
@@ -76,6 +78,7 @@ public class SalaryPlanService {
         }
 
         salaryPlanRepository.save(plan);
+        lifeStabilityService.recalculateFromUserData(userId);
     }
 
     /** 운용현황 — ACTIVE 없으면 빈 응답(최초 진입 분기), 있으면 plan 종목별 진행률 조립. */
