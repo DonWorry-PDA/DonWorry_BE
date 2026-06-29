@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,7 @@ public class PortfolioRecommendationMapper {
 
     private static final String Q3_REFERENCE_LABEL = "안정안 기준 예시";
     private static final int RATIO_SCALE = 2;
+    private static final int MONEY_SCALE = 2;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     public RecommendationResponse toResponse(AllocationResult allocation, CoverageResult coverage,
@@ -133,7 +135,9 @@ public class PortfolioRecommendationMapper {
                 .riskTarget(plan.getRiskTarget())
                 .safeTarget(plan.getSafeTarget())
                 .shortTermBucket(plan.getShortTermBucket())
-                .holdings(netHoldings(plan.getHoldings(), existingEvalByProductId, maxBuyTotal, priceByProductId))
+                .holdings(withMonthlyContributions(
+                        netHoldings(plan.getHoldings(), existingEvalByProductId, maxBuyTotal, priceByProductId),
+                        coverage))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
@@ -215,8 +219,7 @@ public class PortfolioRecommendationMapper {
                     .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
             remaining.put(h.productId(), rem.subtract(h.amount().min(rem)));
             if (isBuyable(net, sharePrice(priceByProductId, h.productId()))) {
-                result.add(new Holding(h.productId(), h.ticker(), h.productName(),
-                        h.role(), h.currency(), h.weight(), net));
+                result.add(h.withAmount(net));
             }
         }
         BigDecimal netTotal = result.stream().map(Holding::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -228,13 +231,64 @@ public class PortfolioRecommendationMapper {
                 BigDecimal s = h.amount().multiply(scale).setScale(RATIO_SCALE, RoundingMode.FLOOR);
                 // 스케일 다운으로 1주 미만이 된 종목도 동일 기준으로 제외(0주 주문 방지)
                 if (isBuyable(s, sharePrice(priceByProductId, h.productId()))) {
-                    scaled.add(new Holding(h.productId(), h.ticker(), h.productName(),
-                            h.role(), h.currency(), h.weight(), s));
+                    scaled.add(h.withAmount(s));
                 }
             }
             return scaled;
         }
         return result;
+    }
+
+    /**
+     * 종목별 월기여(monthlyContribution) 분배(#238) — 버킷 net 운용수입을 버킷 내 비중으로 쪼갠다.
+     *   SAFE → coverage.safeNetIncome, RISK → riskNetIncome, SHORT_TERM(목돈) → 0.
+     * netHoldings에서 일부 종목이 탈락해도 남은 weight 합으로 재정규화 → Σ(버킷) = 버킷 net 유지.
+     * 독립 반올림 누적 오차는 버킷의 마지막 종목이 잔여를 흡수해 합계 정합(Σ = 버킷 net)을 보장한다.
+     * 버킷 net이 0이거나 버킷 내 weight 합이 0이면 분배 불가라 0(원/월)으로 둔다(null 없음).
+     *
+     * <p>Σ monthlyContribution = safeNet + riskNet = monthlyIncome − 국민연금 − 연금저축(사적연금).
+     * 운용현황 헤드라인(expectedMonthlySalary = 총 monthlyIncome)과의 차액은 국민연금·연금저축(종목 비귀속)이다.
+     */
+    private List<Holding> withMonthlyContributions(List<Holding> holdings, PlanCoverage coverage) {
+        Map<BucketRole, BigDecimal> bucketNet = new EnumMap<>(BucketRole.class);
+        bucketNet.put(BucketRole.SAFE, nonNull(coverage.getSafeNetIncome()));
+        bucketNet.put(BucketRole.RISK, nonNull(coverage.getRiskNetIncome()));
+        bucketNet.put(BucketRole.SHORT_TERM, BigDecimal.ZERO);
+
+        // 버킷별 weight 합(재정규화 분모) + 버킷 마지막 종목 인덱스(잔여 흡수 대상)
+        Map<BucketRole, BigDecimal> weightSum = new EnumMap<>(BucketRole.class);
+        Map<BucketRole, Integer> lastIndex = new EnumMap<>(BucketRole.class);
+        for (int i = 0; i < holdings.size(); i++) {
+            Holding h = holdings.get(i);
+            weightSum.merge(h.role(), nonNull(h.weight()), BigDecimal::add);
+            lastIndex.put(h.role(), i);
+        }
+
+        Map<BucketRole, BigDecimal> allocated = new EnumMap<>(BucketRole.class);
+        List<Holding> result = new ArrayList<>(holdings.size());
+        for (int i = 0; i < holdings.size(); i++) {
+            Holding h = holdings.get(i);
+            BigDecimal net = bucketNet.get(h.role());
+            BigDecimal sumW = weightSum.get(h.role());
+            BigDecimal contribution;
+            if (net.signum() == 0 || sumW == null || sumW.signum() <= 0) {
+                contribution = BigDecimal.ZERO.setScale(MONEY_SCALE);
+            } else if (lastIndex.get(h.role()) == i) {
+                // 버킷 마지막 종목 — 잔여 흡수로 Σ = 버킷 net 정확
+                contribution = net.subtract(allocated.getOrDefault(h.role(), BigDecimal.ZERO))
+                        .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            } else {
+                contribution = net.multiply(nonNull(h.weight()))
+                        .divide(sumW, MONEY_SCALE, RoundingMode.HALF_UP);
+                allocated.merge(h.role(), contribution, BigDecimal::add);
+            }
+            result.add(h.withMonthlyContribution(contribution));
+        }
+        return result;
+    }
+
+    private BigDecimal nonNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     /** 현재가 조회(null 키 안전). priceByProductId가 null 키를 막는 불변맵일 수 있어 productId null이면 null 반환. */

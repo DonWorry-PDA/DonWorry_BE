@@ -327,6 +327,62 @@ class AlphaCoverageCalculatorTest {
         return calculator.calculate(input).getPlanCoverages().get(0).getMonthlyIncome();
     }
 
+    // ── #238 버킷별 net 운용수입 노출 (종목 monthlyContribution 분배 재료) ──────────
+
+    @Test
+    void 버킷net운용수입_합은_국민연금_연금저축_제외한_월수입과_정합한다() {
+        // 국민연금·연금저축을 0으로 두면 월수입은 전부 운용분(SAFE+RISK)이라야 한다 → 종목 귀속 합과 정합.
+        PlanAllocation mixed = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.valueOf(100_000_000))
+                .surplusSafeAmount(BigDecimal.valueOf(100_000_000))
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("3.0000"))
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .monthlyNationalPension(BigDecimal.ZERO)
+                .pensionSaving(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.valueOf(50_000_000))
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL).plans(List.of(mixed)).build())
+                .build();
+
+        PlanCoverage pc = calculator.calculate(input).getPlanCoverages().get(0);
+
+        assertThat(pc.getSafeNetIncome()).isNotNull().isPositive();
+        assertThat(pc.getRiskNetIncome()).isNotNull().isPositive();
+        // 국민연금·연금저축 0 → 월수입 = SAFE net + RISK net (종목 monthlyContribution 합과 동일 기준)
+        assertThat(pc.getSafeNetIncome().add(pc.getRiskNetIncome()))
+                .isEqualByComparingTo(pc.getMonthlyIncome());
+    }
+
+    @Test
+    void floor_이자수입은_SAFE_버킷net에_귀속된다() {
+        // 바닥자산만 남기면 월수입 전액이 SAFE net이어야(floor 포함), RISK net은 0.
+        PlanAllocation onlyFloor = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .surplusRiskAmount(BigDecimal.ZERO)
+                .surplusSafeAmount(BigDecimal.ZERO)
+                .shortTermBucket(BigDecimal.ZERO)
+                .planDividendRate(new BigDecimal("3.0000"))
+                .holdings(List.of())
+                .build();
+        CoverageInput input = baseBuilder()
+                .monthlyNationalPension(BigDecimal.ZERO)
+                .pensionSaving(BigDecimal.ZERO)
+                .floorAsset(BigDecimal.valueOf(120_000_000))
+                .allocation(AllocationResult.builder()
+                        .track(RecommendationTrack.NORMAL).plans(List.of(onlyFloor)).build())
+                .build();
+
+        PlanCoverage pc = calculator.calculate(input).getPlanCoverages().get(0);
+
+        // 바닥 이자 net = 296,100 (1.2억×3.5%/12×(1−0.154)) → 전액 SAFE net 귀속
+        assertThat(pc.getSafeNetIncome()).isEqualByComparingTo("296100");
+        assertThat(pc.getRiskNetIncome()).isEqualByComparingTo("0");
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private CoverageInput.CoverageInputBuilder baseBuilder() {

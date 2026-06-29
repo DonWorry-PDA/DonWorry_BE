@@ -103,6 +103,8 @@ public class AlphaCoverageCalculator {
                 // 단기버킷은 "곧 빼 쓸 일회성 목돈" — 월수령 흐름도 상속도 아니라 별도 항으로 그대로 통과시킨다.
                 // 인출 시점이 정해지지 않아 보유 중 이자는 과대표시 위험이 있으므로 원금만 노출(이자 무시).
                 .shortTermLumpSum(money(shortTermLumpSum(plan)))
+                .safeNetIncome(money(c.safeNetIncome()))
+                .riskNetIncome(money(c.riskNetIncome()))
                 .build();
     }
 
@@ -167,12 +169,17 @@ public class AlphaCoverageCalculator {
         // 전부 net 실수령. yield(이자·배당)는 전액 과세, 소진 annuity는 원금회수분 비과세·수익분만 과세,
         // 연금저축은 과세이연이라 yield·annuity 전액 연금소득세.
         //   #192: 위험 소진분 gain은 배당분(도미사일 무관 15.4%)/자본차익분(국내주식형 비과세)으로 분해 과세.
-        BigDecimal total = netNationalPension(input.monthlyNationalPension())
-                .add(netFinancial(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE)))
+        // 버킷별 net 운용수입 — 종목별 monthlyContribution 분배 재료(#238). floor yield는 SAFE 종목 원금에
+        //   floor가 섞여 있어 SAFE에 귀속(floor 포함). 국민연금·연금저축은 종목 아니므로 종목 귀속에서 제외.
+        BigDecimal safeNet = netFinancial(monthlyYield(input.floorAsset(), PortfolioConstants.SAFE_RATE))
                 .add(netFinancial(monthlyYield(safePreserved, PortfolioConstants.SAFE_RATE)))
-                .add(netAnnuityFinancial(safeDeplete, PortfolioConstants.SAFE_RATE, years))
-                .add(netFinancial(monthlyYield(riskPreserved, dividendFrac)))
+                .add(netAnnuityFinancial(safeDeplete, PortfolioConstants.SAFE_RATE, years));
+        BigDecimal riskNet = netFinancial(monthlyYield(riskPreserved, dividendFrac))
                 .add(netRiskAnnuity(riskDeplete, dividendFrac, capGainTaxableWeight(plan), years));
+
+        BigDecimal total = netNationalPension(input.monthlyNationalPension())
+                .add(safeNet)
+                .add(riskNet);
         if (canWithdrawPension) {
             total = total
                     .add(netPrivatePension(monthlyYield(pensionPreserved, PortfolioConstants.PENSION_SAVING_RATE), input.age()))
@@ -191,7 +198,7 @@ public class AlphaCoverageCalculator {
         BigDecimal riskInheritance = compound(riskPreserved, realCapitalGainRate, years);
         BigDecimal inheritance = riskInheritance.add(safePreserved).add(pensionPreserved);
 
-        return new Computed(sustainable, total, inheritance);
+        return new Computed(sustainable, total, inheritance, safeNet, riskNet);
     }
 
     /** 원금을 연 성장률로 N년 복리 성장시킨 값(상속가치용). rate≤0이면 원금 그대로. */
@@ -363,6 +370,7 @@ public class AlphaCoverageCalculator {
         }
     }
 
-    private record Computed(BigDecimal sustainableIncome, BigDecimal totalIncome, BigDecimal inheritance) {
+    private record Computed(BigDecimal sustainableIncome, BigDecimal totalIncome, BigDecimal inheritance,
+                            BigDecimal safeNetIncome, BigDecimal riskNetIncome) {
     }
 }

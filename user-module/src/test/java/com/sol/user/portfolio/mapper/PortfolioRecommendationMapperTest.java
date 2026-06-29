@@ -128,9 +128,9 @@ class PortfolioRecommendationMapperTest {
     @Test
     void 순매수액이_1주_값보다_작은_종목은_매수목록에서_제외된다() {
         // ETF-A: 순매수 300만 ≥ 1주 5만 → 유지 / ETF-B: 순매수 3만 < 1주 50,130 → 0주라 제외(#186)
-        Holding buyable = new Holding(1L, "433330", "ETF-A", BucketRole.RISK,
+        Holding buyable = Holding.of(1L, "433330", "ETF-A", BucketRole.RISK,
                 CurrencyExposure.UNHEDGED, new BigDecimal("1.0"), won(3_000_000));
-        Holding tooSmall = new Holding(2L, "497880", "CD금리MMF", BucketRole.SHORT_TERM,
+        Holding tooSmall = Holding.of(2L, "497880", "CD금리MMF", BucketRole.SHORT_TERM,
                 CurrencyExposure.UNHEDGED, new BigDecimal("1.0"), won(30_000));
         PlanAllocation plan = PlanAllocation.builder()
                 .type(PlanType.LIQUIDITY)
@@ -153,6 +153,63 @@ class PortfolioRecommendationMapperTest {
         assertThat(response.getPlans().get(0).getHoldings())
                 .extracting(Holding::productId)
                 .containsExactly(1L); // ETF-B(2L)는 0주라 제외
+    }
+
+    @Test
+    void 종목별_월기여는_버킷net운용수입을_버킷내_비중으로_분배하고_단기는_0이다() {
+        // SAFE net 10만을 0.6/0.4로, RISK net 5만을 0.7/0.3로 분배. SHORT_TERM(목돈)은 0.
+        List<Holding> holdings = List.of(
+                Holding.of(10L, "SAFE1", "안전A", BucketRole.SAFE, CurrencyExposure.UNHEDGED, new BigDecimal("0.60"), won(6_000_000)),
+                Holding.of(11L, "SAFE2", "안전B", BucketRole.SAFE, CurrencyExposure.UNHEDGED, new BigDecimal("0.40"), won(4_000_000)),
+                Holding.of(20L, "RISK1", "위험A", BucketRole.RISK, CurrencyExposure.UNHEDGED, new BigDecimal("0.70"), won(7_000_000)),
+                Holding.of(21L, "RISK2", "위험B", BucketRole.RISK, CurrencyExposure.UNHEDGED, new BigDecimal("0.30"), won(3_000_000)),
+                Holding.of(30L, "CASH", "단기", BucketRole.SHORT_TERM, CurrencyExposure.UNHEDGED, new BigDecimal("1.00"), won(1_000_000)));
+        PlanAllocation plan = PlanAllocation.builder()
+                .type(PlanType.STABLE)
+                .riskTarget(won(10_000_000))
+                .safeTarget(won(10_000_000))
+                .surplusRiskAmount(won(10_000_000))
+                .surplusSafeAmount(won(10_000_000))
+                .shortTermBucket(won(1_000_000))
+                .planDividendRate(new BigDecimal("3.00"))
+                .holdings(holdings)
+                .build();
+        AllocationResult allocation = allocation(RecommendationTrack.NORMAL, List.of(plan));
+        CoverageResult coverage = coverage(RecommendationTrack.NORMAL, GuidanceBand.TRADEOFF, List.of(
+                planCoverage(PlanType.STABLE, new BigDecimal("80.00"), won(100_000), won(50_000))));
+
+        RecommendationResponse response = mapper.toResponse(allocation, coverage, CURRENT_CASH_FLOW,
+                TARGET_LIVING_COST, Map.of(), NO_BROKERAGE_BALANCE, UNCONSTRAINED_BUY, Map.of());
+
+        List<Holding> result = response.getPlans().get(0).getHoldings();
+        assertThat(result).extracting(Holding::monthlyContribution).doesNotContainNull();
+
+        BigDecimal safeSum = bucketContribution(result, BucketRole.SAFE);
+        BigDecimal riskSum = bucketContribution(result, BucketRole.RISK);
+        BigDecimal shortSum = bucketContribution(result, BucketRole.SHORT_TERM);
+        // Σ = 버킷 net 정합, 단기 0
+        assertThat(safeSum).isEqualByComparingTo(won(100_000));
+        assertThat(riskSum).isEqualByComparingTo(won(50_000));
+        assertThat(shortSum).isEqualByComparingTo("0");
+        // 비중 분배 확인 (마지막 종목 잔여흡수)
+        assertThat(contributionOf(result, 10L)).isEqualByComparingTo("60000");
+        assertThat(contributionOf(result, 11L)).isEqualByComparingTo("40000");
+        assertThat(contributionOf(result, 20L)).isEqualByComparingTo("35000");
+        assertThat(contributionOf(result, 21L)).isEqualByComparingTo("15000");
+    }
+
+    private BigDecimal bucketContribution(List<Holding> holdings, BucketRole role) {
+        return holdings.stream()
+                .filter(h -> h.role() == role)
+                .map(Holding::monthlyContribution)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal contributionOf(List<Holding> holdings, long productId) {
+        return holdings.stream()
+                .filter(h -> h.productId() == productId)
+                .findFirst().orElseThrow()
+                .monthlyContribution();
     }
 
     // ── helpers ──
@@ -193,12 +250,23 @@ class PortfolioRecommendationMapperTest {
                 .build();
     }
 
+    private PlanCoverage planCoverage(PlanType type, BigDecimal rate, BigDecimal safeNet, BigDecimal riskNet) {
+        return PlanCoverage.builder()
+                .type(type)
+                .monthlyIncome(won(2_000_000))
+                .alphaCoverageRate(rate)
+                .inheritanceAmount(won(0))
+                .safeNetIncome(safeNet)
+                .riskNetIncome(riskNet)
+                .build();
+    }
+
     private Holding holding(String name, long amount) {
         return holding(name, BucketRole.RISK, amount);
     }
 
     private Holding holding(String name, BucketRole role, long amount) {
-        return new Holding(null, "000000", name, role, CurrencyExposure.UNHEDGED,
+        return Holding.of(null, "000000", name, role, CurrencyExposure.UNHEDGED,
                 new BigDecimal("1.0"), won(amount));
     }
 
