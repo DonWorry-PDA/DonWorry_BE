@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -21,6 +22,8 @@ public class StockRealtimeCache {
         redisTemplate.opsForHash().put(key, "change", change.trim());
         redisTemplate.opsForHash().put(key, "drate", drate.trim());
         redisTemplate.opsForHash().put(key, "sign", sign != null ? sign.trim() : "3");
+        // 마지막 수신 후 8시간 내 미갱신 시 만료 → 당일 종가 스케줄러(15:35) 이후 자정 전에 소멸해 daily_price 폴백 사용
+        redisTemplate.expire(key, Duration.ofHours(8));
     }
 
     public Map<String, String> getRaw(String ticker) {

@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,10 @@ public class StockPriceService {
 
         Map<String, String> raw = stockRealtimeCache.getRaw(stock.getTickerCode());
         if (!raw.isEmpty() && !isBlank(raw.get("price"))) {
-            return Long.parseLong(raw.get("price").trim());
+            try {
+                return Long.parseLong(raw.get("price").trim());
+            } catch (NumberFormatException ignored) {
+            }
         }
 
         return dailyPriceRepository.findTopByProductProductIdOrderByPriceDateDesc(productId)
@@ -45,7 +49,7 @@ public class StockPriceService {
                 .orElseThrow(() -> new BaseException(ErrorCode.PRICE_UNAVAILABLE));
     }
 
-    /** productId 목록 → 현재가 Map. Redis 캐시 우선, 없으면 daily_price 폴백. 조회 실패 종목은 0. */
+    /** productId 목록 → 현재가 Map. Redis 캐시 우선, miss 묶음 후 daily_price 배치 폴백. 조회 실패 종목은 0. */
     public Map<Long, Long> getBatchPrices(List<Long> productIds) {
         if (productIds == null || productIds.isEmpty()) return Map.of();
 
@@ -57,34 +61,42 @@ public class StockPriceService {
                 ));
 
         Map<Long, Long> result = new LinkedHashMap<>();
+        List<Long> cacheMisses = new ArrayList<>();
+
         for (Long productId : productIds) {
             StockDetail detail = byProductId.get(productId);
             if (detail == null) {
                 result.put(productId, 0L);
                 continue;
             }
-            result.put(productId, resolvePrice(detail, productId));
+            Map<String, String> raw = stockRealtimeCache.getRaw(detail.getTickerCode());
+            if (!raw.isEmpty() && !isBlank(raw.get("price"))) {
+                try {
+                    result.put(productId, Long.parseLong(raw.get("price").trim()));
+                    continue;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            cacheMisses.add(productId);
         }
-        return result;
-    }
 
-    private long resolvePrice(StockDetail detail, Long productId) {
-        Map<String, String> raw = stockRealtimeCache.getRaw(detail.getTickerCode());
-        if (!raw.isEmpty() && !isBlank(raw.get("price"))) {
-            try {
-                return Long.parseLong(raw.get("price").trim());
-            } catch (NumberFormatException ignored) {
+        if (!cacheMisses.isEmpty()) {
+            Map<Long, Long> fallback = dailyPriceRepository.findLatestByProductIds(cacheMisses).stream()
+                    .collect(Collectors.toMap(
+                            dp -> dp.getProduct().getProductId(),
+                            dp -> {
+                                try {
+                                    return dp.getClosingPrice().longValueExact();
+                                } catch (ArithmeticException e) {
+                                    return 0L;
+                                }
+                            }
+                    ));
+            for (Long productId : cacheMisses) {
+                result.put(productId, fallback.getOrDefault(productId, 0L));
             }
         }
-        return dailyPriceRepository.findTopByProductProductIdOrderByPriceDateDesc(productId)
-                .map(dp -> {
-                    try {
-                        return dp.getClosingPrice().longValueExact();
-                    } catch (ArithmeticException e) {
-                        return 0L;
-                    }
-                })
-                .orElse(0L);
+        return result;
     }
 
     private boolean isBlank(String value) {

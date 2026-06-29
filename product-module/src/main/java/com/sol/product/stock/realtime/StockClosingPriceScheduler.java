@@ -1,14 +1,11 @@
 package com.sol.product.stock.realtime;
 
-import com.sol.product.dailyprice.entity.DailyPrice;
-import com.sol.product.dailyprice.repository.DailyPriceRepository;
 import com.sol.product.stock.entity.StockDetail;
 import com.sol.product.stock.repository.StockDetailRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,10 +24,9 @@ public class StockClosingPriceScheduler {
     private final StockTickerRegistry stockTickerRegistry;
     private final StockDetailRepository stockDetailRepository;
     private final StockRealtimeCache stockRealtimeCache;
-    private final DailyPriceRepository dailyPriceRepository;
+    private final ClosingPriceSaver closingPriceSaver;
 
     @Scheduled(cron = "0 35 15 * * MON-FRI", zone = "Asia/Seoul")
-    @Transactional
     public void saveClosingPrices() {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
         log.info("주식 종가 저장 시작: {}", today);
@@ -56,15 +52,12 @@ public class StockClosingPriceScheduler {
             }
 
             try {
-                Long productId = detail.getProduct().getProductId();
-                dailyPriceRepository.deleteAllByProductProductId(productId);
-                dailyPriceRepository.save(DailyPrice.builder()
-                        .product(detail.getProduct())
-                        .priceDate(today)
-                        .closingPrice(new BigDecimal(price))
-                        .priceChange(new BigDecimal(change))
-                        .changeRate(new BigDecimal(drate))
-                        .build());
+                // DB 변경 전 파싱 먼저 — 파싱 실패 시 delete 없이 catch로 빠짐
+                BigDecimal closingPrice = new BigDecimal(price);
+                BigDecimal priceChange = new BigDecimal(change);
+                BigDecimal changeRate = new BigDecimal(drate);
+                // REQUIRES_NEW: ticker 단위 트랜잭션 격리 — 한 종목 실패가 다른 종목에 영향 없음
+                closingPriceSaver.save(detail, today, closingPrice, priceChange, changeRate);
                 saved++;
             } catch (Exception e) {
                 log.warn("주식 종가 저장 실패 [{}]: {}", ticker, e.getMessage());

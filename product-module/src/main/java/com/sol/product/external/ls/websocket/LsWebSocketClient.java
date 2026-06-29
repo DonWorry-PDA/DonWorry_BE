@@ -184,7 +184,11 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                         etfPriceWebSocketHandler.broadcast(pricePayload);
                     }
                 } else if (stockTickerRegistry.contains(ticker)) {
-                    stockRealtimeCache.save(ticker, price, change, drate, sign);
+                    if (isBlank(price) || isBlank(change) || isBlank(drate)) {
+                        log.debug("개별주 시세 필드 누락 - 저장 건너뜀 [{}]", ticker);
+                    } else {
+                        stockRealtimeCache.save(ticker, price, change, drate, sign);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -198,5 +202,9 @@ public class LsWebSocketClient extends TextWebSocketHandler {
         this.session = null;
         lsTokenService.clearToken();
         scheduleReconnect();
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

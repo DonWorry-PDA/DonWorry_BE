@@ -4,6 +4,7 @@ import com.sol.product.stock.repository.StockDetailRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -37,5 +38,13 @@ public class StockTickerRegistry {
 
     public Set<String> getAll() {
         return tickerSet;
+    }
+
+    @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
+    public void reloadIfEmpty() {
+        if (tickerSet.isEmpty()) {
+            log.info("주식 티커 미적재 상태 - 재시도");
+            load();
+        }
     }
 }
