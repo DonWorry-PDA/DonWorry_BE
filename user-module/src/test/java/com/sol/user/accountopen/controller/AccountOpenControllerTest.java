@@ -7,6 +7,7 @@ import com.sol.user.accountopen.dto.AccountOpenResponse;
 import com.sol.user.accountopen.dto.IdentityResponse;
 import com.sol.user.accountopen.service.AccountOpenService;
 import com.sol.user.accountopen.service.OtpService;
+import com.sol.user.accountopen.service.ShinhanCertService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,9 @@ class AccountOpenControllerTest {
 
     @Mock
     private OtpService otpService;
+
+    @Mock
+    private ShinhanCertService shinhanCertService;
 
     @InjectMocks
     private AccountOpenController accountOpenController;
@@ -184,6 +188,19 @@ class AccountOpenControllerTest {
                         .content("{\"phone\":\"010-1234-5678\",\"otp\":\"123456\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OTP_EXPIRED"));
+    }
+
+    @Test
+    @DisplayName("신한인증서 인증 완료 요청 시 200을 반환한다")
+    void verifyShinhanCert_ok() throws Exception {
+        doNothing().when(shinhanCertService).verify(1L);
+
+        mockMvc.perform(post("/api/user/account-open/shinhan-cert/verify")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+        verify(shinhanCertService).verify(1L);
     }
 
     // ── 계좌 개설 ────────────────────────────────────────────────────────────────

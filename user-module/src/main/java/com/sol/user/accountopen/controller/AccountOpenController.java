@@ -4,6 +4,7 @@ import com.sol.common.response.ApiResponse;
 import com.sol.user.accountopen.dto.*;
 import com.sol.user.accountopen.service.AccountOpenService;
 import com.sol.user.accountopen.service.OtpService;
+import com.sol.user.accountopen.service.ShinhanCertService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ public class AccountOpenController {
 
     private final AccountOpenService accountOpenService;
     private final OtpService otpService;
+    private final ShinhanCertService shinhanCertService;
 
     @Operation(summary = "약관 동의 제출")
     @PostMapping("/terms")
@@ -51,6 +53,14 @@ public class AccountOpenController {
             @Valid @RequestBody OtpVerifyRequest request) {
         otpService.verifyOtp(request.getPhone(), request.getOtp(), userId);
         return ResponseEntity.ok(ApiResponse.ok(null, "인증이 완료되었습니다."));
+    }
+
+    @Operation(summary = "신한인증서 인증 완료 처리", description = "계좌개설 시연용 신한인증서 mock 인증 완료 상태를 저장합니다.")
+    @PostMapping("/shinhan-cert/verify")
+    public ResponseEntity<ApiResponse<Void>> verifyShinhanCert(
+            @RequestAttribute("userId") Long userId) {
+        shinhanCertService.verify(userId);
+        return ResponseEntity.ok(ApiResponse.ok(null, "신한인증서 인증이 완료되었습니다."));
     }
 
     @Operation(summary = "계좌 개설")
