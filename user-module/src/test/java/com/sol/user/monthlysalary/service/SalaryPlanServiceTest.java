@@ -49,11 +49,34 @@ class SalaryPlanServiceTest {
     void 운용현황_ACTIVE_없으면_빈응답_최초진입_분기() {
         when(salaryPlanRepository.findWithItemsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.empty());
+        when(salaryPlanRepository.findTopByUserUserIdOrderByCreatedAtDesc(USER_ID))
+                .thenReturn(Optional.empty());
 
         SalaryPlanStatusResponse response = salaryPlanService.getStatus(USER_ID);
 
         assertThat(response.hasPlan()).isFalse();
         assertThat(response.holdings()).isNull();
+    }
+
+    @Test
+    void getStatusReturnsLatestPlanWhenActivePlanDoesNotExist() {
+        SalaryPlan plan = SalaryPlan.active(mock(User.class), "STABLE",
+                new BigDecimal("1680000"), new BigDecimal("84.00"), new BigDecimal("2000000"));
+        plan.addItem(item(101L, "SOL 국고채", "SAFE", new BigDecimal("10000000")));
+        plan.supersede();
+        when(salaryPlanRepository.findWithItemsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.empty());
+        when(salaryPlanRepository.findTopByUserUserIdOrderByCreatedAtDesc(USER_ID))
+                .thenReturn(Optional.of(plan));
+        when(holdingRepository.findHoldingsWithAccountTypeByUserId(USER_ID))
+                .thenReturn(List.of());
+
+        SalaryPlanStatusResponse response = salaryPlanService.getStatus(USER_ID);
+
+        assertThat(response.hasPlan()).isTrue();
+        assertThat(response.displayName()).isEqualTo("안정 월급형");
+        assertThat(response.holdings()).hasSize(1);
+        assertThat(response.totalCurrentEval()).isEqualByComparingTo("0");
     }
 
     @Test

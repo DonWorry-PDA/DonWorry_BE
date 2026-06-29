@@ -250,6 +250,7 @@ class AssetHubServiceTest {
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
         assertThat(response.menus().salaryMaking().hasActivePlan()).isTrue();
+        assertThat(response.menus().salaryMaking().hasPlanHistory()).isTrue();
         assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("3280000");
         assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("3000000");
         assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(109);
@@ -266,9 +267,27 @@ class AssetHubServiceTest {
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
         assertThat(response.menus().salaryMaking().hasActivePlan()).isFalse();
+        assertThat(response.menus().salaryMaking().hasPlanHistory()).isFalse();
         assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("1300000");
         assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("2200000");
         assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(59);
+    }
+
+    @Test
+    void salaryPlanHistoryExistsWithoutActivePlanKeepsCurrentCashflowAndPlanHistoryFlag() {
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        when(salaryPlanRepository.existsByUserUserId(USER_ID)).thenReturn(true);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.menus().salaryMaking().hasActivePlan()).isFalse();
+        assertThat(response.menus().salaryMaking().hasPlanHistory()).isTrue();
+        assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("1300000");
+        assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("2200000");
+        assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(59);
+        assertThat(response.menus().lifeStability().coverageRate()).isEqualTo(59);
     }
 
     @Test

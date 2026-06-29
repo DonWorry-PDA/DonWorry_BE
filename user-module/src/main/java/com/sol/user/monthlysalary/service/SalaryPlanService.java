@@ -81,11 +81,12 @@ public class SalaryPlanService {
         lifeStabilityService.recalculateFromUserDataIfReady(userId);
     }
 
-    /** 운용현황 — ACTIVE 없으면 빈 응답(최초 진입 분기), 있으면 plan 종목별 진행률 조립. */
+    /** 운용현황 — ACTIVE plan을 우선 조회하고, 없으면 최신 plan 이력으로 종목별 진행률을 조립한다. */
     @Transactional(readOnly = true)
     public SalaryPlanStatusResponse getStatus(Long userId) {
         SalaryPlan plan = salaryPlanRepository
                 .findWithItemsByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
+                .or(() -> salaryPlanRepository.findTopByUserUserIdOrderByCreatedAtDesc(userId))
                 .orElse(null);
         if (plan == null) {
             return SalaryPlanStatusResponse.empty();
