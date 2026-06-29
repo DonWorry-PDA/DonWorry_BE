@@ -34,8 +34,9 @@ class HoldingRepositoryCalendarTest {
     @Test
     void findsLatestDividendInputsAndAggregatesUsersQuantityAcrossAccounts() {
         jdbcTemplate.update(
-                "INSERT INTO users (user_id, onboarding_completed) VALUES (?, ?), (?, ?)",
-                9001L, false, 9002L, false
+                "INSERT INTO users (user_id, onboarding_completed, third_party_agreed, marketing_agreed) "
+                        + "VALUES (?, ?, ?, ?), (?, ?, ?, ?)",
+                9001L, false, false, false, 9002L, false, false, false
         );
         jdbcTemplate.update(
                 "INSERT INTO account (account_id, user_id) VALUES (?, ?), (?, ?), (?, ?)",
