@@ -1,6 +1,7 @@
 package com.sol.user.notification.controller;
 
 import com.sol.common.response.ApiResponse;
+import com.sol.user.notification.dto.MarketOpenReminderResponse;
 import com.sol.user.notification.dto.NotificationResponse;
 import com.sol.user.notification.dto.NotificationSettingResponse;
 import com.sol.user.notification.dto.NotificationSettingToggleRequest;
@@ -77,5 +78,12 @@ public class NotificationController {
             @RequestAttribute("userId") Long userId) {
         notificationSettingService.toggleSetting(userId, id, request.enabled());
         return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @Operation(summary = "장 시작 알림 구독", description = "다음 장 시작 시 월급 만들기 알림을 1회 수신한다")
+    @PostMapping("/market-open-reminder")
+    public ResponseEntity<ApiResponse<MarketOpenReminderResponse>> subscribeMarketOpenReminder(
+            @RequestAttribute("userId") Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(notificationSettingService.subscribeMarketOpenReminder(userId)));
     }
 }
