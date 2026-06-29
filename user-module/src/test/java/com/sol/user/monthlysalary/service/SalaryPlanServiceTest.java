@@ -160,7 +160,7 @@ class SalaryPlanServiceTest {
 
         salaryPlanService.confirm(USER_ID, request);
 
-        verify(lifeStabilityService).recalculateFromUserData(USER_ID);
+        verify(lifeStabilityService).recalculateFromUserDataIfReady(USER_ID);
     }
 
     private SalaryPlanItem item(Long productId, String name, String role, BigDecimal target) {

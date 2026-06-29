@@ -78,7 +78,7 @@ public class SalaryPlanService {
         }
 
         salaryPlanRepository.save(plan);
-        lifeStabilityService.recalculateFromUserData(userId);
+        lifeStabilityService.recalculateFromUserDataIfReady(userId);
     }
 
     /** 운용현황 — ACTIVE 없으면 빈 응답(최초 진입 분기), 있으면 plan 종목별 진행률 조립. */
