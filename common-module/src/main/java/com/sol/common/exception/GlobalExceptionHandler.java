@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
+
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -47,6 +49,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @ExceptionHandler(IOException.class)
+    public void handleIOException(IOException e) {
+        // SSE 등 스트리밍 응답에서 클라이언트가 연결을 끊으면 Broken pipe가 발생한다.
+        // 이미 파이프가 끊겼으므로 응답을 쓰지 않는다.
+        if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
+            log.debug("Client disconnected (broken pipe)");
+            return;
+        }
+        log.error("[IO Error]", e);
     }
 
     @ExceptionHandler(Exception.class)
