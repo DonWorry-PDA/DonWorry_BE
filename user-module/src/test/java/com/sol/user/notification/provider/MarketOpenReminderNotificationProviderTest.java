@@ -15,8 +15,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,18 +50,18 @@ class MarketOpenReminderNotificationProviderTest {
         assertThat(targets.get(0).title()).isEqualTo("장 시작 알림");
         assertThat(targets.get(0).linkTarget()).isEqualTo("/monthly-salary");
         assertThat(targets.get(1).userId()).isEqualTo(2L);
-        verify(notificationSettingRepository).clearAllMarketOpenReminders();
+        verify(notificationSettingRepository).clearMarketOpenRemindersByUserIds(List.of(1L, 2L));
     }
 
     @Test
-    @DisplayName("구독자가 없으면 빈 리스트를 반환하고 플래그 초기화를 호출한다")
+    @DisplayName("구독자가 없으면 빈 리스트를 반환하고 플래그 초기화를 호출하지 않는다")
     void returnsEmptyWhenNoSubscribers() {
         given(notificationSettingRepository.findByMarketOpenReminderTrue()).willReturn(List.of());
 
         List<NotificationTarget> targets = provider.findTargets();
 
         assertThat(targets).isEmpty();
-        verify(notificationSettingRepository).clearAllMarketOpenReminders();
+        verify(notificationSettingRepository, never()).clearMarketOpenRemindersByUserIds(anyList());
     }
 
     private NotificationSetting settingWithReminder(Long userId) {

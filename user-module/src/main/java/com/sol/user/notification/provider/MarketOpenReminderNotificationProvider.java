@@ -25,7 +25,13 @@ public class MarketOpenReminderNotificationProvider implements NotificationProvi
     @Transactional
     public List<NotificationTarget> findTargets() {
         List<NotificationSetting> subscribers = notificationSettingRepository.findByMarketOpenReminderTrue();
-        notificationSettingRepository.clearAllMarketOpenReminders();
+        if (subscribers.isEmpty()) {
+            return List.of();
+        }
+        List<Long> userIds = subscribers.stream()
+                .map(s -> s.getUser().getUserId())
+                .toList();
+        notificationSettingRepository.clearMarketOpenRemindersByUserIds(userIds);
         return subscribers.stream()
                 .map(s -> new NotificationTarget(
                         s.getUser().getUserId(),
