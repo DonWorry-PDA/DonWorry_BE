@@ -6,6 +6,9 @@ import com.sol.user.mypage.dto.MypageResponse;
 import com.sol.user.mypage.dto.MypageUpdateRequest;
 import com.sol.user.mypage.dto.UserProfileResponse;
 import com.sol.user.mypage.dto.UserProfileUpdateRequest;
+import com.sol.user.monthlysalary.entity.SalaryPlan;
+import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
+import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
@@ -23,6 +26,8 @@ public class MypageService {
 
     private final UserRepository userRepository;
     private final UserGoalRepository userGoalRepository;
+    private final SalaryPlanRepository salaryPlanRepository;
+    private final LifeStabilityService lifeStabilityService;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(Long userId) {
@@ -46,6 +51,7 @@ public class MypageService {
         user.updateProfile(request.age(), request.retiredValue(), request.nationalPensionReceivingValue(), now);
 
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId).orElse(null);
+        boolean targetChanged = isTargetChanged(monthlyTargetKrw, goal);
         if (monthlyTargetKrw != null) {
             if (goal == null) {
                 goal = userGoalRepository.save(new UserGoal(user, monthlyTargetKrw, null, now));
@@ -53,6 +59,7 @@ public class MypageService {
                 goal.updateTargetLivingCost(monthlyTargetKrw, now);
             }
         }
+        handleTargetLivingCostChanged(userId, targetChanged);
 
         return UserProfileResponse.of(user, goal);
     }
@@ -74,8 +81,10 @@ public class MypageService {
         if (monthlyTargetLivingCost != null) {
             UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
                     .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+            boolean targetChanged = isTargetChanged(monthlyTargetLivingCost, goal);
             goal.updateTargetLivingCost(monthlyTargetLivingCost, now);
             currentTargetLivingCost = goal.getMonthlyTargetLivingCost();
+            handleTargetLivingCostChanged(userId, targetChanged);
         }
 
         return new MypageResponse(
@@ -85,5 +94,24 @@ public class MypageService {
                 user.getNationalPensionReceiving(),
                 currentTargetLivingCost
         );
+    }
+
+    private boolean isTargetChanged(BigDecimal requestedTarget, UserGoal goal) {
+        if (requestedTarget == null) {
+            return false;
+        }
+        if (goal == null || goal.getMonthlyTargetLivingCost() == null) {
+            return true;
+        }
+        return requestedTarget.compareTo(goal.getMonthlyTargetLivingCost()) != 0;
+    }
+
+    private void handleTargetLivingCostChanged(Long userId, boolean targetChanged) {
+        if (!targetChanged) {
+            return;
+        }
+        salaryPlanRepository.findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
+                .ifPresent(SalaryPlan::supersede);
+        lifeStabilityService.recalculateFromUserDataIfReady(userId);
     }
 }
