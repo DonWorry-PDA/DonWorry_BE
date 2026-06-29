@@ -89,14 +89,15 @@ public class SalaryAssetService {
                 .distinct()
                 .toList();
 
-        Map<Long, DepositDetailItem> depositDetails = Map.of();
+        Map<Long, DepositDetailItem> depositDetailsMutable = Map.of();
         if (!depositProductIds.isEmpty()) {
             try {
-                depositDetails = depositDetailClient.fetchDepositDetails(depositProductIds);
+                depositDetailsMutable = depositDetailClient.fetchDepositDetails(depositProductIds);
             } catch (BaseException ignored) {
                 // 상품명 보강 실패 시 기본 계좌명으로 폴백
             }
         }
+        final Map<Long, DepositDetailItem> depositDetails = depositDetailsMutable;
 
         // 계좌 (DON_WORRY 제외) → accountType별 그루핑
         accounts.forEach(account -> {
