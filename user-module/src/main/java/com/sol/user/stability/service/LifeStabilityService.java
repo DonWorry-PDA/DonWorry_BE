@@ -104,10 +104,12 @@ public class LifeStabilityService {
      */
     @Transactional
     public void recalculateFromUserDataIfReady(Long userId) {
-        boolean onboardingDone = userGoalRepository
+        boolean calculationReady = userGoalRepository
                 .findTopByUserUserIdOrderByUpdatedAtDesc(userId)
+                .filter(goal -> goal.getMonthlyTargetLivingCost() != null)
+                .filter(goal -> goal.getMonthlyExpectedMedicalCost() != null)
                 .isPresent();
-        if (onboardingDone) {
+        if (calculationReady) {
             recalculateFromUserData(userId);
         }
     }
