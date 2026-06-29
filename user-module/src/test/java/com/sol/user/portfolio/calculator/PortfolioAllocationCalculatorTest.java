@@ -360,7 +360,7 @@ class PortfolioAllocationCalculatorTest {
     /** 위험버킷 holding — weightedCapGainTaxableWeight는 amount·ticker만 보므로 나머지는 byTicker에서 채운다. */
     private Holding risk(String ticker, Map<String, EtfInfo> byTicker, long amount) {
         EtfInfo etf = byTicker.get(ticker);
-        return new Holding(etf.productId(), ticker, etf.productName(), BucketRole.RISK,
+        return Holding.of(etf.productId(), ticker, etf.productName(), BucketRole.RISK,
                 etf.currency(), BigDecimal.ZERO, BigDecimal.valueOf(amount));
     }
 
