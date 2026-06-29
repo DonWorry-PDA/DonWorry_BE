@@ -84,7 +84,7 @@ public class AssetHubService {
                 continue;
             }
             AssetCategory cat = AssetCategory.fromAccountType(account.getAccountType());
-            if (cat == AssetCategory.CMA) cat = AssetCategory.DEPOSIT;
+            if (cat == AssetCategory.CMA) cat = AssetCategory.STOCK;
             map.merge(cat, balance, BigDecimal::add);
         }
 
