@@ -132,6 +132,7 @@ public class AssetHubService {
                 .targetAmount(plan.getTargetMonthlyLivingCost())
                 .currentAmount(plan.getExpectedMonthlySalary())
                 .hasActivePlan(true)
+                .hasPlanHistory(true)
                 .build();
     }
 
@@ -144,7 +145,8 @@ public class AssetHubService {
                 .achievementRate(ratePercent(cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost()))
                 .targetAmount(cashFlow.getTargetMonthlyLivingCost())
                 .currentAmount(cashFlow.getMonthlyCashFlow())
-                .hasActivePlan(hasPlanHistory)
+                .hasActivePlan(false)
+                .hasPlanHistory(hasPlanHistory)
                 .build();
     }
 

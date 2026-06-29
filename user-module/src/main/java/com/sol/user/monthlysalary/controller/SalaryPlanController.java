@@ -35,7 +35,7 @@ public class SalaryPlanController {
     }
 
     @Operation(summary = "현재 운용 현황 조회",
-            description = "확정 plan이 있으면 종목별 진행률을, 없으면 hasPlan=false를 내려준다(최초 진입 분기).")
+            description = "ACTIVE plan이 있으면 ACTIVE plan을, 없으면 최신 plan 이력을 조회한다. plan 이력이 전혀 없으면 hasPlan=false를 내려준다.")
     @GetMapping
     public ResponseEntity<ApiResponse<SalaryPlanStatusResponse>> getStatus(
             @RequestAttribute("userId") Long userId) {
