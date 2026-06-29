@@ -1,6 +1,7 @@
 package com.sol.common.exception;
 
 import com.sol.common.response.ApiResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,7 +53,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IOException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIOException(IOException e) {
+    public ResponseEntity<ApiResponse<Void>> handleIOException(IOException e, HttpServletResponse response) {
+        String contentType = response.getContentType();
+        if (contentType != null && contentType.contains("text/event-stream")) {
+            log.debug("SSE 연결 종료: {}", e.getMessage());
+            return ResponseEntity.ok().<ApiResponse<Void>>build();
+        }
         if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
             log.debug("Client disconnected (broken pipe)");
             return ResponseEntity.ok().<ApiResponse<Void>>build();
