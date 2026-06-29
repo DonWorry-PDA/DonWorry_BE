@@ -1,7 +1,13 @@
 package com.sol.user.accountopen.controller;
 
 import com.sol.common.response.ApiResponse;
-import com.sol.user.accountopen.dto.*;
+import com.sol.user.accountopen.dto.AccountNeedCheckResponse;
+import com.sol.user.accountopen.dto.AccountOpenRequest;
+import com.sol.user.accountopen.dto.AccountOpenResponse;
+import com.sol.user.accountopen.dto.IdentityResponse;
+import com.sol.user.accountopen.dto.OtpSendRequest;
+import com.sol.user.accountopen.dto.OtpVerifyRequest;
+import com.sol.user.accountopen.dto.TermsRequest;
 import com.sol.user.accountopen.service.AccountOpenService;
 import com.sol.user.accountopen.service.OtpService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +25,14 @@ public class AccountOpenController {
 
     private final AccountOpenService accountOpenService;
     private final OtpService otpService;
+
+    @Operation(summary = "계좌 개설 필요 여부 확인",
+            description = "DON_WORRY 계좌가 있거나 신한은행+신한투자증권 계좌가 모두 있으면 needsAccount=false")
+    @GetMapping("/check")
+    public ResponseEntity<ApiResponse<AccountNeedCheckResponse>> checkAccountNeed(
+            @RequestAttribute("userId") Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(accountOpenService.checkAccountNeed(userId)));
+    }
 
     @Operation(summary = "약관 동의 제출")
     @PostMapping("/terms")
