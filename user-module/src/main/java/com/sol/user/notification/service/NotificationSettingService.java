@@ -2,8 +2,10 @@ package com.sol.user.notification.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.notification.dto.MarketOpenReminderResponse;
 import com.sol.user.notification.dto.NotificationSettingResponse;
 import com.sol.user.notification.entity.NotificationSetting;
+import com.sol.user.notification.mapper.NotificationSettingMapper;
 import com.sol.user.notification.repository.NotificationSettingRepository;
 import com.sol.user.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,10 +25,11 @@ public class NotificationSettingService {
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
     private final NotificationSettingCreator notificationSettingCreator;
+    private final NotificationSettingMapper notificationSettingMapper;
 
     @Transactional
     public List<NotificationSettingResponse> getSettings(Long userId) {
-        return NotificationSettingResponse.from(getOrCreateDefault(userId));
+        return notificationSettingMapper.toSettingResponses(getOrCreateDefault(userId));
     }
 
     @Transactional
@@ -35,6 +38,13 @@ public class NotificationSettingService {
             throw new BaseException(ErrorCode.INVALID_INPUT);
         }
         getOrCreateDefault(userId).toggle(id, enabled);
+    }
+
+    @Transactional
+    public MarketOpenReminderResponse subscribeMarketOpenReminder(Long userId) {
+        NotificationSetting setting = getOrCreateDefault(userId);
+        setting.subscribeMarketOpenReminder();
+        return notificationSettingMapper.toMarketOpenReminderResponse(setting);
     }
 
     private NotificationSetting getOrCreateDefault(Long userId) {
