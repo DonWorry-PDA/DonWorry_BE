@@ -489,7 +489,7 @@ class AssetMockServiceTest {
         // 예금 이자 계산에 필요한 productId 연결 및 금리 조회 stub
         lenient().when(depositDetailClient.fetchFirstDepositProductId()).thenReturn(Optional.of(9001L));
         lenient().when(depositDetailClient.fetchDepositDetails(any()))
-                .thenReturn(Map.of(9001L, new DepositDetailItem(9001L, new BigDecimal("2.9"), 12)));
+                .thenReturn(Map.of(9001L, new DepositDetailItem(9001L, null, new BigDecimal("2.9"), 12)));
     }
 
     @SuppressWarnings("unchecked")

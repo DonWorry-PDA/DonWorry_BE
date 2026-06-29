@@ -95,7 +95,7 @@ class AssetIncomeServiceTest {
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccount));
         given(depositDetailClient.fetchDepositDetails(List.of(300L)))
-                .willReturn(Map.of(300L, new DepositDetailItem(300L, new BigDecimal("1.0"), 12)));
+                .willReturn(Map.of(300L, new DepositDetailItem(300L, null, new BigDecimal("1.0"), 12)));
 
         // 미실현 손익
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))

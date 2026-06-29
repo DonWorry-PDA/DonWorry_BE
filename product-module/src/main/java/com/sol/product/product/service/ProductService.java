@@ -76,6 +76,7 @@ public class ProductService {
         return depositDetailRepository.findByProductProductIdIn(productIds).stream()
                 .map(d -> new DepositDetailBatchItem(
                         d.getProduct().getProductId(),
+                        d.getProduct().getProductName(),
                         d.getInterestRate(),
                         d.getMaturityMonths()))
                 .toList();

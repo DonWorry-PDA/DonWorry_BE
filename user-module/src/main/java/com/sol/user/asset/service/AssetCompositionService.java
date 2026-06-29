@@ -54,7 +54,7 @@ public class AssetCompositionService {
         // PENSION, DEPOSIT, ETC — 기존 로직 그대로
         List<AssetGroupItem> groups = new ArrayList<>();
         for (AssetCategory cat : new AssetCategory[]{
-                AssetCategory.PENSION, AssetCategory.DEPOSIT, AssetCategory.ETC}) {
+                AssetCategory.PENSION, AssetCategory.CMA, AssetCategory.DEPOSIT, AssetCategory.ETC}) {
             if (accountsByCategory.containsKey(cat)) {
                 groups.add(assetMapper.toGroupItem(cat, accountsByCategory.get(cat),
                         holdingsByAccountId, snapshot.products(), depositDetails));

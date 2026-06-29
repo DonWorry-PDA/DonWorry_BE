@@ -7,6 +7,7 @@ package com.sol.user.asset.type;
  */
 public enum AssetCategory {
     PENSION("연금"),
+    CMA("CMA"),
     DEPOSIT("예금"),
     ETF("ETF"),
     STOCK("주식"),
@@ -28,7 +29,8 @@ public enum AssetCategory {
         }
         return switch (accountType) {
             case "IRP", "PENSION_SAVING" -> PENSION;
-            case "CMA", "DEPOSIT" -> DEPOSIT;
+            case "CMA" -> CMA;
+            case "DEPOSIT" -> DEPOSIT;
             case "BROKERAGE" -> ETF;
             default -> ETC;
         };

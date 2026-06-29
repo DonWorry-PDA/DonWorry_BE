@@ -166,7 +166,7 @@ class AssetScheduleServiceTest {
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccount));
         given(depositDetailClient.fetchDepositDetails(List.of(200L)))
-                .willReturn(Map.of(200L, new DepositDetailItem(200L, new BigDecimal("1.0"), 12)));
+                .willReturn(Map.of(200L, new DepositDetailItem(200L, null, new BigDecimal("1.0"), 12)));
         given(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .willReturn(List.of());
         given(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(
@@ -198,7 +198,7 @@ class AssetScheduleServiceTest {
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccount));
         given(depositDetailClient.fetchDepositDetails(List.of(201L)))
-                .willReturn(Map.of(201L, new DepositDetailItem(201L, new BigDecimal("1.2"), 12)));
+                .willReturn(Map.of(201L, new DepositDetailItem(201L, null, new BigDecimal("1.2"), 12)));
         given(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .willReturn(List.of());
         given(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(
@@ -271,7 +271,7 @@ class AssetScheduleServiceTest {
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccount));
         given(depositDetailClient.fetchDepositDetails(List.of(202L)))
-                .willReturn(Map.of(202L, new DepositDetailItem(202L, new BigDecimal("1.5"), 12)));
+                .willReturn(Map.of(202L, new DepositDetailItem(202L, null, new BigDecimal("1.5"), 12)));
         given(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .willReturn(List.of());
         given(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(
@@ -302,7 +302,7 @@ class AssetScheduleServiceTest {
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccount));
         given(depositDetailClient.fetchDepositDetails(List.of(203L)))
-                .willReturn(Map.of(203L, new DepositDetailItem(203L, new BigDecimal("1.0"), 24)));
+                .willReturn(Map.of(203L, new DepositDetailItem(203L, null, new BigDecimal("1.0"), 24)));
         given(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .willReturn(List.of());
         given(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(

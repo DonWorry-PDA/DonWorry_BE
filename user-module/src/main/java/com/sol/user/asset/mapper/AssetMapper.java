@@ -109,24 +109,42 @@ public class AssetMapper {
                                           Map<Long, DepositDetailItem> depositDetails) {
         BigDecimal interestRate = null;
         LocalDate maturityDate = null;
-        if ("DEPOSIT".equals(account.getAccountType()) && account.getProductId() != null) {
-            DepositDetailItem detail = depositDetails.get(account.getProductId());
-            if (detail != null) {
-                interestRate = detail.interestRate();
-                if (account.getOpenedAt() != null && detail.maturityMonths() != null) {
-                    maturityDate = account.getOpenedAt().plusMonths(detail.maturityMonths());
-                }
+        boolean isDeposit = "DEPOSIT".equals(account.getAccountType()) && account.getProductId() != null;
+        DepositDetailItem depositDetail = isDeposit ? depositDetails.get(account.getProductId()) : null;
+
+        if (depositDetail != null) {
+            interestRate = depositDetail.interestRate();
+            if (account.getOpenedAt() != null && depositDetail.maturityMonths() != null) {
+                maturityDate = account.getOpenedAt().plusMonths(depositDetail.maturityMonths());
             }
         }
-        List<AssetHoldingItem> holdingItems = holdingsByAccountId
-                .getOrDefault(account.getAccountId(), List.of()).stream()
-                .map(h -> toHoldingItem(h, products.get(h.getProductId())))
-                .toList();
+
+        List<AssetHoldingItem> holdingItems;
+        BigDecimal balance;
+
+        if (depositDetail != null) {
+            // DEPOSIT: 예금 상품을 가상 holding으로 표시, balance=0으로 이중 합산 방지
+            String name = depositDetail.productName() != null ? depositDetail.productName() : account.getInstitutionName();
+            holdingItems = List.of(AssetHoldingItem.builder()
+                    .productName(name)
+                    .tickerCode(null)
+                    .quantity(null)
+                    .evaluationAmount(nz(account.getDepositBalance()))
+                    .build());
+            balance = BigDecimal.ZERO;
+        } else {
+            holdingItems = holdingsByAccountId
+                    .getOrDefault(account.getAccountId(), List.of()).stream()
+                    .map(h -> toHoldingItem(h, products.get(h.getProductId())))
+                    .toList();
+            balance = nz(account.getDepositBalance());
+        }
+
         return AssetAccountItem.builder()
                 .accountId(account.getAccountId())
                 .institutionName(account.getInstitutionName())
                 .accountType(account.getAccountType())
-                .balance(nz(account.getDepositBalance()))
+                .balance(balance)
                 .interestRate(interestRate)
                 .maturityDate(maturityDate)
                 .holdings(holdingItems)
