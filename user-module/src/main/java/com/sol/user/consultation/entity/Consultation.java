@@ -59,6 +59,10 @@ public class Consultation extends BaseEntity {
     @Column(name = "method", length = 20, nullable = false)
     private ConsultMethod method;
 
+    /** 사용자가 고른 영업점 참조(branch 테이블). 기본 지점 폴백 시 null일 수 있다. */
+    @Column(name = "branch_id")
+    private Long branchId;
+
     @Column(name = "branch_name", length = 100)
     private String branchName;
 
@@ -83,7 +87,7 @@ public class Consultation extends BaseEntity {
 
     @Builder
     private Consultation(Long userId, String title, ConsultType consultType, ConsultStatus status,
-                         LocalDateTime scheduledAt, ConsultMethod method, String branchName,
+                         LocalDateTime scheduledAt, ConsultMethod method, Long branchId, String branchName,
                          String counselorName, Long planId, String userMemo,
                          List<String> contextTopics) {
         this.userId = userId;
@@ -92,6 +96,7 @@ public class Consultation extends BaseEntity {
         this.status = status;
         this.scheduledAt = scheduledAt;
         this.method = method;
+        this.branchId = branchId;
         this.branchName = branchName;
         this.counselorName = counselorName;
         this.planId = planId;

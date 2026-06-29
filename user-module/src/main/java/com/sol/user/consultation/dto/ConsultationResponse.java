@@ -1,7 +1,6 @@
 package com.sol.user.consultation.dto;
 
 import com.sol.user.consultation.entity.Consultation;
-import com.sol.user.consultation.type.ConsultMethod;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -29,8 +28,8 @@ public record ConsultationResponse(
                 .status(c.getStatus().name())
                 .scheduledAt(c.getScheduledAt())
                 .method(c.getMethod().name())
-                // 대면이면 지점명, 비대면이면 방식 라벨("비대면 상담")을 location으로 내려 FE가 바로 표시
-                .location(c.getMethod() == ConsultMethod.FACE_TO_FACE
+                // 지점이 있으면(대면·전화 모두 진입점에서 지점을 고름) 지점명을, 없으면 방식 라벨을 내려 FE가 바로 표시
+                .location(c.getBranchName() != null
                         ? c.getBranchName()
                         : c.getMethod().getLabel())
                 .counselorName(c.getCounselorName())
