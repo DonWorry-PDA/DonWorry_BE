@@ -18,6 +18,7 @@ import com.sol.user.portfolio.dto.EtfInfo;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
+import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.stability.service.LifeStabilityService;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
@@ -37,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -393,6 +395,10 @@ class AssetMockServiceTest {
         lenient().when(insurancePolicyRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(assetConnectionRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
         lenient().when(cashFlowEventRepository.saveAll(any())).thenAnswer(invocation -> toList(invocation.getArgument(0)));
+        // 예금 이자 계산에 필요한 productId 연결 및 금리 조회 stub
+        lenient().when(depositDetailClient.fetchFirstDepositProductId()).thenReturn(Optional.of(9001L));
+        lenient().when(depositDetailClient.fetchDepositDetails(any()))
+                .thenReturn(Map.of(9001L, new DepositDetailItem(9001L, new BigDecimal("2.9"), 12)));
     }
 
     @SuppressWarnings("unchecked")

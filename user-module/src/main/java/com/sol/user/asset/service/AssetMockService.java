@@ -17,6 +17,7 @@ import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
+import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.holding.dto.StockTickerProductId;
 import com.sol.user.holding.entity.Holding;
 import com.sol.user.holding.repository.HoldingRepository;
@@ -38,6 +39,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -152,7 +154,7 @@ public class AssetMockService {
         List<Debt> debts = saveDebts(user, scenario);
         List<InsurancePolicy> policies = saveInsurancePolicies(user, scenario);
         SavedConnections connections = saveConnections(user, generatedAt);
-        List<CashFlowEvent> events = saveCashflowEvents(user, scenario);
+        List<CashFlowEvent> events = saveCashflowEvents(user, scenario, accounts);
 
         // 원천 데이터 저장 직후 생활 안정도를 재계산해 항상 최신 결과가 존재하도록 한다.
         // 온보딩(UserGoal) 전 사용자는 내부에서 스킵된다.
@@ -432,14 +434,9 @@ public class AssetMockService {
     }
 
     private List<CashFlowEvent> buildMonthEvents(User user, LocalDate monthStart,
-                                                  Scenario scenario, boolean recurring) {
+                                                  Scenario scenario, boolean recurring,
+                                                  BigDecimal interestAmount, int interestDay) {
         String status = recurring ? "SCHEDULED" : "COMPLETED";
-
-        // 예금 이자만 시드로 적재한다. 배당은 보유 ETF(dividend_history) 기반 단일 출처로
-        // 통일했으므로 시드 DIVIDEND 이벤트는 만들지 않는다(캘린더 이중계상 제거, #216).
-        BigDecimal interestIncome = scenario.monthlyFinancialIncome()
-                .multiply(BigDecimal.valueOf(30))
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
 
         List<CashFlowEvent> events = new ArrayList<>();
 
@@ -448,9 +445,12 @@ public class AssetMockService {
             events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
                     scenario.monthlyPensionIncome(), "INCOME", status, recurring));
         }
-        if (interestIncome.signum() > 0) {
-            events.add(event(user, monthStart.withDayOfMonth(20), "INTEREST", "예금 이자",
-                    interestIncome, "INCOME", status, recurring));
+        // 예금 이자: 실제 계좌 잔고 × 금리 / 1200 계산값, 지급일은 account.openedAt 기준.
+        // 배당은 보유 ETF(dividend_history) 기반 단일 출처로 통일했으므로 시드하지 않는다(#216).
+        if (interestAmount.signum() > 0) {
+            int cappedDay = Math.min(interestDay, YearMonth.from(monthStart).lengthOfMonth());
+            events.add(event(user, monthStart.withDayOfMonth(cappedDay), "INTEREST", "예금 이자",
+                    interestAmount, "INCOME", status, recurring));
         }
 
         if (scenario.monthlyMaintenanceExpense().signum() > 0) {
@@ -501,22 +501,59 @@ public class AssetMockService {
         return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
     }
 
-    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario) {
+    private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario, List<Account> accounts) {
         List<CashFlowEvent> existing = cashFlowEventRepository.findByUserUserId(user.getUserId()).stream()
                 .filter(e -> "MYDATA_MOCK".equals(e.getSource()))
                 .toList();
         cashFlowEventRepository.deleteAll(existing);
 
+        // 예금 이자 금액과 지급일을 schedule/income-analysis와 동일한 기준으로 계산한다.
+        // - 금액: balance × rate / 1200 (AssetIncomeService·AssetScheduleService와 동일 공식)
+        // - 지급일: account.openedAt의 일(日) (AssetScheduleService.addDepositInterestEvents와 동일)
+        // saveAssets 결과를 그대로 사용해 DB 재조회를 피한다(linkDepositProductId가 productId를 인-플레이스 설정).
+        BigDecimal interestAmount = computeDepositInterest(accounts);
+        int interestDay = resolveInterestDay(accounts);
+
         LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
         List<CashFlowEvent> events = new ArrayList<>();
-        events.addAll(buildMonthEvents(user, currentMonth, scenario, true));
+        events.addAll(buildMonthEvents(user, currentMonth, scenario, true, interestAmount, interestDay));
         events.addAll(buildMonthStockEvents(user, currentMonth, scenario));
         for (int i = 1; i <= 5; i++) {
             LocalDate pastMonth = currentMonth.minusMonths(i);
-            events.addAll(buildMonthEvents(user, pastMonth, scenario, false));
+            events.addAll(buildMonthEvents(user, pastMonth, scenario, false, interestAmount, interestDay));
             events.addAll(buildMonthStockEvents(user, pastMonth, scenario));
         }
         return cashFlowEventRepository.saveAll(events);
+    }
+
+    private BigDecimal computeDepositInterest(List<Account> accounts) {
+        List<Account> depositAccounts = accounts.stream()
+                .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getProductId() != null)
+                .toList();
+        if (depositAccounts.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        List<Long> productIds = depositAccounts.stream().map(Account::getProductId).toList();
+        Map<Long, DepositDetailItem> details = depositDetailClient.fetchDepositDetails(productIds);
+        return depositAccounts.stream()
+                .filter(a -> details.containsKey(a.getProductId()))
+                .map(a -> {
+                    DepositDetailItem detail = details.get(a.getProductId());
+                    if (detail.interestRate() == null) return BigDecimal.ZERO;
+                    BigDecimal balance = a.getDepositBalance() == null ? BigDecimal.ZERO : a.getDepositBalance();
+                    return balance.multiply(detail.interestRate())
+                            .divide(new BigDecimal("1200"), 10, RoundingMode.HALF_UP)
+                            .setScale(0, RoundingMode.HALF_UP);
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private int resolveInterestDay(List<Account> accounts) {
+        return accounts.stream()
+                .filter(a -> "DEPOSIT".equals(a.getAccountType()) && a.getOpenedAt() != null)
+                .findFirst()
+                .map(a -> a.getOpenedAt().getDayOfMonth())
+                .orElse(20);
     }
 
     /**
