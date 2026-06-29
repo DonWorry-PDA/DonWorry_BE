@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +62,8 @@ class AssetHubServiceTest {
                         new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                                 BigDecimal.ZERO, BigDecimal.ZERO),
                         List.of(), List.of(), Map.of()));
+        lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -235,16 +238,22 @@ class AssetHubServiceTest {
 
     @Test
     void 확정plan_있으면_월급만들기_hasActivePlan_true이고_ACTIVE로_조회한다() {
-        stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
-        when(salaryPlanRepository.existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
-                .thenReturn(true);
+        SalaryPlan plan = mock(SalaryPlan.class);
+        when(plan.getExpectedMonthlySalary()).thenReturn(BigDecimal.valueOf(3_280_000));
+        when(plan.getTargetMonthlyLivingCost()).thenReturn(BigDecimal.valueOf(3_000_000));
+        when(plan.getLivingCostCoverageRate()).thenReturn(new BigDecimal("109.33"));
+        when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.of(plan));
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
         assertThat(response.menus().salaryMaking().hasActivePlan()).isTrue();
-        verify(salaryPlanRepository).existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE);
+        assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("3280000");
+        assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("3000000");
+        assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(109);
+        verify(salaryPlanRepository).findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE);
     }
 
     @Test
@@ -252,12 +261,13 @@ class AssetHubServiceTest {
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();
         stubLifeStability(59);
-        when(salaryPlanRepository.existsByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
-                .thenReturn(false);
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
         assertThat(response.menus().salaryMaking().hasActivePlan()).isFalse();
+        assertThat(response.menus().salaryMaking().currentAmount()).isEqualByComparingTo("1300000");
+        assertThat(response.menus().salaryMaking().targetAmount()).isEqualByComparingTo("2200000");
+        assertThat(response.menus().salaryMaking().achievementRate()).isEqualTo(59);
     }
 
     @Test

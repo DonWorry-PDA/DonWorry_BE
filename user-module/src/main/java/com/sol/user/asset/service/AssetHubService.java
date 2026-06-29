@@ -28,6 +28,7 @@ import java.time.YearMonth;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -103,23 +104,38 @@ public class AssetHubService {
     }
 
     private AssetHubMenus buildMenus(Long userId, AssetAggregator.AssetSnapshot snapshot) {
-        CashFlowDiagnosisResponse cashFlow = cashFlowDiagnosisService.diagnose(userId);
-        Integer coverageRate = ratePercent(cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost());
+        Optional<SalaryPlan> activePlan = salaryPlanRepository
+                .findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE);
+        AssetHubMenus.SalaryMaking salaryMaking = activePlan
+                .map(this::toSalaryMaking)
+                .orElseGet(() -> toSalaryMaking(cashFlowDiagnosisService.diagnose(userId)));
 
         return AssetHubMenus.builder()
-                .salaryMaking(AssetHubMenus.SalaryMaking.builder()
-                        .achievementRate(coverageRate)
-                        .targetAmount(cashFlow.getTargetMonthlyLivingCost())
-                        .currentAmount(cashFlow.getMonthlyCashFlow())
-                        .hasActivePlan(salaryPlanRepository
-                                .existsByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE))
-                        .build())
+                .salaryMaking(salaryMaking)
                 .lifeStability(buildLifeStabilityPreview(userId))
                 .investmentCheck(buildInvestmentCheckPreview(snapshot))
                 // 후속 이슈에서 채움: 국민연금 연기(#5) / 월간 리포트(#6)
                 .pensionDefer(AssetHubMenus.PensionDefer.builder().build())
                 .retirementSim(new AssetHubMenus.RetirementSim(true))
                 .monthlyReport(AssetHubMenus.MonthlyReport.builder().build())
+                .build();
+    }
+
+    private AssetHubMenus.SalaryMaking toSalaryMaking(SalaryPlan plan) {
+        return AssetHubMenus.SalaryMaking.builder()
+                .achievementRate(toInt(plan.getLivingCostCoverageRate()))
+                .targetAmount(plan.getTargetMonthlyLivingCost())
+                .currentAmount(plan.getExpectedMonthlySalary())
+                .hasActivePlan(true)
+                .build();
+    }
+
+    private AssetHubMenus.SalaryMaking toSalaryMaking(CashFlowDiagnosisResponse cashFlow) {
+        return AssetHubMenus.SalaryMaking.builder()
+                .achievementRate(ratePercent(cashFlow.getMonthlyCashFlow(), cashFlow.getTargetMonthlyLivingCost()))
+                .targetAmount(cashFlow.getTargetMonthlyLivingCost())
+                .currentAmount(cashFlow.getMonthlyCashFlow())
+                .hasActivePlan(false)
                 .build();
     }
 
