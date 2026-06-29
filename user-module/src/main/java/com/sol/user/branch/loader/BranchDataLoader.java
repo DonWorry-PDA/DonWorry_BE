@@ -56,8 +56,9 @@ public class BranchDataLoader implements ApplicationRunner {
                 }
                 String[] cols = parseCsvLine(stripBom(line));
                 if (cols.length < minCols) {
-                    log.warn("[BranchDataLoader] 컬럼 부족으로 건너뜀: {}", line);
-                    continue;
+                    // 큐레이션된 정적 CSV라 컬럼 부족은 데이터 준비 단계의 버그다.
+                    // 적재 실패와 동일하게 부팅을 막아 누락을 즉시 드러낸다.
+                    throw new IllegalStateException(label + " CSV 컬럼 수가 부족합니다. line=" + line);
                 }
                 branches.add(mapper.map(institution, cols));
             }
