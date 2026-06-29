@@ -122,10 +122,11 @@ public class AssetMapper {
         List<AssetHoldingItem> holdingItems;
         BigDecimal balance;
 
-        if (depositDetail != null && depositDetail.productName() != null) {
+        if (depositDetail != null) {
             // DEPOSIT: 예금 상품을 가상 holding으로 표시, balance=0으로 이중 합산 방지
+            String name = depositDetail.productName() != null ? depositDetail.productName() : account.getInstitutionName();
             holdingItems = List.of(AssetHoldingItem.builder()
-                    .productName(depositDetail.productName())
+                    .productName(name)
                     .tickerCode(null)
                     .quantity(null)
                     .evaluationAmount(nz(account.getDepositBalance()))
