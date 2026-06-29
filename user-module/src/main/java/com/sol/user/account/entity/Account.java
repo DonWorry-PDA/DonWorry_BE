@@ -20,6 +20,7 @@ public class Account {
 
     public static final String TYPE_DON_WORRY = "DON_WORRY";
     public static final String INSTITUTION_SHINHAN = "신한은행";
+    public static final String INSTITUTION_SHINHAN_INVEST = "신한투자증권";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
