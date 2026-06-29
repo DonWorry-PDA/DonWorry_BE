@@ -2,6 +2,7 @@ package com.sol.user.portfolio.infra.rest;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 public class ProductBatchClient {
 
@@ -63,6 +65,29 @@ public class ProductBatchClient {
                     ));
         } catch (Exception e) {
             throw new BaseException(ErrorCode.PRODUCT_POOL_UNAVAILABLE);
+        }
+    }
+
+    /** productId 목록 → 주식 현재가 Map(원). Redis 우선·daily_price 폴백은 product-module이 처리. 실패 시 빈 Map(주식 평가액 0으로 처리). */
+    public Map<Long, Long> fetchStockPrices(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            StockPriceApiResponse response = productRestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/product/stocks/prices")
+                            .queryParam("productIds", productIds)
+                            .build())
+                    .retrieve()
+                    .body(StockPriceApiResponse.class);
+            if (response == null || response.data() == null) {
+                return Map.of();
+            }
+            return response.data();
+        } catch (Exception e) {
+            log.warn("주식 현재가 조회 실패 - 개별주 평가액 0 처리: {}", e.getMessage());
+            return Map.of();
         }
     }
 }

@@ -96,18 +96,29 @@ public class AssetAggregator {
         Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
                 holdings.stream().map(HoldingWithProduct::getProductId).toList());
 
+        // STOCK 보유의 현재가를 product-module에서 배치 조회 (Redis 우선, daily_price 폴백)
+        List<Long> stockProductIds = holdings.stream()
+                .filter(h -> isStock(products.get(h.getProductId())))
+                .map(HoldingWithProduct::getProductId)
+                .distinct()
+                .toList();
+        Map<Long, Long> stockPrices = stockProductIds.isEmpty()
+                ? Map.of() : productBatchClient.fetchStockPrices(stockProductIds);
+
         BigDecimal nonStock = BigDecimal.ZERO;
         BigDecimal pensionHolding = BigDecimal.ZERO;
         BigDecimal stock = BigDecimal.ZERO;
         for (HoldingWithProduct holding : holdings) {
-            BigDecimal eval = nz(holding.getEvaluationAmount());
             if (isStock(products.get(holding.getProductId()))) {
-                stock = stock.add(eval);
+                // 평가액 = 수량 × 실시간 현재가 (DB 저장 evaluationAmount 미사용)
+                long price = stockPrices.getOrDefault(holding.getProductId(), 0L);
+                BigDecimal qty = holding.getQuantity() != null ? holding.getQuantity() : BigDecimal.ZERO;
+                stock = stock.add(qty.multiply(BigDecimal.valueOf(price)));
             } else if (PENSION_ACCOUNT_TYPES.contains(holding.getAccountType())) {
                 // 연금계좌(IRP·연금저축)의 비STOCK 종목 — 55세 제약이라 즉시가용에서 빠지도록 별도 집계.
-                pensionHolding = pensionHolding.add(eval);
+                pensionHolding = pensionHolding.add(nz(holding.getEvaluationAmount()));
             } else {
-                nonStock = nonStock.add(eval);
+                nonStock = nonStock.add(nz(holding.getEvaluationAmount()));
             }
         }
         AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);

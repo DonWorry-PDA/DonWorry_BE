@@ -375,8 +375,8 @@ public class AssetMockService {
         for (HoldingSeed seed : stockSeeds) {
             Long stockProductId = stockTickerToProductId.get(seed.ticker());
             if (stockProductId != null) {
-                desired.add(new Holding(brokerage, stockProductId,
-                        seed.evaluationAmount(), seed.quantity()));
+                // 개별주 평가액은 실시간 현재가 × 수량으로 산출하므로 DB에는 저장하지 않는다.
+                desired.add(new Holding(brokerage, stockProductId, null, seed.quantity()));
             }
         }
         // 재동기화 시 (account, productId) 기준 upsert — 기존 보유행을 재사용해 holdingId를 유지한다.
@@ -827,8 +827,10 @@ public class AssetMockService {
                 grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
 
         // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
+        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산.
         BigDecimal holdingsTotal = holdings.stream()
                 .map(Holding::getEvaluationAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (holdingsTotal.signum() > 0) {
             grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);

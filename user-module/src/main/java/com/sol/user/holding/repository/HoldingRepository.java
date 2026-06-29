@@ -150,13 +150,13 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             @Param("to") LocalDate to
     );
 
-    // 투자 건강검진 성장블록용: 보유 개별주(STOCK)의 종목별 평가액 합 + 시가배당률
+    // 투자 건강검진 성장블록용: 보유 개별주(STOCK)의 종목별 수량 합 + 시가배당률 (평가액은 서비스에서 현재가 × 수량으로 산출)
     @Query(value = """
-            SELECT fp.product_id          AS productId,
-                   fp.product_name        AS productName,
-                   SUM(h.evaluation_amount) AS evaluationAmount,
-                   s.dividend_yield       AS dividendYield,
-                   s.sector               AS sector
+            SELECT fp.product_id    AS productId,
+                   fp.product_name  AS productName,
+                   SUM(h.quantity)  AS quantity,
+                   s.dividend_yield AS dividendYield,
+                   s.sector         AS sector
             FROM holding h
             JOIN account a ON h.account_id = a.account_id
             JOIN financial_product fp ON fp.product_id = h.product_id
@@ -164,7 +164,7 @@ public interface HoldingRepository extends JpaRepository<Holding, Long> {
             WHERE a.user_id = :userId
               AND fp.product_type = 'STOCK'
             GROUP BY fp.product_id, fp.product_name, s.dividend_yield, s.sector
-            ORDER BY SUM(h.evaluation_amount) DESC
+            ORDER BY SUM(h.quantity) DESC
             """, nativeQuery = true)
     List<StockDividendProjection> findStockDividendsByUserId(@Param("userId") Long userId);
 

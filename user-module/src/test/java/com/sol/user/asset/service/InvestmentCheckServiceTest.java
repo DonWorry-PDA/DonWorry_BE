@@ -10,7 +10,9 @@ import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.dto.StockDividendProjection;
 import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.infra.rest.ProductBatchItem;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -22,8 +24,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,9 +38,21 @@ class InvestmentCheckServiceTest {
 
     @Mock AssetAggregator assetAggregator;
     @Mock HoldingRepository holdingRepository;
+    @Mock ProductBatchClient productBatchClient;
     @Spy AssetMapper assetMapper = new AssetMapper();
 
     @InjectMocks InvestmentCheckService service;
+
+    @BeforeEach
+    void setupStockPriceMock() {
+        // stock()은 quantity=eval로 설정, 현재가=1로 고정 → evaluationAmount=quantity×1=eval.
+        // lenient: 주식 없는 테스트에서 이 stubbing이 호출되지 않아도 UnnecessaryStubbingException 미발생.
+        lenient().when(productBatchClient.fetchStockPrices(anyList()))
+                .thenAnswer(inv -> {
+                    List<Long> ids = inv.getArgument(0);
+                    return ids.stream().collect(Collectors.toMap(id -> id, id -> 1L));
+                });
+    }
 
     @Test
     void 자산이_없으면_비율0_역할빈리스트_성장블록null() {
@@ -321,7 +338,8 @@ class InvestmentCheckServiceTest {
         return new StockDividendProjection() {
             public Long getProductId() { return productId; }
             public String getProductName() { return name; }
-            public BigDecimal getEvaluationAmount() { return BigDecimal.valueOf(eval); }
+            // quantity=eval, 현재가=1(setupStockPriceMock) → evaluationAmount = eval×1 = eval
+            public BigDecimal getQuantity() { return BigDecimal.valueOf(eval); }
             public BigDecimal getDividendYield() { return new BigDecimal(yield); }
             public String getSector() { return sector; }
         };

@@ -12,8 +12,8 @@ public interface StockDividendProjection {
 
     String getProductName();
 
-    /** 종목별 평가액 합(원). */
-    BigDecimal getEvaluationAmount();
+    /** 종목별 보유 수량 합. 평가액은 quantity × 실시간 현재가로 산출(DB evaluationAmount 미사용). */
+    BigDecimal getQuantity();
 
     /** stock_detail.dividend_yield — 시가배당률(%), 무배당은 0. 미적재면 NULL. */
     BigDecimal getDividendYield();
