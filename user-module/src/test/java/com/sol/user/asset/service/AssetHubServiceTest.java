@@ -8,6 +8,7 @@ import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
@@ -50,6 +51,7 @@ class AssetHubServiceTest {
     @Mock LifeStabilityService lifeStabilityService;
     @Mock AssetAggregator assetAggregator;
     @Mock SalaryPlanRepository salaryPlanRepository;
+    @Mock EtfDividendCalculator etfDividendCalculator;
     @Spy AssetMapper assetMapper = new AssetMapper();
 
     @InjectMocks AssetHubService assetHubService;
@@ -64,6 +66,8 @@ class AssetHubServiceTest {
                         List.of(), List.of(), Map.of()));
         lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.empty());
+        // 분배금 단일 출처 — 기본 0. 분배금 합산을 검증하는 테스트만 override.
+        lenient().when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.ZERO);
     }
 
     @Test
@@ -90,6 +94,20 @@ class AssetHubServiceTest {
                 .isEqualTo(100);
         assertThat(response.monthlyIncome()).isEqualByComparingTo("1300000");
         assertThat(response.monthlyExpense()).isEqualByComparingTo("2180000");
+    }
+
+    @Test
+    void 이번_달_수입에_ETF_분배금이_더해진다() {
+        // 배당 이벤트는 #216에서 제거됐으므로 단일 출처(EtfDividendCalculator)로 더해져야 한다(#303).
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();   // INCOME 이벤트 합(연금+이자) = 1,300,000
+        stubLifeStability(59);
+        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.valueOf(200_000));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        // 1,300,000(이벤트) + 200,000(분배금) = 1,500,000
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1500000");
     }
 
     @Test

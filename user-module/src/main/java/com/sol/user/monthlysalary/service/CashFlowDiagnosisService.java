@@ -2,14 +2,12 @@ package com.sol.user.monthlysalary.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
-import com.sol.user.holding.dto.EtfHolding;
-import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
 import com.sol.user.usergoal.repository.UserGoalRepository;
@@ -19,8 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -31,11 +27,10 @@ public class CashFlowDiagnosisService {
 
     private final PensionRepository pensionRepository;
     private final UserGoalRepository userGoalRepository;
-    private final HoldingRepository holdingRepository;
     private final UserRepository userRepository;
-    private final ProductBatchClient productBatchClient;
     private final SalaryAssetExclusionRepository salaryAssetExclusionRepository;
     private final SalaryAssetMapper salaryAssetMapper;
+    private final EtfDividendCalculator etfDividendCalculator;
 
     @Transactional(readOnly = true)
     public CashFlowDiagnosisResponse diagnose(Long userId) {
@@ -72,21 +67,11 @@ public class CashFlowDiagnosisService {
         // 월급 만들기에서 제외한 보유종목은 분배금 산출에서도 뺀다(선택UI #115 死선 해소).
         // 계좌(ACCOUNT_*) 제외는 예수금(cash)만 빼는데 분배금은 보유종목에서만 나오므로 무관 —
         // AssetAggregator와 동일하게 계좌·종목 제외는 독립이라 종목(HOLDING_*) 제외만 적용한다.
+        // 분배금 단가·합산은 단일 출처(EtfDividendCalculator)에서 가져오고, 여기선 제외만 넘긴다(#303).
         Set<Long> excludedHoldingIds = salaryAssetMapper.extractHoldingIds(
                 salaryAssetExclusionRepository.findAssetKeysByUserId(userId));
-        List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId).stream()
-                .filter(holding -> !excludedHoldingIds.contains(holding.getHoldingId()))
-                .toList();
-        if (holdings.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        List<Long> productIds = holdings.stream().map(EtfHolding::getProductId).toList();
-        Map<Long, BigDecimal> monthlyDividendMap = productBatchClient.fetchEtfMonthlyDividends(productIds);
-
-        return holdings.stream()
-                .map(h -> monthlyDividendMap.getOrDefault(h.getProductId(), BigDecimal.ZERO)
-                        .multiply(h.getQuantity()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 현금흐름 진단은 연금·비연금 구분 없이 전체 분배금을 본다(생활비 충당 관점).
+        return etfDividendCalculator.monthlyDividendBreakdown(userId, excludedHoldingIds).totalGross();
     }
 
     /** 이자·배당소득 원천징수(15.4%) 차감 후 실수령. */

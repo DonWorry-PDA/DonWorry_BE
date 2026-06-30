@@ -10,6 +10,7 @@ import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.asset.type.AssetCategory;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.HoldingWithProduct;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
@@ -44,6 +45,7 @@ public class AssetHubService {
     private final AssetAggregator assetAggregator;
     private final SalaryPlanRepository salaryPlanRepository;
     private final AssetMapper assetMapper;
+    private final EtfDividendCalculator etfDividendCalculator;
 
     public AssetHubResponse getHub(Long userId) {
         AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
@@ -62,8 +64,11 @@ public class AssetHubService {
                 .changeAmount(null)
                 .changeDirection("FLAT")
                 .allocation(assetMapper.toCategoryAllocation(byCategory, totalAsset))
+                // 배당 이벤트는 #216에서 제거됐으므로, 보유 ETF 기반 단일 출처(EtfDividendCalculator)를
+                // 더해 '이번 달 수입'에 분배금이 빠지지 않게 한다(#303). 연금+이자(이벤트) + 분배금(세전).
                 .monthlyIncome(nz(cashFlowEventRepository
-                        .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end)))
+                        .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end))
+                        .add(etfDividendCalculator.monthlyDividend(userId)))
                 .monthlyExpense(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
                 .etfHoldings(etfSnapshot.holdings())
