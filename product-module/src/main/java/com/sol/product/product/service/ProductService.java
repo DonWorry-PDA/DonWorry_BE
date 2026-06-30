@@ -8,6 +8,7 @@ import com.sol.product.deposit.repository.DepositDetailRepository;
 import com.sol.product.etf.entity.EtfDetail;
 import com.sol.product.etf.repository.EtfDetailRepository;
 import com.sol.product.pensionsaving.repository.PensionSavingDetailRepository;
+import com.sol.product.stock.repository.StockDetailRepository;
 import com.sol.product.product.dto.DepositDetailBatchItem;
 import com.sol.product.product.dto.ProductBatchItem;
 import com.sol.product.product.dto.ProductDetailResponse;
@@ -18,9 +19,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,11 +29,13 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private static final String TYPE_ETF = "ETF";
+    private static final String TYPE_STOCK = "STOCK";
     private static final String TYPE_DEPOSIT = "DEPOSIT";
     private static final String TYPE_PENSION_SAVING = "PENSION_SAVING";
 
     private final FinancialProductRepository financialProductRepository;
     private final EtfDetailRepository etfDetailRepository;
+    private final StockDetailRepository stockDetailRepository;
     private final DepositDetailRepository depositDetailRepository;
     private final PensionSavingDetailRepository pensionSavingDetailRepository;
     private final DailyPriceRepository dailyPriceRepository;
@@ -48,15 +51,24 @@ public class ProductService {
                 .filter(p -> TYPE_ETF.equals(p.getProductType()))
                 .map(FinancialProduct::getProductId)
                 .toList();
-        Map<Long, String> tickerByProductId = etfProductIds.isEmpty() ? Map.of()
-                : etfDetailRepository.findAllByProductProductIdIn(etfProductIds).stream()
-                        .collect(Collectors.toMap(
-                                e -> e.getProduct().getProductId(),
-                                EtfDetail::getTickerCode
-                        ));
+        Map<Long, String> tickerByProductId = new HashMap<>();
+        if (!etfProductIds.isEmpty()) {
+            etfDetailRepository.findAllByProductProductIdIn(etfProductIds)
+                    .forEach(e -> tickerByProductId.put(e.getProduct().getProductId(), e.getTickerCode()));
+        }
 
         if (etfProductIds.stream().anyMatch(id -> !tickerByProductId.containsKey(id))) {
             throw new BaseException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        // 개별주식도 실시간 시세 매칭을 위해 tickerCode를 채운다. (데이터 누락 종목은 null 유지)
+        List<Long> stockProductIds = products.stream()
+                .filter(p -> TYPE_STOCK.equals(p.getProductType()))
+                .map(FinancialProduct::getProductId)
+                .toList();
+        if (!stockProductIds.isEmpty()) {
+            stockDetailRepository.findAllByProductProductIdIn(stockProductIds)
+                    .forEach(s -> tickerByProductId.put(s.getProduct().getProductId(), s.getTickerCode()));
         }
 
         return products.stream()
