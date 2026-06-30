@@ -70,4 +70,10 @@ public class SavedPortfolioPlanService {
                 .map(savedPortfolioPlanMapper::toSavedPlanResponse)
                 .orElse(null);
     }
+
+    @Transactional
+    public void delete(Long userId) {
+        savedPlanRepository.findByUserUserId(userId)
+                .ifPresent(savedPlanRepository::delete);
+    }
 }

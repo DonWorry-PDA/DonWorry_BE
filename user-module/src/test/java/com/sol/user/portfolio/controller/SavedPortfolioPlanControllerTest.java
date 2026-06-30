@@ -24,7 +24,9 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -119,6 +121,16 @@ class SavedPortfolioPlanControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void DELETE_저장된_설계안_삭제_200() throws Exception {
+        mockMvc.perform(delete("/api/user/portfolio/saved-plan")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+        verify(service).delete(1L);
     }
 
     private SavePlanRequest validRequest(PlanType planType) {

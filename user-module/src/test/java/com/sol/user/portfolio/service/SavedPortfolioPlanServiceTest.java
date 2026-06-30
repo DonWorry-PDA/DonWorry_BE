@@ -100,6 +100,25 @@ class SavedPortfolioPlanServiceTest {
         assertThat(service.getSaved(USER_ID)).isNull();
     }
 
+    @Test
+    void 저장된_설계안_있으면_삭제() {
+        SavedPortfolioPlan plan = mock(SavedPortfolioPlan.class);
+        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.of(plan));
+
+        service.delete(USER_ID);
+
+        verify(savedPlanRepository).delete(plan);
+    }
+
+    @Test
+    void 저장된_설계안_없으면_삭제_아무것도_안함() {
+        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.empty());
+
+        service.delete(USER_ID);
+
+        verify(savedPlanRepository, never()).delete(any());
+    }
+
     private SavePlanRequest request(PlanType planType) {
         return new SavePlanRequest(
                 planType,
