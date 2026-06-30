@@ -333,6 +333,32 @@ class AssetMockServiceTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
+    void 현재달_미래_날짜_소비이벤트는_PENDING_상태로_저장된다() {
+        User user = mock(User.class);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(2L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        LocalDate today = LocalDate.now();
+
+        // 현재달의 미래 날짜 소비 이벤트는 PENDING 이어야 한다
+        List<CashFlowEvent> futureConsumptionEvents = saved.stream()
+                .filter(e -> "EXPENSE".equals(e.getFlowType())
+                        && !Boolean.TRUE.equals(e.getRecurring())
+                        && e.getEventDate() != null
+                        && e.getEventDate().isAfter(today))
+                .toList();
+        assertThat(futureConsumptionEvents).isNotEmpty();
+        assertThat(futureConsumptionEvents).allSatisfy(e -> assertThat(e.getStatus()).isEqualTo("PENDING"));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
     void pensionCashflowEvent_notCreated_whenNationalPensionNotReceiving() {
         User user = mock(User.class);
         when(user.getNationalPensionReceiving()).thenReturn(false);
