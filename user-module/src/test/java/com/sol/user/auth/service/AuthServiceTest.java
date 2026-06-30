@@ -120,6 +120,38 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("PIN 재확인 시 올바른 PIN이면 예외 없이 통과한다")
+    void verifyPin_correctPin_noException() {
+        User user = userWithPin("123456");
+        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+
+        authService.verifyPin(42L, "123456");
+    }
+
+    @Test
+    @DisplayName("PIN 재확인 시 다른 유저의 PIN을 입력하면 AUTH_001 예외를 발생시킨다")
+    void verifyPin_wrongPin_throwsAuth001() {
+        User user = userWithPin("123456");
+        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.verifyPin(42L, "654321"))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorCode())
+                .isEqualTo(ErrorCode.AUTH_001);
+    }
+
+    @Test
+    @DisplayName("PIN 재확인 시 존재하지 않는 유저이면 AUTH_001 예외를 발생시킨다")
+    void verifyPin_userNotFound_throwsAuth001() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyPin(99L, "123456"))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorCode())
+                .isEqualTo(ErrorCode.AUTH_001);
+    }
+
+    @Test
     @DisplayName("온보딩 완료 처리 시 사용자의 완료 메서드를 호출한다")
     void completeOnboarding_callsUserCompleteOnboarding() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
