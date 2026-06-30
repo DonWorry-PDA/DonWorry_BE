@@ -19,7 +19,10 @@ public record AssetHubResponse(
         BigDecimal monthlyExpense,
         List<EtfHoldingItem> etfHoldings,
         BigDecimal etfSnapshotAmount,
+        List<StockHoldingItem> stockHoldings,
+        BigDecimal stockSnapshotAmount,
         AssetHubMenus menus
 ) {
     public record EtfHoldingItem(String ticker, BigDecimal quantity) {}
+    public record StockHoldingItem(String ticker, BigDecimal quantity) {}
 }

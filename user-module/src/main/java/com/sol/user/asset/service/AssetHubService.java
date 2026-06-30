@@ -55,6 +55,7 @@ public class AssetHubService {
         LocalDate start = thisMonth.atDay(1);
         LocalDate end = thisMonth.atEndOfMonth();
         AssetMapper.EtfSnapshot etfSnapshot = assetMapper.toEtfSnapshot(snapshot);
+        AssetMapper.StockSnapshot stockSnapshot = assetMapper.toStockSnapshot(snapshot);
 
         return AssetHubResponse.builder()
                 .totalAsset(totalAsset)
@@ -68,6 +69,8 @@ public class AssetHubService {
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
                 .etfHoldings(etfSnapshot.holdings())
                 .etfSnapshotAmount(etfSnapshot.snapshotAmount())
+                .stockHoldings(stockSnapshot.holdings())
+                .stockSnapshotAmount(stockSnapshot.snapshotAmount())
                 .menus(buildMenus(userId, snapshot))
                 .build();
     }
