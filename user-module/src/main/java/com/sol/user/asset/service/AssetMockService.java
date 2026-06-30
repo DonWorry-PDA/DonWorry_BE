@@ -216,11 +216,12 @@ public class AssetMockService {
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario, accounts);
         saveTradeHistory(accounts, holdings);
 
-        // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
-        AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
-        // 보유 평가액(현금 제외)은 월별 시세변동(평가손익)의 베이스 — 자산이 늘고 주는 출처.
-        // 개별주는 '수량 × 현재가'로 평가(createAssetSummary와 동일).
+        // 보유 평가액(현금 제외)은 ① 응답 총자산(BROKERAGE 합산)과 ② 월별 시세변동 스냅샷 베이스에 함께 쓰인다.
+        // 개별주는 '수량 × 현재가'라 현재가 조회(RestClient)가 필요한데, 두 용도가 같은 결과를 재사용하도록
+        // 한 번만 계산한다(중복 HTTP 호출 제거 + 응답·스냅샷 평가 기준 동일 보장).
         BigDecimal holdingsValuation = holdingsMarketValue(holdings);
+        // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
+        AssetSummaryResponse assetSummary = createAssetSummary(accounts, scenario.debtBalance(), holdingsValuation);
         // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름 + 배당 + 시세변동"에서 역산해 백필.
         saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), holdingsValuation, events);
 
@@ -866,8 +867,8 @@ public class AssetMockService {
      * {@code saveHoldings}가 증권계좌 부재나 ETF 풀 조회 실패로 빈 리스트를 반환하면
      * DB엔 종목이 없으므로, 시나리오 평가액을 더하면 응답과 실제 저장이 어긋난다.
      */
-    private AssetSummaryResponse createAssetSummary(List<Account> accounts, List<Holding> holdings,
-                                                    BigDecimal debtBalance) {
+    private AssetSummaryResponse createAssetSummary(List<Account> accounts, BigDecimal debtBalance,
+                                                    BigDecimal holdingsTotal) {
         Map<String, BigDecimal> grouped = new LinkedHashMap<>();
         accounts.forEach(account ->
                 grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
@@ -875,7 +876,7 @@ public class AssetMockService {
         // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
         // 개별주는 평가액=null(현재가 기반)이라 AssetAggregator와 동일하게 '수량 × 현재가'로 평가해야
         // 응답·스냅샷 총자산이 실제 표시값과 일치한다(이게 빠지면 자산변화에 거대 점프가 생긴다).
-        BigDecimal holdingsTotal = holdingsMarketValue(holdings);
+        // holdingsTotal은 호출부에서 holdingsMarketValue로 1회 계산해 전달(스냅샷 베이스와 동일 값).
         if (holdingsTotal.signum() > 0) {
             grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
         }
