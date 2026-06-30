@@ -163,6 +163,30 @@ class EtfDividendCalculatorTest {
         assertThat(calculator.actualMonthlyDividend(1L, ym)).isEqualByComparingTo("0");
     }
 
+    @Test
+    void actualMonthlyDividend_실제지급이_있는_종목의_예상분배는_중복산입되지_않는다() {
+        YearMonth ym = YearMonth.of(2026, 3);
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        // productId=101: actual payment exists for March
+        HoldingDividendPaymentProjection actual = payment(
+            101L, new BigDecimal("10"), new BigDecimal("2700"), LocalDate.of(2026, 3, 15));
+        given(holdingRepository.findDividendPaymentsByUserId(1L, from, to))
+            .willReturn(List.of(actual));
+
+        // productId=101: projection grid also lands on March (interval=3, anchor=2026-03-15 → Mar is on grid)
+        // This should NOT be added again — deduplication must block it
+        HoldingDividendCalendarProjection projection = calendarInput(
+            101L, new BigDecimal("10"), new BigDecimal("2700"),
+            LocalDate.of(2026, 3, 15), 3);
+        given(holdingRepository.findDividendCalendarInputsByUserId(1L))
+            .willReturn(List.of(projection));
+
+        // Result should be 27,000 (actual only), NOT 54,000 (actual + duplicate projection)
+        assertThat(calculator.actualMonthlyDividend(1L, ym)).isEqualByComparingTo("27000");
+    }
+
     private HoldingWithProduct holding(Long holdingId, Long productId, BigDecimal quantity, String accountType) {
         return new HoldingWithProduct() {
             @Override public Long getHoldingId() { return holdingId; }

@@ -111,6 +111,7 @@ public class EtfDividendCalculator {
      *   <li>보유 ETF의 분배 그리드(latestPaymentDate + interval)를 걸어 당월에 착지하는 종목만
      *       합산한다(단, actualMonths에 이미 있으면 중복 제외).</li>
      * </ol>
+     * @see com.sol.user.calendar.service.CalendarQueryService — 그리드 투영 알고리즘 원본(변경 시 동기화 필요)
      */
     public BigDecimal actualMonthlyDividend(Long userId, YearMonth ym) {
         LocalDate from = ym.atDay(1);

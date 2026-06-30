@@ -68,7 +68,7 @@ public class AssetHubService {
                 // 이번 달 분배금을 더해 '이번 달 수입'에 분배금이 빠지지 않게 한다(#303). 연금+이자(이벤트) + 분배금(세전).
                 .monthlyIncome(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end))
-                        .add(etfDividendCalculator.actualMonthlyDividend(userId, YearMonth.now())))
+                        .add(etfDividendCalculator.actualMonthlyDividend(userId, thisMonth)))
                 .monthlyExpense(nz(cashFlowEventRepository
                         .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
                 .etfHoldings(etfSnapshot.holdings())
