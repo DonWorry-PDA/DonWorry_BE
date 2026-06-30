@@ -124,6 +124,22 @@ class SavedPortfolioPlanControllerTest {
     }
 
     @Test
+    void POST_holdings_productId_없으면_400() throws Exception {
+        mockMvc.perform(post("/api/user/portfolio/saved-plan")
+                        .requestAttr("userId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "planType": "STABLE",
+                                  "monthlyIncome": 1680000,
+                                  "principalAmount": 200000000,
+                                  "holdings": [{"ticker": "069500", "productName": "KODEX 200", "weight": 0.6, "targetAmount": 120000000}]
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void DELETE_저장된_설계안_삭제_200() throws Exception {
         mockMvc.perform(delete("/api/user/portfolio/saved-plan")
                         .requestAttr("userId", 1L))
