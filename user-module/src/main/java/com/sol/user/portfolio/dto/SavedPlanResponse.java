@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record SavedPlanResponse(
+        Long id,
         PlanType planType,
         BigDecimal monthlyIncome,
         BigDecimal currentCoverageRate,

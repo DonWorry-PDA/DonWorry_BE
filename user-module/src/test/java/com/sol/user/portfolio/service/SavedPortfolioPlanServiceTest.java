@@ -27,13 +27,13 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SavedPortfolioPlanServiceTest {
 
     private static final Long USER_ID = 1L;
+    private static final Long PLAN_ID = 10L;
 
     @Mock SavedPortfolioPlanRepository savedPlanRepository;
     @Mock UserRepository userRepository;
@@ -42,11 +42,10 @@ class SavedPortfolioPlanServiceTest {
     @InjectMocks SavedPortfolioPlanService service;
 
     @Test
-    void 최초_저장_신규_엔티티가_save된다() {
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.empty());
+    void 저장_시_항상_새_엔티티가_save된다() {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(mock(User.class)));
         when(savedPortfolioPlanMapper.toItem(any())).thenReturn(mock(SavedPortfolioPlanItem.class));
-        when(savedPortfolioPlanMapper.toSaveResponse(any())).thenReturn(new SavePlanResponse(LocalDateTime.now()));
+        when(savedPortfolioPlanMapper.toSaveResponse(any(), any())).thenReturn(new SavePlanResponse(null, LocalDateTime.now()));
 
         service.save(USER_ID, request(PlanType.STABLE));
 
@@ -57,22 +56,7 @@ class SavedPortfolioPlanServiceTest {
     }
 
     @Test
-    void 기존_저장_있으면_update_호출하고_save_호출_안함() {
-        SavedPortfolioPlan existing = mock(SavedPortfolioPlan.class);
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.of(existing));
-        when(savedPortfolioPlanMapper.toItem(any())).thenReturn(mock(SavedPortfolioPlanItem.class));
-        when(savedPortfolioPlanMapper.toSaveResponse(any())).thenReturn(new SavePlanResponse(LocalDateTime.now()));
-
-        service.save(USER_ID, request(PlanType.BALANCED));
-
-        verify(existing).update(eq(PlanType.BALANCED), any(), any(), any(), any(), any(), any(), any());
-        verify(savedPlanRepository, never()).save(any());
-        verify(userRepository, never()).findById(any());
-    }
-
-    @Test
-    void 최초_저장_유저_없으면_USER_NOT_FOUND() {
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.empty());
+    void 저장_유저_없으면_USER_NOT_FOUND() {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.save(USER_ID, request(PlanType.STABLE)))
@@ -82,41 +66,45 @@ class SavedPortfolioPlanServiceTest {
     }
 
     @Test
-    void 저장된_설계안_있으면_응답_반환() {
-        SavedPortfolioPlan plan = mock(SavedPortfolioPlan.class);
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.of(plan));
-        SavedPlanResponse expected = savedPlanResponse(PlanType.STABLE);
-        when(savedPortfolioPlanMapper.toSavedPlanResponse(plan)).thenReturn(expected);
+    void 저장된_설계안_목록_반환() {
+        SavedPortfolioPlan plan1 = mock(SavedPortfolioPlan.class);
+        SavedPortfolioPlan plan2 = mock(SavedPortfolioPlan.class);
+        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(List.of(plan1, plan2));
+        SavedPlanResponse r1 = savedPlanResponse(PlanType.STABLE);
+        SavedPlanResponse r2 = savedPlanResponse(PlanType.BALANCED);
+        when(savedPortfolioPlanMapper.toSavedPlanResponse(plan1)).thenReturn(r1);
+        when(savedPortfolioPlanMapper.toSavedPlanResponse(plan2)).thenReturn(r2);
 
-        SavedPlanResponse result = service.getSaved(USER_ID);
+        List<SavedPlanResponse> result = service.getSavedList(USER_ID);
 
-        assertThat(result).isEqualTo(expected);
+        assertThat(result).containsExactly(r1, r2);
     }
 
     @Test
-    void 저장된_설계안_없으면_null_반환() {
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.empty());
+    void 저장된_설계안_없으면_빈_목록_반환() {
+        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(List.of());
 
-        assertThat(service.getSaved(USER_ID)).isNull();
+        assertThat(service.getSavedList(USER_ID)).isEmpty();
     }
 
     @Test
-    void 저장된_설계안_있으면_삭제() {
+    void planId와_userId_일치하면_삭제() {
         SavedPortfolioPlan plan = mock(SavedPortfolioPlan.class);
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.of(plan));
+        when(savedPlanRepository.findByIdAndUserUserId(PLAN_ID, USER_ID)).thenReturn(Optional.of(plan));
 
-        service.delete(USER_ID);
+        service.delete(USER_ID, PLAN_ID);
 
         verify(savedPlanRepository).delete(plan);
     }
 
     @Test
-    void 저장된_설계안_없으면_삭제_아무것도_안함() {
-        when(savedPlanRepository.findByUserUserId(USER_ID)).thenReturn(Optional.empty());
+    void planId가_없거나_다른_유저_소유면_SAVED_PLAN_NOT_FOUND() {
+        when(savedPlanRepository.findByIdAndUserUserId(PLAN_ID, USER_ID)).thenReturn(Optional.empty());
 
-        service.delete(USER_ID);
-
-        verify(savedPlanRepository, never()).delete(any());
+        assertThatThrownBy(() -> service.delete(USER_ID, PLAN_ID))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SAVED_PLAN_NOT_FOUND);
     }
 
     private SavePlanRequest request(PlanType planType) {
@@ -131,7 +119,7 @@ class SavedPortfolioPlanServiceTest {
     }
 
     private SavedPlanResponse savedPlanResponse(PlanType planType) {
-        return new SavedPlanResponse(planType,
+        return new SavedPlanResponse(1L, planType,
                 new BigDecimal("1680000"),
                 new BigDecimal("59.00"), new BigDecimal("84.00"),
                 new BigDecimal("900000"), BigDecimal.ZERO,

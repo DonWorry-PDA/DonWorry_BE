@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -28,19 +28,6 @@ public class SavedPortfolioPlanService {
     @Transactional
     public SavePlanResponse save(Long userId, SavePlanRequest request) {
         LocalDateTime now = LocalDateTime.now();
-        Optional<SavedPortfolioPlan> existing = savedPlanRepository.findByUserUserId(userId);
-
-        if (existing.isPresent()) {
-            SavedPortfolioPlan plan = existing.get();
-            plan.update(request.planType(), request.monthlyIncome(),
-                    request.currentCoverageRate(), request.totalCoverageRate(),
-                    request.currentMonthlyShortfall(), request.residualMonthlyShortfall(),
-                    request.principalAmount(), now);
-            request.holdings().stream()
-                    .map(savedPortfolioPlanMapper::toItem)
-                    .forEach(plan::addItem);
-            return savedPortfolioPlanMapper.toSaveResponse(now);
-        }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
@@ -61,19 +48,20 @@ public class SavedPortfolioPlanService {
                 .forEach(plan::addItem);
         savedPlanRepository.save(plan);
 
-        return savedPortfolioPlanMapper.toSaveResponse(now);
+        return savedPortfolioPlanMapper.toSaveResponse(plan.getId(), now);
     }
 
     @Transactional(readOnly = true)
-    public SavedPlanResponse getSaved(Long userId) {
-        return savedPlanRepository.findByUserUserId(userId)
+    public List<SavedPlanResponse> getSavedList(Long userId) {
+        return savedPlanRepository.findByUserUserId(userId).stream()
                 .map(savedPortfolioPlanMapper::toSavedPlanResponse)
-                .orElse(null);
+                .toList();
     }
 
     @Transactional
-    public void delete(Long userId) {
-        savedPlanRepository.findByUserUserId(userId)
-                .ifPresent(savedPlanRepository::delete);
+    public void delete(Long userId, Long planId) {
+        SavedPortfolioPlan plan = savedPlanRepository.findByIdAndUserUserId(planId, userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SAVED_PLAN_NOT_FOUND));
+        savedPlanRepository.delete(plan);
     }
 }

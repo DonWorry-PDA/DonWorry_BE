@@ -23,8 +23,8 @@ public class SavedPortfolioPlan {
     @Column(name = "id")
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @Enumerated(EnumType.STRING)
@@ -55,21 +55,6 @@ public class SavedPortfolioPlan {
     @OneToMany(mappedBy = "savedPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<SavedPortfolioPlanItem> items = new ArrayList<>();
-
-    public void update(PlanType planType, BigDecimal monthlyIncome,
-                       BigDecimal currentCoverageRate, BigDecimal totalCoverageRate,
-                       BigDecimal currentMonthlyShortfall, BigDecimal residualMonthlyShortfall,
-                       BigDecimal principalAmount, LocalDateTime savedAt) {
-        this.planType = planType;
-        this.monthlyIncome = monthlyIncome;
-        this.currentCoverageRate = currentCoverageRate;
-        this.totalCoverageRate = totalCoverageRate;
-        this.currentMonthlyShortfall = currentMonthlyShortfall;
-        this.residualMonthlyShortfall = residualMonthlyShortfall;
-        this.principalAmount = principalAmount;
-        this.savedAt = savedAt;
-        this.items.clear();
-    }
 
     public void addItem(SavedPortfolioPlanItem item) {
         items.add(item);

@@ -21,18 +21,20 @@ class SavedPortfolioPlanMapperTest {
     private final SavedPortfolioPlanMapper mapper = new SavedPortfolioPlanMapper();
 
     @Test
-    void toSaveResponse_savedAt_그대로_반환() {
-        LocalDateTime now = LocalDateTime.of(2026, 6, 30, 12, 0, 0);
+    void toSaveResponse_id와_savedAt_반환() {
+        LocalDateTime now = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
 
-        SavePlanResponse response = mapper.toSaveResponse(now);
+        SavePlanResponse response = mapper.toSaveResponse(10L, now);
 
+        assertThat(response.id()).isEqualTo(10L);
         assertThat(response.savedAt()).isEqualTo(now);
     }
 
     @Test
     void toSavedPlanResponse_헤더_필드_전체_매핑() {
-        LocalDateTime savedAt = LocalDateTime.of(2026, 6, 30, 12, 0, 0);
+        LocalDateTime savedAt = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
         SavedPortfolioPlan entity = mock(SavedPortfolioPlan.class);
+        when(entity.getId()).thenReturn(1L);
         when(entity.getPlanType()).thenReturn(PlanType.STABLE);
         when(entity.getMonthlyIncome()).thenReturn(new BigDecimal("1680000"));
         when(entity.getCurrentCoverageRate()).thenReturn(new BigDecimal("59.00"));
@@ -45,6 +47,7 @@ class SavedPortfolioPlanMapperTest {
 
         SavedPlanResponse response = mapper.toSavedPlanResponse(entity);
 
+        assertThat(response.id()).isEqualTo(1L);
         assertThat(response.planType()).isEqualTo(PlanType.STABLE);
         assertThat(response.monthlyIncome()).isEqualByComparingTo("1680000");
         assertThat(response.currentCoverageRate()).isEqualByComparingTo("59.00");
