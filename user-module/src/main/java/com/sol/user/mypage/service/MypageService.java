@@ -59,9 +59,9 @@ public class MypageService {
                 goal.updateTargetLivingCost(monthlyTargetKrw, now);
             }
         }
-        handleTargetLivingCostChanged(userId, targetChanged);
+        boolean activePlanSuperseded = handleTargetLivingCostChanged(userId, targetChanged);
 
-        return UserProfileResponse.of(user, goal);
+        return UserProfileResponse.of(user, goal, activePlanSuperseded);
     }
 
     @Transactional
@@ -106,12 +106,18 @@ public class MypageService {
         return requestedTarget.compareTo(goal.getMonthlyTargetLivingCost()) != 0;
     }
 
-    private void handleTargetLivingCostChanged(Long userId, boolean targetChanged) {
+    /** 목표 생활비가 바뀌면 ACTIVE 설계안을 비활성화하고 재계산한다. 실제로 비활성화한 경우 true. */
+    private boolean handleTargetLivingCostChanged(Long userId, boolean targetChanged) {
         if (!targetChanged) {
-            return;
+            return false;
         }
-        salaryPlanRepository.findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
-                .ifPresent(SalaryPlan::supersede);
+        boolean superseded = salaryPlanRepository.findByUserUserIdAndStatus(userId, SalaryPlan.STATUS_ACTIVE)
+                .map(plan -> {
+                    plan.supersede();
+                    return true;
+                })
+                .orElse(false);
         lifeStabilityService.recalculateFromUserDataIfReady(userId);
+        return superseded;
     }
 }
