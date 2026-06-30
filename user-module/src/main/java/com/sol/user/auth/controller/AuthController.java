@@ -3,6 +3,7 @@ package com.sol.user.auth.controller;
 import com.sol.common.response.ApiResponse;
 import com.sol.user.auth.dto.LoginRequest;
 import com.sol.user.auth.dto.LoginResponse;
+import com.sol.user.auth.dto.VerifyPinRequest;
 import com.sol.user.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,15 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> logout(
             @RequestHeader("Authorization") String authorization) {
         authService.logout(authorization.substring(7));
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @Operation(summary = "PIN 재확인 (주문 등 인증 재검증용, JWT 필수)")
+    @PostMapping("/verify-pin")
+    public ResponseEntity<ApiResponse<Void>> verifyPin(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody VerifyPinRequest request) {
+        authService.verifyPin(userId, request.pin());
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 

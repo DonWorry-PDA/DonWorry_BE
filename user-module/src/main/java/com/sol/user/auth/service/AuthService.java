@@ -41,6 +41,15 @@ public class AuthService {
         return new LoginResponse(token, user.getOnboardingCompleted());
     }
 
+    @Transactional(readOnly = true)
+    public void verifyPin(Long userId, String pin) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.AUTH_001));
+        if (!passwordEncoder.matches(pin, user.getPassword())) {
+            throw new BaseException(ErrorCode.AUTH_001);
+        }
+    }
+
     @Transactional
     public void completeOnboarding(Long userId) {
         User user = userRepository.findById(userId)
