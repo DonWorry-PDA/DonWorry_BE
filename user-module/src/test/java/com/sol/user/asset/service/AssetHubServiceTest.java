@@ -99,15 +99,38 @@ class AssetHubServiceTest {
     @Test
     void 이번_달_수입에_ETF_분배금이_더해진다() {
         // 배당 이벤트는 #216에서 제거됐으므로 단일 출처(EtfDividendCalculator)로 더해져야 한다(#303).
+        // 분배금은 월간 리포트와 정합을 위해 MonthlyVariation.dividendFactor가 곱해진다.
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();   // INCOME 이벤트 합(연금+이자) = 1,300,000
         stubLifeStability(59);
-        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.valueOf(200_000));
+        BigDecimal baseDividend = BigDecimal.valueOf(200_000);
+        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(baseDividend);
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
-        // 1,300,000(이벤트) + 200,000(분배금) = 1,500,000
-        assertThat(response.monthlyIncome()).isEqualByComparingTo("1500000");
+        BigDecimal expectedDividend = baseDividend
+                .multiply(com.sol.user.cashflow.MonthlyVariation.dividendFactor(java.time.YearMonth.now()));
+        BigDecimal expectedMonthlyIncome = BigDecimal.valueOf(1_300_000).add(expectedDividend);
+        assertThat(response.monthlyIncome()).isEqualByComparingTo(expectedMonthlyIncome);
+    }
+
+    @Test
+    void monthlyIncome에_ETF_배당은_이번달_dividendFactor가_곱해진다() {
+        // 월간 리포트는 분배금에 MonthlyVariation.dividendFactor를 곱해 표시하므로(#정합),
+        // 홈 monthlyIncome도 동일 계수를 곱해야 두 화면의 숫자가 일치한다.
+        BigDecimal baseDividend = BigDecimal.valueOf(1_000_000);
+        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(baseDividend);
+        stubCashFlow(0, 2_000_000);
+        stubMonthlyFlows();
+        lenient().when(lifeStabilityService.getLatest(USER_ID))
+                .thenThrow(new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        BigDecimal expectedDividend = baseDividend
+                .multiply(com.sol.user.cashflow.MonthlyVariation.dividendFactor(java.time.YearMonth.now()));
+        BigDecimal expectedMonthlyIncome = BigDecimal.valueOf(1_300_000).add(expectedDividend);
+        assertThat(response.monthlyIncome()).isEqualByComparingTo(expectedMonthlyIncome);
     }
 
     @Test
