@@ -3,6 +3,8 @@ package com.sol.user.report.service;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetBreakdown;
+import com.sol.user.asset.infra.rest.DepositDetailClient;
+import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
@@ -27,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +54,7 @@ class MonthlyReportServiceTest {
     @Mock CashFlowEventRepository cashFlowEventRepository;
     @Mock PensionRepository pensionRepository;
     @Mock AccountRepository accountRepository;
+    @Mock DepositDetailClient depositDetailClient;
     @Mock EtfDividendCalculator etfDividendCalculator;
     @Mock MonthlyReportSummaryGenerator summaryGenerator;
     @Spy MonthlyReportMapper mapper;
@@ -240,6 +244,26 @@ class MonthlyReportServiceTest {
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
         assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void 다음달_들어올돈에_예금이자가_잔고기준으로_추정되어_포함된다() {
+        // 이번 달 실제 이자(0일 수 있음) 복사가 아니라 잔고×금리로 산출돼 누락되지 않는다(#309).
+        stubDefaults();
+        Account deposit = mock(Account.class);
+        when(deposit.getAccountType()).thenReturn("DEPOSIT");
+        when(deposit.getProductId()).thenReturn(300L);
+        when(deposit.getDepositBalance()).thenReturn(won(120_000_000));
+        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(deposit));
+        // 잔고 1.2억 × 금리 1.0% / 1200 = 100,000
+        when(depositDetailClient.fetchDepositDetails(List.of(300L)))
+                .thenReturn(Map.of(300L, new DepositDetailItem(300L, null, new BigDecimal("1.0"), 12)));
+
+        MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
+
+        assertThat(response.nextMonthPreview().interestAmount()).isEqualByComparingTo("100000");
+        // 연금 0 + 배당 0 + 이자 100,000
+        assertThat(response.nextMonthPreview().incomingTotal()).isEqualByComparingTo("100000");
     }
 
     // ─── 헬퍼 ────────────────────────────────────────────────────
