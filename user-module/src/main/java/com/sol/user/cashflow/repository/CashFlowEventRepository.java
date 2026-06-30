@@ -91,6 +91,21 @@ public interface CashFlowEventRepository extends JpaRepository<CashFlowEvent, Lo
             @Param("end") LocalDate end
     );
 
+    /**
+     * 사용자의 recurring 고정지출(관리비·보험·대출상환) 합계 — 날짜 무관.
+     * recurring 이벤트는 시드상 '현재월'에만 존재하므로, 다음 달 예측을 날짜창에 묶으면
+     * 보는 달의 다음 달에 recurring이 없어 0이 된다(과거 달 조회 시 '나갈 돈 0원' 버그).
+     * 고정지출 템플릿 자체를 합산하면 어느 달을 봐도 정상적으로 잡힌다.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(e.amount), 0)
+            FROM CashFlowEvent e
+            WHERE e.user.userId = :userId
+              AND e.flowType = 'EXPENSE'
+              AND e.recurring = true
+            """)
+    BigDecimal sumRecurringExpense(@Param("userId") Long userId);
+
     /** 특정 날짜·이벤트 타입 기준 유저별 합계. 알림 Provider용. */
     @Query("""
             SELECT e.user.userId, SUM(e.amount)

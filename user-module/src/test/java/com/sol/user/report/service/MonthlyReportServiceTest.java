@@ -4,6 +4,7 @@ import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.service.AssetAggregator;
+import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.dto.EtfHolding;
 import com.sol.user.holding.repository.HoldingRepository;
@@ -46,6 +47,7 @@ class MonthlyReportServiceTest {
     private static final Long USER_ID = 1L;
     private static final YearMonth JUNE = YearMonth.of(2026, 6);
     private static final YearMonth MAY = YearMonth.of(2026, 5);
+    private static final YearMonth JULY = YearMonth.of(2026, 7);
 
     @Mock AssetAggregator assetAggregator;
     @Mock MonthlyReportRepository reportRepository;
@@ -107,7 +109,9 @@ class MonthlyReportServiceTest {
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
         assertThat(response.income().pensionAmount()).isEqualByComparingTo("1200000");
-        assertThat(response.income().dividendAmount()).isEqualByComparingTo("100000");
+        // 배당은 보유 런레이트(100,000)에 그 달의 결정적 배당 계수를 곱한 값(#월별 변동)
+        assertThat(response.income().dividendAmount())
+                .isEqualByComparingTo(won(100_000).multiply(MonthlyVariation.dividendFactor(JUNE)));
         assertThat(response.income().interestAmount()).isEqualByComparingTo("32450");
     }
 
@@ -201,9 +205,13 @@ class MonthlyReportServiceTest {
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
+        // 다음 달(7월) 배당 = 런레이트 × 7월 배당 계수, 들어올 돈 = 연금 + 배당 + 이자(여기선 0)
+        BigDecimal nextDividend = won(100_000).multiply(MonthlyVariation.dividendFactor(JULY));
         assertThat(response.nextMonthPreview().pensionAmount()).isEqualByComparingTo("1200000");
-        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo("100000");
-        assertThat(response.nextMonthPreview().incomingTotal()).isEqualByComparingTo("1300000");
+        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo(nextDividend);
+        assertThat(response.nextMonthPreview().interestAmount()).isEqualByComparingTo("0");
+        assertThat(response.nextMonthPreview().incomingTotal())
+                .isEqualByComparingTo(won(1_200_000).add(nextDividend));
     }
 
     @Test
@@ -211,8 +219,7 @@ class MonthlyReportServiceTest {
         stubDefaults();
         when(accountRepository.findByUserUserId(USER_ID))
                 .thenReturn(List.of(accountWithBalance(won(3_000_000))));
-        when(cashFlowEventRepository.sumRecurringExpenseInPeriod(
-                eq(USER_ID), any(LocalDate.class), any(LocalDate.class)))
+        when(cashFlowEventRepository.sumRecurringExpense(eq(USER_ID)))
                 .thenReturn(won(2_150_000));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
@@ -225,8 +232,7 @@ class MonthlyReportServiceTest {
         stubDefaults();
         when(accountRepository.findByUserUserId(USER_ID))
                 .thenReturn(List.of(accountWithBalance(won(1_000_000))));
-        when(cashFlowEventRepository.sumRecurringExpenseInPeriod(
-                eq(USER_ID), any(LocalDate.class), any(LocalDate.class)))
+        when(cashFlowEventRepository.sumRecurringExpense(eq(USER_ID)))
                 .thenReturn(won(2_150_000));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
@@ -260,8 +266,7 @@ class MonthlyReportServiceTest {
         when(cashFlowEventRepository.sumAmountByFlowTypeInPeriod(
                 eq(USER_ID), any(), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(BigDecimal.ZERO);
-        when(cashFlowEventRepository.sumRecurringExpenseInPeriod(
-                eq(USER_ID), any(LocalDate.class), any(LocalDate.class)))
+        when(cashFlowEventRepository.sumRecurringExpense(eq(USER_ID)))
                 .thenReturn(BigDecimal.ZERO);
 
         when(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))

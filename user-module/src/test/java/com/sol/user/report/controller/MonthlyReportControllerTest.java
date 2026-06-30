@@ -96,7 +96,7 @@ class MonthlyReportControllerTest {
                 new AssetChangeSection(null, null, BigDecimal.valueOf(250_000_000)),
                 new IncomeSection(BigDecimal.ZERO, BigDecimal.ZERO, null, BigDecimal.ZERO),
                 new SpendingSection(BigDecimal.ZERO, BigDecimal.ZERO, "적정", 0),
-                new NextMonthPreviewSection(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, true)
+                new NextMonthPreviewSection(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, true)
         );
         when(monthlyReportService.getMonthlyReport(eq(1L), eq(YearMonth.of(2026, 6))))
                 .thenReturn(noSnapshot);
@@ -117,7 +117,7 @@ class MonthlyReportControllerTest {
                 new AssetChangeSection(BigDecimal.valueOf(1_200_000), BigDecimal.valueOf(248_800_000), BigDecimal.valueOf(250_000_000)),
                 new IncomeSection(BigDecimal.valueOf(1_200_000), BigDecimal.valueOf(100_000), new BigDecimal("12.4"), BigDecimal.valueOf(32_450)),
                 new SpendingSection(BigDecimal.valueOf(2_180_000), BigDecimal.valueOf(3_000_000), "적정", 73),
-                new NextMonthPreviewSection(BigDecimal.valueOf(1_300_000), BigDecimal.valueOf(1_200_000), BigDecimal.valueOf(100_000), BigDecimal.valueOf(2_150_000), true)
+                new NextMonthPreviewSection(BigDecimal.valueOf(1_332_450), BigDecimal.valueOf(1_200_000), BigDecimal.valueOf(100_000), BigDecimal.valueOf(32_450), BigDecimal.valueOf(2_150_000), true)
         );
     }
 }

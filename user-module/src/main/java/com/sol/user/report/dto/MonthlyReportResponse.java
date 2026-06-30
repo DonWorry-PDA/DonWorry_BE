@@ -33,9 +33,10 @@ public record MonthlyReportResponse(
     ) {}
 
     public record NextMonthPreviewSection(
-            BigDecimal incomingTotal,
+            BigDecimal incomingTotal,   // 연금 + 배당 + 예금 이자
             BigDecimal pensionAmount,
             BigDecimal dividendAmount,
+            BigDecimal interestAmount,
             BigDecimal outgoingTotal,
             boolean balanceSufficient
     ) {}
