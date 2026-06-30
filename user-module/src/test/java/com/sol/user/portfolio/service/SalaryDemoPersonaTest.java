@@ -28,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -83,10 +84,13 @@ class SalaryDemoPersonaTest {
         BigDecimal incInherit = recommended(recommendWithSurvey(USER_ID, 2, 1, 0)).getMonthlyIncome();
         BigDecimal incSpend = recommended(recommendWithSurvey(USER_ID, 2, 1, 2)).getMonthlyIncome();
 
+        assertThat(incInherit).as("상속우선(q3=0) 월수령 > 0").isPositive();
         assertThat(incSpend).as("소비우선(q3=2) 월수령 > 상속우선(q3=0)")
                 .isGreaterThan(incInherit);
-        double swing = incSpend.subtract(incInherit).doubleValue() / incInherit.doubleValue();
-        assertThat(swing).as("q3 월수령 스윙 ≥ 20%%").isGreaterThanOrEqualTo(0.20);
+        BigDecimal swing = incSpend.subtract(incInherit)
+                .divide(incInherit, 4, RoundingMode.HALF_UP);
+        assertThat(swing).as("q3 월수령 스윙 ≥ 20%%")
+                .isGreaterThanOrEqualTo(new BigDecimal("0.20"));
     }
 
     @Test
@@ -137,7 +141,8 @@ class SalaryDemoPersonaTest {
 
     PlanResponse recommended(RecommendationResponse res) {
         return res.getPlans().stream().filter(p -> p.getStatus() == PlanStatus.RECOMMENDED)
-                .findFirst().orElse(res.getPlans().get(0));
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("RECOMMENDED plan not found"));
     }
 
     List<EtfInfo> fullPool() {
