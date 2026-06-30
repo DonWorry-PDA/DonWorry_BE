@@ -5,10 +5,8 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.service.AssetAggregator;
 import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
-import com.sol.user.holding.dto.EtfHolding;
-import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.pension.repository.PensionRepository;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.report.dto.MonthlyReportResponse;
 import com.sol.user.report.entity.MonthlyReport;
 import com.sol.user.report.mapper.MonthlyReportMapper;
@@ -22,8 +20,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -37,8 +35,7 @@ public class MonthlyReportService {
     private final CashFlowEventRepository cashFlowEventRepository;
     private final PensionRepository pensionRepository;
     private final AccountRepository accountRepository;
-    private final HoldingRepository holdingRepository;
-    private final ProductBatchClient productBatchClient;
+    private final EtfDividendCalculator etfDividendCalculator;
     private final MonthlyReportSummaryGenerator summaryGenerator;
     private final MonthlyReportMapper mapper;
 
@@ -127,20 +124,12 @@ public class MonthlyReportService {
     }
 
     /**
-     * 보유 ETF 월 배당(런레이트)에 그 달의 배당 계수를 곱한다. 보유 기준이라 값 자체는 고정이지만,
-     * 실제 분배는 달마다 들쭉날쭉하므로 결정적 월별 계수로 흔든다 — 자산 변화 백필과 같은 계수(정합).
+     * 보유 ETF 월 배당(런레이트)에 그 달의 배당 계수를 곱한다. 런레이트(base)는 분배금 단일 출처
+     * {@link EtfDividendCalculator}에서 받아 화면 간 정합을 보장하고(#307), 실제 분배는 달마다
+     * 들쭉날쭉하므로 결정적 월별 계수(MonthlyVariation)로 흔든다 — 자산 변화 백필과 같은 계수(정합).
      */
     private BigDecimal calcMonthlyEtfDividend(Long userId, YearMonth ym) {
-        List<EtfHolding> holdings = holdingRepository.findAllHoldingsByUserId(userId);
-        if (holdings.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        List<Long> productIds = holdings.stream().map(EtfHolding::getProductId).toList();
-        Map<Long, BigDecimal> monthlyDividendMap = productBatchClient.fetchEtfMonthlyDividends(productIds);
-        BigDecimal base = holdings.stream()
-                .map(h -> monthlyDividendMap.getOrDefault(h.getProductId(), BigDecimal.ZERO)
-                        .multiply(h.getQuantity()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal base = etfDividendCalculator.monthlyDividendBreakdown(userId, Set.of()).totalGross();
         return base.multiply(MonthlyVariation.dividendFactor(ym)).setScale(0, RoundingMode.HALF_UP);
     }
 }
