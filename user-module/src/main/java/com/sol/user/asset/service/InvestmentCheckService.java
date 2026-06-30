@@ -40,8 +40,8 @@ import java.util.stream.Collectors;
  * ({@link HoldingRepository#findStockDividendsByUserId})로 산출한다. ETF 실분배 데이터가 전혀 없을 때만
  * 대표배당률({@link PortfolioConstants#REPRESENTATIVE_DIVIDEND_RATE})로 폴백한다(풀 밖 종목 방어).
  *
- * <p>모든 월 현금흐름은 <b>net 실수령</b>이다(금융소득 원천징수 15.4% 차감) — STEP6 은퇴 월수령과 동일 기준이라
- * 화면 간 정합하고, "매달 들어오는 현금흐름"이 실입금액이 된다. 실분배·개별주배당·폴백추정 전 경로에 적용한다.
+ * <p>모든 월 현금흐름은 <b>세전(gross)</b>이다 — 홈·월간리포트와 동일 기준으로 화면 간 정합한다.
+ * 실분배·개별주배당·폴백추정 전 경로 모두 원천징수 차감 없이 반환한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -142,9 +142,8 @@ public class InvestmentCheckService {
         Map.Entry<String, BigDecimal> topSector = topSectorByValue(stocks);
         int sectorConcentration = topSector == null ? 0 : percent(topSector.getValue(), stockTotal);
 
-        // 전액 배당형 ETF로 옮겼을 때의 월 배당(대표배당률, net) vs 현재 종목 실배당(net).
-        // 둘 다 같은 원천징수율로 스케일되므로 delta 부호·suggestion 분기는 불변(표시 숫자만 net).
-        BigDecimal converted = netFinancial(monthlyByRate(stockTotal, PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE));
+        // 전액 배당형 ETF로 옮겼을 때의 월 배당(대표배당률, gross) vs 현재 종목 실배당(gross).
+        BigDecimal converted = monthlyByRate(stockTotal, PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE);
         BigDecimal delta = converted.subtract(stockMonthly);
 
         return GrowthAsset.builder()
@@ -163,19 +162,17 @@ public class InvestmentCheckService {
     }
 
     /**
-     * 현금흐름 역할의 월 배당(net) = 보유 ETF 실분배 합(종목별 수량 × 분배/주 ÷ 배당주기)에 원천징수 차감.
-     * 실분배 데이터가 전혀 없으면(풀 밖 종목 등) 현금흐름 자산 전체를 대표배당률로 추정 폴백(역시 net).
+     * 현금흐름 역할의 월 배당(gross) = 보유 ETF 실분배 합(종목별 수량 × 분배/주 ÷ 배당주기).
+     * 실분배 데이터가 전혀 없으면(풀 밖 종목 등) 현금흐름 자산 전체를 대표배당률로 추정 폴백.
      */
     private BigDecimal cashflowMonthlyDividend(AssetBreakdown breakdown,
                                               List<HoldingDividendCalendarProjection> etfDividends) {
         if (etfDividends.isEmpty()) {
-            return netFinancial(
-                    monthlyByRate(breakdown.nonStockHoldingValue(), PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE));
+            return monthlyByRate(breakdown.nonStockHoldingValue(), PortfolioConstants.REPRESENTATIVE_DIVIDEND_RATE);
         }
-        BigDecimal gross = etfDividends.stream()
+        return etfDividends.stream()
                 .map(this::monthlyFromDistribution)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return netFinancial(gross);
     }
 
     /** ETF 1종목 월 분배액 = 수량 × 분배/주 ÷ 배당주기(월). 주기는 쿼리에서 >0 보장. */
@@ -203,13 +200,12 @@ public class InvestmentCheckService {
                 .orElse(null);
     }
 
-    /** 성장 역할의 월 배당(net) = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합에 원천징수 차감. */
+    /** 성장 역할의 월 배당(gross) = 개별주 종목별 (평가액 × 시가배당률 / 1200) 합. */
     private BigDecimal stockMonthlyDividend(List<EnrichedStock> stocks) {
-        BigDecimal gross = stocks.stream()
+        return stocks.stream()
                 .map(s -> nz(s.evaluationAmount()).multiply(nz(s.dividendYield()))
                         .divide(PERCENT_MONTHS, 0, RoundingMode.HALF_UP))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return netFinancial(gross);
     }
 
     private String concentrationLevel(int concentration) {
@@ -266,12 +262,6 @@ public class InvestmentCheckService {
         boolean stock = product != null && STOCK_PRODUCT_TYPE.equals(product.productType());
         boolean pension = PENSION_ACCOUNT_TYPES.contains(holding.getAccountType());
         return !stock && !pension;
-    }
-
-    /** 금융소득 원천징수(15.4%) 차감 후 실수령(원, 정수). 월 현금흐름은 실입금 기준이라 net으로 표시. */
-    private BigDecimal netFinancial(BigDecimal grossMonthly) {
-        return grossMonthly.multiply(BigDecimal.ONE.subtract(PortfolioConstants.WITHHOLDING_FINANCIAL))
-                .setScale(0, RoundingMode.HALF_UP);
     }
 
     /** 연 배당률(분수) 기준 월 배당액(원, 정수). */
