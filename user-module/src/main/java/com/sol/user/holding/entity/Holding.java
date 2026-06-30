@@ -56,6 +56,13 @@ public class Holding {
         this.quantity = quantity;
     }
 
+    public void refreshValuation(BigDecimal currentPrice) {
+        if (currentPrice == null || currentPrice.compareTo(BigDecimal.ZERO) <= 0 || quantity == null) {
+            return;
+        }
+        this.evaluationAmount = quantity.multiply(currentPrice).setScale(0, RoundingMode.HALF_UP);
+    }
+
     public static Holding ofBuy(Account account, Long productId, BigDecimal quantity, BigDecimal currentPrice) {
         Holding h = new Holding();
         h.account = account;

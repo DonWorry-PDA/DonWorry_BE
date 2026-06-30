@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,6 +53,55 @@ public class EtfRealtimeService {
                     }
                 })
                 .orElseThrow(() -> new BaseException(ErrorCode.PRICE_UNAVAILABLE));
+    }
+
+    public Map<Long, Long> getBatchPrices(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) return Map.of();
+
+        Map<Long, EtfDetail> byProductId = etfDetailRepository
+                .findAllByProductProductIdIn(productIds).stream()
+                .collect(Collectors.toMap(
+                        d -> d.getProduct().getProductId(),
+                        d -> d
+                ));
+
+        Map<Long, Long> result = new LinkedHashMap<>();
+        List<Long> cacheMisses = new ArrayList<>();
+
+        for (Long productId : productIds) {
+            EtfDetail detail = byProductId.get(productId);
+            if (detail == null) {
+                result.put(productId, 0L);
+                continue;
+            }
+            Map<String, String> raw = etfRealtimeCache.getRaw(detail.getTickerCode());
+            if (!raw.isEmpty() && raw.containsKey("price") && !raw.get("price").isBlank()) {
+                try {
+                    result.put(productId, Long.parseLong(raw.get("price").trim()));
+                    continue;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            cacheMisses.add(productId);
+        }
+
+        if (!cacheMisses.isEmpty()) {
+            Map<Long, Long> fallback = dailyPriceRepository.findLatestByProductIds(cacheMisses).stream()
+                    .collect(Collectors.toMap(
+                            dp -> dp.getProduct().getProductId(),
+                            dp -> {
+                                try {
+                                    return dp.getClosingPrice().longValueExact();
+                                } catch (ArithmeticException e) {
+                                    return 0L;
+                                }
+                            }
+                    ));
+            for (Long productId : cacheMisses) {
+                result.put(productId, fallback.getOrDefault(productId, 0L));
+            }
+        }
+        return result;
     }
 
     public List<EtfRealtimeResponse> getAllRealtime() {

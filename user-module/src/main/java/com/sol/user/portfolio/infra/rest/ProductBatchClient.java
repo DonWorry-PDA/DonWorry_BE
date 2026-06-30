@@ -90,4 +90,26 @@ public class ProductBatchClient {
             return Map.of();
         }
     }
+
+    public Map<Long, Long> fetchEtfPrices(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            StockPriceApiResponse response = productRestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/product/etfs/prices")
+                            .queryParam("productIds", productIds)
+                            .build())
+                    .retrieve()
+                    .body(StockPriceApiResponse.class);
+            if (response == null || response.data() == null) {
+                return Map.of();
+            }
+            return response.data();
+        } catch (Exception e) {
+            log.warn("ETF price lookup failed - falling back to stored holding valuation: {}", e.getMessage());
+            return Map.of();
+        }
+    }
 }

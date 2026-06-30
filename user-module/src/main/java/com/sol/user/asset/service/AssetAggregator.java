@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +43,7 @@ public class AssetAggregator {
     private static final String DEPOSIT_ACCOUNT_TYPE = "DEPOSIT";
     /** 월급 재료에서 제외하는 종목 유형 — 청산해야 수익이 나는 개별주식. */
     private static final String STOCK_PRODUCT_TYPE = "STOCK";
+    private static final String ETF_PRODUCT_TYPE = "ETF";
 
     private final AccountRepository accountRepository;
     private final HoldingRepository holdingRepository;
@@ -98,7 +100,7 @@ public class AssetAggregator {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
             AssetBreakdown breakdown =
                     new AssetBreakdown(cash, pensionCash, pinnedSafe, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-            return new AssetSnapshot(breakdown, accounts, holdings, Map.of());
+            return new AssetSnapshot(breakdown, accounts, holdings, Map.of(), Map.of());
         }
 
         Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
@@ -112,6 +114,20 @@ public class AssetAggregator {
                 .toList();
         Map<Long, Long> stockPrices = stockProductIds.isEmpty()
                 ? Map.of() : productBatchClient.fetchStockPrices(stockProductIds);
+        if (stockPrices == null) {
+            stockPrices = Map.of();
+        }
+
+        List<Long> etfProductIds = holdings.stream()
+                .filter(h -> isEtf(products.get(h.getProductId())))
+                .map(HoldingWithProduct::getProductId)
+                .distinct()
+                .toList();
+        Map<Long, Long> etfPrices = etfProductIds.isEmpty()
+                ? Map.of() : productBatchClient.fetchEtfPrices(etfProductIds);
+        if (etfPrices == null) {
+            etfPrices = Map.of();
+        }
 
         BigDecimal nonStock = BigDecimal.ZERO;
         BigDecimal pensionHolding = BigDecimal.ZERO;
@@ -124,13 +140,13 @@ public class AssetAggregator {
                 stock = stock.add(qty.multiply(BigDecimal.valueOf(price)));
             } else if (PENSION_ACCOUNT_TYPES.contains(holding.getAccountType())) {
                 // 연금계좌(IRP·연금저축)의 비STOCK 종목 — 55세 제약이라 즉시가용에서 빠지도록 별도 집계.
-                pensionHolding = pensionHolding.add(nz(holding.getEvaluationAmount()));
+                pensionHolding = pensionHolding.add(currentEtfValuationOrStored(holding, products, etfPrices));
             } else {
-                nonStock = nonStock.add(nz(holding.getEvaluationAmount()));
+                nonStock = nonStock.add(currentEtfValuationOrStored(holding, products, etfPrices));
             }
         }
         AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, pinnedSafe, nonStock, pensionHolding, stock);
-        return new AssetSnapshot(breakdown, accounts, holdings, products);
+        return new AssetSnapshot(breakdown, accounts, holdings, products, etfPrices);
     }
 
     /** {@link #aggregate} 산출의 원본 데이터(accounts/holdings/products)까지 포함한 스냅샷. */
@@ -138,12 +154,42 @@ public class AssetAggregator {
             AssetBreakdown breakdown,
             List<Account> accounts,
             List<HoldingWithProduct> holdings,
-            Map<Long, ProductBatchItem> products
+            Map<Long, ProductBatchItem> products,
+            Map<Long, Long> etfPrices
     ) {
+        public AssetSnapshot(
+                AssetBreakdown breakdown,
+                List<Account> accounts,
+                List<HoldingWithProduct> holdings,
+                Map<Long, ProductBatchItem> products
+        ) {
+            this(breakdown, accounts, holdings, products, Map.of());
+        }
     }
 
     private boolean isStock(ProductBatchItem product) {
         return product != null && STOCK_PRODUCT_TYPE.equals(product.productType());
+    }
+
+    private boolean isEtf(ProductBatchItem product) {
+        return product != null && ETF_PRODUCT_TYPE.equals(product.productType());
+    }
+
+    private BigDecimal currentEtfValuationOrStored(
+            HoldingWithProduct holding,
+            Map<Long, ProductBatchItem> products,
+            Map<Long, Long> etfPrices
+    ) {
+        if (!isEtf(products.get(holding.getProductId()))) {
+            return nz(holding.getEvaluationAmount());
+        }
+        long price = etfPrices.getOrDefault(holding.getProductId(), 0L);
+        if (price <= 0 || holding.getQuantity() == null) {
+            return nz(holding.getEvaluationAmount());
+        }
+        return holding.getQuantity()
+                .multiply(BigDecimal.valueOf(price))
+                .setScale(0, RoundingMode.HALF_UP);
     }
 
     private BigDecimal nz(BigDecimal value) {
