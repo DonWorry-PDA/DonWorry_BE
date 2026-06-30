@@ -13,10 +13,11 @@ import java.util.List;
 @Builder
 public record AllocationInput(
         int finalGrade,                  // STEP4 최종 등급 (1~5)
-        BigDecimal surplus,              // 여유분
+        BigDecimal surplus,              // 여유분 (pinnedSafe 이미 제외됨)
         BigDecimal floorAsset,           // 바닥자산
-        BigDecimal totalAsset,           // 총자산
+        BigDecimal totalAsset,           // 총자산 (pinnedSafe 포함)
         BigDecimal pensionSaving,        // 연금저축 (별도계좌)
+        BigDecimal pinnedSafe,           // 정기예금 — safeTarget·maxBuyTotal 차감용
         InvestmentPropensity propensity, // 성향 (tier·권유등급)
         BigDecimal shortTermBucket,      // 유동성안 단기버킷 (null/0이면 여유분×0.10)
         List<EtfInfo> pool               // 추천 풀

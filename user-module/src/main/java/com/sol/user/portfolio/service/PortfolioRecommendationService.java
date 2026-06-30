@@ -89,7 +89,9 @@ public class PortfolioRecommendationService {
         // netHoldings가 해당 평가액을 차감하지 못하면 총 매수액이 가용 현금을 초과한다.
         BigDecimal existingBrokerageEtfTotal = existingEvalByProductId.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 정기예금(pinnedSafe)은 약정이라 매수 실탄 아님 — IRP·연금저축과 동급으로 차감.
         BigDecimal maxBuyTotal = input.totalAsset().subtract(input.pensionSaving())
+                .subtract(input.pinnedSafeAsset())
                 .subtract(existingBrokerageEtfTotal)
                 .max(BigDecimal.ZERO);
 
@@ -129,6 +131,7 @@ public class PortfolioRecommendationService {
                 .floorAsset(grade.getFloorAsset())
                 .totalAsset(input.totalAsset())
                 .pensionSaving(input.pensionSaving())
+                .pinnedSafe(input.pinnedSafeAsset())
                 .propensity(input.investmentPropensity())
                 .shortTermBucket(SHORT_TERM_BUCKET)
                 .pool(pool)
@@ -147,6 +150,7 @@ public class PortfolioRecommendationService {
                 .otherRegularIncome(OTHER_REGULAR_INCOME)
                 .floorAsset(grade.getFloorAsset())
                 .pensionSaving(input.pensionSaving())
+                .pinnedSafe(input.pinnedSafeAsset())
                 .build();
     }
 

@@ -11,8 +11,10 @@ import java.util.List;
  * 소비처가 필요한 합만 꺼내 쓴다.
  *
  * <ul>
- *   <li>{@code cash} — 전 계좌 deposit_balance(=예수금/현금) 합. 증권 예수금·연금계좌 잔액 포함.
+ *   <li>{@code cash} — DEPOSIT 제외 비연금 계좌 deposit_balance(=예수금/현금) 합. 증권·CMA 예수금.
  *   <li>{@code pensionCash} — IRP·연금저축 계좌 예수금(55세 인출제약 트랙).
+ *   <li>{@code pinnedSafe} — 정기예금(DEPOSIT) 계좌 잔고. 약정이 걸린 돈이라 매수 실탄에서 제외하되
+ *       순자산·floor 모수엔 포함하고 안전수익(SAFE_RATE)은 1회 기여한다.
  *   <li>{@code nonStockHoldingValue} — 비연금계좌의 STOCK 제외 보유종목(ETF·FUND·BOND 등) 평가액. 즉시가용 월급 재료.
  *   <li>{@code pensionHoldingValue} — 연금계좌(IRP·연금저축)의 STOCK 제외 보유종목 평가액. 월급 재료지만 55세 제약.
  *   <li>{@code stockHoldingValue} — 개별주식 평가액 합(계좌 무관). 순자산엔 포함하되 월급 재료에선 제외.
@@ -26,13 +28,14 @@ import java.util.List;
 public record AssetBreakdown(
         BigDecimal cash,
         BigDecimal pensionCash,
+        BigDecimal pinnedSafe,
         BigDecimal nonStockHoldingValue,
         BigDecimal pensionHoldingValue,
         BigDecimal stockHoldingValue
 ) {
-    /** 월급 재료 총자산 = 예수금 + 전 비STOCK 보유(연금 종목 포함). 개별주식 제외(청산 전제라 월급 재원 아님). */
+    /** 월급 재료 총자산 = 예수금 + 정기예금 + 전 비STOCK 보유(연금 종목 포함). 개별주식 제외(청산 전제라 월급 재원 아님). */
     public BigDecimal operatingTotal() {
-        return cash.add(nonStockHoldingValue).add(pensionHoldingValue);
+        return cash.add(pinnedSafe).add(nonStockHoldingValue).add(pensionHoldingValue);
     }
 
     /** 전체 자산 = 월급 재료 + 개별주식. 순자산·은퇴시뮬 표시용. */
@@ -45,9 +48,9 @@ public record AssetBreakdown(
         return pensionCash.add(pensionHoldingValue);
     }
 
-    /** 즉시 가용 금융자산 = 월급 재료 − 연금 제약분(예수금+종목). */
+    /** 즉시 가용 금융자산 = 월급 재료 − 연금 제약분(예수금+종목) − 정기예금(약정). */
     public BigDecimal availableFinancialAsset() {
-        return operatingTotal().subtract(restrictedPension()).max(BigDecimal.ZERO);
+        return operatingTotal().subtract(restrictedPension()).subtract(pinnedSafe).max(BigDecimal.ZERO);
     }
 
     /** 잠자는 돈 = 비연금 예수금(전체 예수금 − 연금 예수금). 음수 방지. */
@@ -70,7 +73,7 @@ public record AssetBreakdown(
         }
 
         List<Slice> slices = new ArrayList<>();
-        addSlice(slices, AssetRole.CASHFLOW, nonStockHoldingValue, total);
+        addSlice(slices, AssetRole.CASHFLOW, nonStockHoldingValue.add(pinnedSafe), total);
         addSlice(slices, AssetRole.GROWTH, stockHoldingValue, total);
         addSlice(slices, AssetRole.IDLE, idleCash(), total);
         addSlice(slices, AssetRole.PENSION, restrictedPension(), total);

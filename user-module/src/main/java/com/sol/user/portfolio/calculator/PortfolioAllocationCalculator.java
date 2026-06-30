@@ -97,10 +97,12 @@ public class PortfolioAllocationCalculator {
         BigDecimal planDividendRate = weightedDividendRate(riskHoldings, byTicker);
         BigDecimal riskCapGainTaxableWeight = weightedCapGainTaxableWeight(riskHoldings, byTicker);
 
+        // 정기예금(pinnedSafe)은 ETF 매수 대상이 아니므로 매수 가능 안전버킷에서 제외.
         BigDecimal safeTarget = input.totalAsset()
                 .subtract(riskTarget)
                 .subtract(input.pensionSaving())
-                .subtract(shortTermBucket);
+                .subtract(shortTermBucket)
+                .subtract(input.pinnedSafe());
 
         // STEP6용 분리값
         BigDecimal surplusRiskAmount = riskTarget;

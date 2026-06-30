@@ -35,11 +35,12 @@ class AssetAggregatorTest {
         // 계좌2(예금 5천만)와 보유종목11(ETF 3억) 제외
         AssetBreakdown breakdown = aggregator.aggregate(1L, Set.of(2L), Set.of(11L));
 
-        // cash = 증권 예수금 1억 (계좌2 5천만 제외)
+        // cash = 증권 예수금 1억, pinnedSafe = 0(계좌2 제외)
         assertThat(breakdown.cash()).isEqualByComparingTo("100000000");
+        assertThat(breakdown.pinnedSafe()).isEqualByComparingTo("0");
         // nonStock = ETF 2억 (보유종목11 3억 제외)
         assertThat(breakdown.nonStockHoldingValue()).isEqualByComparingTo("200000000");
-        // operatingTotal = 1억 + 2억 = 3억
+        // operatingTotal = 1억 + 0 + 2억 = 3억
         assertThat(breakdown.operatingTotal()).isEqualByComparingTo("300000000");
     }
 
@@ -49,10 +50,12 @@ class AssetAggregatorTest {
 
         AssetBreakdown breakdown = aggregator.aggregate(1L);
 
-        // cash = 증권 1억 + 예금 5천만 = 1.5억
-        assertThat(breakdown.cash()).isEqualByComparingTo("150000000");
+        // cash = 증권 1억(DEPOSIT 분리됨), pinnedSafe = 5천만
+        assertThat(breakdown.cash()).isEqualByComparingTo("100000000");
+        assertThat(breakdown.pinnedSafe()).isEqualByComparingTo("50000000");
         // nonStock = ETF 2억 + 3억 = 5억
         assertThat(breakdown.nonStockHoldingValue()).isEqualByComparingTo("500000000");
+        // operatingTotal = 1억 + 5천만 + 5억 = 6.5억
         assertThat(breakdown.operatingTotal()).isEqualByComparingTo("650000000");
     }
 

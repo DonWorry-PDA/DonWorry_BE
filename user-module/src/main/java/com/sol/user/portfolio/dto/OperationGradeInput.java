@@ -16,6 +16,7 @@ public record OperationGradeInput(
         BigDecimal monthlyNationalPension,
 
         // STEP2 — 능력 점수
+        BigDecimal pinnedSafeAsset,            // 정기예금(약정) — surplus·매수 제외, totalAsset엔 포함
         BigDecimal availableFinancialAsset,    // 가용금융자산 (부동산 제외)
         boolean hasLossInsurance,              // 실손보험 보유
         boolean hasMajorIllnessInsurance,      // 장기요양·중대질병 보험 보유

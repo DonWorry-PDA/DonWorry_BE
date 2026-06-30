@@ -28,6 +28,7 @@ public class SalaryAssetMapper {
                 .description(resolveAccountDescription(account.getAccountType()))
                 .amount(account.getDepositBalance())
                 .excluded(excludedKeys.contains(assetKey))
+                .deployability(resolveAccountDeployability(account.getAccountType()))
                 .build();
     }
 
@@ -42,6 +43,7 @@ public class SalaryAssetMapper {
                 .description(resolveHoldingDescription(productType))
                 .amount(holding.getEvaluationAmount())
                 .excluded(excludedKeys.contains(assetKey))
+                .deployability(resolveHoldingDeployability(holding.getAccountType(), productType))
                 .build();
     }
 
@@ -119,6 +121,27 @@ public class SalaryAssetMapper {
             case "CMA" -> "수시 입출금 자산";
             default -> null;
         };
+    }
+
+    private AssetItemDto.Deployability resolveAccountDeployability(String accountType) {
+        if (accountType == null) {
+            return AssetItemDto.Deployability.FREE;
+        }
+        return switch (accountType) {
+            case "DEPOSIT" -> AssetItemDto.Deployability.PINNED_SAFE;
+            case "IRP", "PENSION_SAVING" -> AssetItemDto.Deployability.RESTRICTED_PENSION;
+            default -> AssetItemDto.Deployability.FREE;
+        };
+    }
+
+    private AssetItemDto.Deployability resolveHoldingDeployability(String accountType, String productType) {
+        if ("STOCK".equals(productType)) {
+            return AssetItemDto.Deployability.EXCLUDED_STOCK;
+        }
+        if (accountType != null && (accountType.equals("IRP") || accountType.equals("PENSION_SAVING"))) {
+            return AssetItemDto.Deployability.RESTRICTED_PENSION;
+        }
+        return AssetItemDto.Deployability.FREE;
     }
 
     private String resolveHoldingDescription(String productType) {

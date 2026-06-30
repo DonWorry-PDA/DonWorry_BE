@@ -60,7 +60,7 @@ class AssetHubServiceTest {
         lenient().when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(
                         new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                                BigDecimal.ZERO, BigDecimal.ZERO),
+                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO),
                         List.of(), List.of(), Map.of()));
         lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.empty());
@@ -122,7 +122,7 @@ class AssetHubServiceTest {
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(
                         new AssetBreakdown(BigDecimal.valueOf(80_000_000), BigDecimal.ZERO,
-                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(30_000_000)),
+                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(30_000_000)),
                         List.of(account("DEPOSIT", 80_000_000)),
                         List.of(holding),
                         Map.of(2001L, product)));
@@ -236,7 +236,7 @@ class AssetHubServiceTest {
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(
                         new AssetBreakdown(BigDecimal.valueOf(20_000_000), BigDecimal.ZERO,
-                                BigDecimal.valueOf(30_000_000), BigDecimal.ZERO, BigDecimal.valueOf(50_000_000)),
+                                BigDecimal.ZERO, BigDecimal.valueOf(30_000_000), BigDecimal.ZERO, BigDecimal.valueOf(50_000_000)),
                         List.of(), List.of(), Map.of()));
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
@@ -252,7 +252,7 @@ class AssetHubServiceTest {
         // 현금흐름·잠자는 돈·성장 각 1천만 = 33.33%씩 → CASHFLOW 34(상세 헤드라인과 동일 값).
         // 독립 HALF_UP(33)을 쓰면 허브·상세가 1%p 어긋난다.
         AssetBreakdown breakdown = new AssetBreakdown(BigDecimal.valueOf(10_000_000), BigDecimal.ZERO,
-                BigDecimal.valueOf(10_000_000), BigDecimal.ZERO, BigDecimal.valueOf(10_000_000));
+                BigDecimal.ZERO, BigDecimal.valueOf(10_000_000), BigDecimal.ZERO, BigDecimal.valueOf(10_000_000));
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(breakdown, List.of(), List.of(), Map.of()));
 
@@ -472,30 +472,32 @@ class AssetHubServiceTest {
     }
 
     private void stubSnapshot(List<Account> accounts, HoldingAndProduct holdingAndProduct) {
+        // breakdownFor가 mock getter를 호출하므로 when() 인자 평가 도중 stubbing이 끊기지 않게 미리 계산한다.
+        List<HoldingWithProduct> holdings = List.of(holdingAndProduct.holding());
+        AssetBreakdown breakdown = breakdownFor(accounts, holdings, holdingAndProduct.products());
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
-                new AssetAggregator.AssetSnapshot(
-                        breakdownFor(accounts, List.of(holdingAndProduct.holding()), holdingAndProduct.products()), accounts,
-                        List.of(holdingAndProduct.holding()), holdingAndProduct.products()));
+                new AssetAggregator.AssetSnapshot(breakdown, accounts, holdings, holdingAndProduct.products()));
     }
 
     private void stubSnapshotWithoutProduct(List<Account> accounts, long productId, long evaluationAmount) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
         when(holding.getProductId()).thenReturn(productId);
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
+        AssetBreakdown breakdown = breakdownFor(accounts, List.of(holding), Map.of());
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
-                new AssetAggregator.AssetSnapshot(
-                        breakdownFor(accounts, List.of(holding), Map.of()), accounts, List.of(holding), Map.of()));
+                new AssetAggregator.AssetSnapshot(breakdown, accounts, List.of(holding), Map.of()));
     }
 
     private void stubAccountsOnly(List<Account> accounts) {
+        AssetBreakdown breakdown = breakdownFor(accounts, List.of(), Map.of());
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
-                new AssetAggregator.AssetSnapshot(breakdownFor(accounts, List.of(), Map.of()), accounts, List.of(), Map.of()));
+                new AssetAggregator.AssetSnapshot(breakdown, accounts, List.of(), Map.of()));
     }
 
     /** 카테고리 집계 테스트는 AssetBreakdown 값 자체를 보지 않으므로 영(zero)으로 둔다. */
     private AssetBreakdown breakdownPlaceholder() {
         return new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
     private AssetBreakdown breakdownFor(
@@ -526,7 +528,7 @@ class AssetHubServiceTest {
                 nonStock = nonStock.add(evaluationAmount);
             }
         }
-        return new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
+        return new AssetBreakdown(cash, pensionCash, BigDecimal.ZERO, nonStock, pensionHolding, stock);
     }
 
     private record HoldingAndProduct(HoldingWithProduct holding, Map<Long, ProductBatchItem> products) {

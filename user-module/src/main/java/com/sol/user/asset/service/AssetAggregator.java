@@ -38,6 +38,8 @@ public class AssetAggregator {
 
     /** 55세 인출제약이 걸린 연금 계좌. */
     private static final Set<String> PENSION_ACCOUNT_TYPES = Set.of("PENSION_SAVING", "IRP");
+    /** 약정이 걸린 정기예금 계좌 — 순자산·floor 모수엔 포함하되 매수 실탄에서 제외(pinnedSafe carve-out). */
+    private static final String DEPOSIT_ACCOUNT_TYPE = "DEPOSIT";
     /** 월급 재료에서 제외하는 종목 유형 — 청산해야 수익이 나는 개별주식. */
     private static final String STOCK_PRODUCT_TYPE = "STOCK";
 
@@ -75,11 +77,17 @@ public class AssetAggregator {
         List<Account> accounts = accountRepository.findByUserUserId(userId).stream()
                 .filter(account -> !excludedAccountIds.contains(account.getAccountId()))
                 .toList();
+        // DEPOSIT(정기예금) 잔고는 약정이 걸린 pinnedSafe — 자유현금(cash)과 분리해 매수 실탄에서 제외.
         BigDecimal cash = accounts.stream()
+                .filter(account -> !DEPOSIT_ACCOUNT_TYPE.equals(account.getAccountType()))
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal pensionCash = accounts.stream()
                 .filter(account -> PENSION_ACCOUNT_TYPES.contains(account.getAccountType()))
+                .map(account -> nz(account.getDepositBalance()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal pinnedSafe = accounts.stream()
+                .filter(account -> DEPOSIT_ACCOUNT_TYPE.equals(account.getAccountType()))
                 .map(account -> nz(account.getDepositBalance()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -89,7 +97,7 @@ public class AssetAggregator {
         if (holdings.isEmpty()) {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
             AssetBreakdown breakdown =
-                    new AssetBreakdown(cash, pensionCash, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                    new AssetBreakdown(cash, pensionCash, pinnedSafe, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
             return new AssetSnapshot(breakdown, accounts, holdings, Map.of());
         }
 
@@ -121,7 +129,7 @@ public class AssetAggregator {
                 nonStock = nonStock.add(nz(holding.getEvaluationAmount()));
             }
         }
-        AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
+        AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, pinnedSafe, nonStock, pensionHolding, stock);
         return new AssetSnapshot(breakdown, accounts, holdings, products);
     }
 

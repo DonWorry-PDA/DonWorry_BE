@@ -259,6 +259,7 @@ class OperationGradeCalculatorTest {
                 .age(65)
                 .totalAsset(BigDecimal.valueOf(300_000_000))
                 .pensionSaving(BigDecimal.valueOf(30_000_000))
+                .pinnedSafeAsset(BigDecimal.ZERO)
                 .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
                 .essentialRatio(new BigDecimal("0.72"))
                 .monthlyNationalPension(BigDecimal.valueOf(1_000_000))

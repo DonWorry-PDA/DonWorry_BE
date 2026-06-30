@@ -77,6 +77,7 @@ class OperationGradeInputAssemblerTest {
         given(assetAggregator.aggregate(eq(1L), any(), any())).willReturn(new AssetBreakdown(
                 BigDecimal.valueOf(100_000_000),  // cash
                 BigDecimal.valueOf(20_000_000),   // pensionCash
+                BigDecimal.ZERO,                  // pinnedSafe
                 BigDecimal.valueOf(50_000_000),   // nonStockHoldingValue
                 BigDecimal.valueOf(30_000_000),   // pensionHoldingValue
                 BigDecimal.valueOf(40_000_000))); // stockHoldingValue
@@ -109,7 +110,7 @@ class OperationGradeInputAssemblerTest {
         // 증권 예수금 6억 + 종목 없음 → operatingTotal 6억, 연금 제약분 0
         given(assetAggregator.aggregate(eq(1L), any(), any())).willReturn(
                 new AssetBreakdown(BigDecimal.valueOf(600_000_000), BigDecimal.ZERO,
-                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
 
         UserGoal goal = mock(UserGoal.class);
         given(goal.getMonthlyTargetLivingCost()).willReturn(BigDecimal.valueOf(3_000_000));

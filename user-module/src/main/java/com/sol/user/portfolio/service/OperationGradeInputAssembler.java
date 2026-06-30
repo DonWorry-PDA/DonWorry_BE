@@ -78,8 +78,9 @@ public class OperationGradeInputAssembler {
                 salaryAssetMapper.extractHoldingIds(excludedKeys));
         BigDecimal totalAsset = assets.operatingTotal();
         // 55세 제약분 = 연금 예수금 + 연금 보유종목. 계산기(OperationGradeCalculator)가
-        // availableAsset = totalAsset − pensionSaving 으로 재계산하므로 연금 종목까지 포함해 넘긴다.
+        // availableAsset = totalAsset − pensionSaving − pinnedSafe 로 재계산하므로 연금 종목까지 포함해 넘긴다.
         BigDecimal pensionSaving = assets.restrictedPension();
+        BigDecimal pinnedSafeAsset = assets.pinnedSafe();
         BigDecimal availableFinancialAsset = assets.availableFinancialAsset();
 
         UserGoal goal = userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(userId)
@@ -106,6 +107,7 @@ public class OperationGradeInputAssembler {
                 .age(user.getAge())
                 .totalAsset(totalAsset)
                 .pensionSaving(pensionSaving)
+                .pinnedSafeAsset(pinnedSafeAsset)
                 .targetMonthlyLivingCost(goal.getMonthlyTargetLivingCost())
                 .essentialRatio(PortfolioConstants.ESSENTIAL_RATIO)
                 .monthlyNationalPension(monthlyNationalPension)
