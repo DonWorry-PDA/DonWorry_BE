@@ -10,8 +10,10 @@ import com.sol.product.external.ls.LsProperties;
 import com.sol.product.external.ls.dto.LsWsRequest;
 import com.sol.product.external.ls.dto.LsWsStockResponse;
 import com.sol.product.external.ls.service.LsTokenService;
+import com.sol.product.stock.realtime.StockPricePayload;
 import com.sol.product.stock.realtime.StockRealtimeCache;
 import com.sol.product.stock.realtime.StockTickerRegistry;
+import com.sol.product.stock.realtime.websocket.StockPriceWebSocketHandler;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,7 @@ public class LsWebSocketClient extends TextWebSocketHandler {
     private final EtfRealtimeCache etfRealtimeCache;
     private final EtfPriceWebSocketHandler etfPriceWebSocketHandler;
     private final StockRealtimeCache stockRealtimeCache;
+    private final StockPriceWebSocketHandler stockPriceWebSocketHandler;
     private final StockTickerRegistry stockTickerRegistry;
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
@@ -188,6 +191,10 @@ public class LsWebSocketClient extends TextWebSocketHandler {
                         log.debug("개별주 시세 필드 누락 - 저장 건너뜀 [{}]", ticker);
                     } else {
                         stockRealtimeCache.save(ticker, price, change, drate, sign);
+                        StockPricePayload stockPayload = StockPricePayload.of(ticker, price, change, drate, sign);
+                        if (stockPayload != null) {
+                            stockPriceWebSocketHandler.broadcast(stockPayload);
+                        }
                     }
                 }
             }

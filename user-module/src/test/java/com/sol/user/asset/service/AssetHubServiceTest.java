@@ -378,6 +378,45 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void 개별주식_보유종목은_stockHoldings에_ticker와_quantity가_담긴다() {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(2001L);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(8_000_000));
+        when(holding.getQuantity()).thenReturn(new BigDecimal("100.0000"));
+        ProductBatchItem product = new ProductBatchItem(2001L, "삼성전자", "STOCK", "005930");
+
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        breakdownPlaceholder(), List.of(),
+                        List.of(holding), Map.of(2001L, product)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.stockHoldings()).hasSize(1);
+        assertThat(response.stockHoldings().get(0).ticker()).isEqualTo("005930");
+        assertThat(response.stockHoldings().get(0).quantity()).isEqualByComparingTo("100.0000");
+        assertThat(response.stockSnapshotAmount()).isEqualByComparingTo("8000000");
+        // 개별주식은 ETF 스냅샷에 섞이지 않는다
+        assertThat(response.etfHoldings()).isEmpty();
+        assertThat(response.etfSnapshotAmount()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void 개별주식_보유가_없으면_stockHoldings는_빈_리스트다() {
+        stubCashFlow(0, 0);
+        stubMonthlyFlows();
+        stubLifeStability(0);
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.stockHoldings()).isNotNull().isEmpty();
+        assertThat(response.stockSnapshotAmount()).isEqualByComparingTo("0");
+    }
+
+    @Test
     void ETF_보유가_없으면_etfHoldings는_빈_리스트다() {
         stubCashFlow(0, 0);
         stubMonthlyFlows();
