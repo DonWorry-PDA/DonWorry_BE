@@ -54,7 +54,11 @@ public class ProductService {
         Map<Long, String> tickerByProductId = new HashMap<>();
         if (!etfProductIds.isEmpty()) {
             etfDetailRepository.findAllByProductProductIdIn(etfProductIds)
-                    .forEach(e -> tickerByProductId.put(e.getProduct().getProductId(), e.getTickerCode()));
+                    .forEach(e -> {
+                        if (e.getTickerCode() != null) {
+                            tickerByProductId.put(e.getProduct().getProductId(), e.getTickerCode());
+                        }
+                    });
         }
 
         if (etfProductIds.stream().anyMatch(id -> !tickerByProductId.containsKey(id))) {
