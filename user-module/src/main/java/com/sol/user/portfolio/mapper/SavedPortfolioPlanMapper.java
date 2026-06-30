@@ -13,8 +13,8 @@ import java.util.List;
 @Component
 public class SavedPortfolioPlanMapper {
 
-    public SavePlanResponse toSaveResponse(LocalDateTime savedAt) {
-        return new SavePlanResponse(savedAt);
+    public SavePlanResponse toSaveResponse(Long id, LocalDateTime savedAt) {
+        return new SavePlanResponse(id, savedAt);
     }
 
     public SavedPlanResponse toSavedPlanResponse(SavedPortfolioPlan entity) {
@@ -29,6 +29,7 @@ public class SavedPortfolioPlanMapper {
                 .toList();
 
         return new SavedPlanResponse(
+                entity.getId(),
                 entity.getPlanType(),
                 entity.getMonthlyIncome(),
                 entity.getCurrentCoverageRate(),

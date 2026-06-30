@@ -50,9 +50,9 @@ class SavedPortfolioPlanControllerTest {
     }
 
     @Test
-    void POST_정상_요청_200_savedAt_반환() throws Exception {
-        LocalDateTime now = LocalDateTime.of(2026, 6, 30, 12, 0, 0);
-        when(service.save(eq(1L), any(SavePlanRequest.class))).thenReturn(new SavePlanResponse(now));
+    void POST_정상_요청_200_id와_savedAt_반환() throws Exception {
+        LocalDateTime now = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
+        when(service.save(eq(1L), any(SavePlanRequest.class))).thenReturn(new SavePlanResponse(10L, now));
 
         mockMvc.perform(post("/api/user/portfolio/saved-plan")
                         .requestAttr("userId", 1L)
@@ -60,6 +60,7 @@ class SavedPortfolioPlanControllerTest {
                         .content(objectMapper.writeValueAsString(validRequest(PlanType.STABLE))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.id").value(10))
                 .andExpect(jsonPath("$.data.savedAt").exists());
     }
 
@@ -93,37 +94,6 @@ class SavedPortfolioPlanControllerTest {
     }
 
     @Test
-    void GET_저장된_설계안_있으면_200_planType_반환() throws Exception {
-        SavedPlanResponse response = new SavedPlanResponse(
-                PlanType.STABLE,
-                new BigDecimal("1680000"),
-                new BigDecimal("59.00"), new BigDecimal("84.00"),
-                new BigDecimal("900000"), BigDecimal.ZERO,
-                new BigDecimal("200000000"),
-                List.of(),
-                LocalDateTime.of(2026, 6, 30, 12, 0, 0));
-        when(service.getSaved(1L)).thenReturn(response);
-
-        mockMvc.perform(get("/api/user/portfolio/saved-plan")
-                        .requestAttr("userId", 1L))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.planType").value("STABLE"))
-                .andExpect(jsonPath("$.data.monthlyIncome").value(1680000));
-    }
-
-    @Test
-    void GET_저장된_설계안_없으면_200_data_null() throws Exception {
-        when(service.getSaved(1L)).thenReturn(null);
-
-        mockMvc.perform(get("/api/user/portfolio/saved-plan")
-                        .requestAttr("userId", 1L))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data").doesNotExist());
-    }
-
-    @Test
     void POST_holdings_productId_없으면_400() throws Exception {
         mockMvc.perform(post("/api/user/portfolio/saved-plan")
                         .requestAttr("userId", 1L)
@@ -140,13 +110,37 @@ class SavedPortfolioPlanControllerTest {
     }
 
     @Test
-    void DELETE_저장된_설계안_삭제_200() throws Exception {
-        mockMvc.perform(delete("/api/user/portfolio/saved-plan")
+    void GET_저장된_설계안_목록_200() throws Exception {
+        SavedPlanResponse response = savedPlanResponse(1L, PlanType.STABLE);
+        when(service.getSavedList(1L)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/user/portfolio/saved-plan")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data[0].id").value(1))
+                .andExpect(jsonPath("$.data[0].planType").value("STABLE"));
+    }
+
+    @Test
+    void GET_저장된_설계안_없으면_빈_배열() throws Exception {
+        when(service.getSavedList(1L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/user/portfolio/saved-plan")
+                        .requestAttr("userId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void DELETE_planId로_삭제_200() throws Exception {
+        mockMvc.perform(delete("/api/user/portfolio/saved-plan/10")
                         .requestAttr("userId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"));
 
-        verify(service).delete(1L);
+        verify(service).delete(1L, 10L);
     }
 
     private SavePlanRequest validRequest(PlanType planType) {
@@ -158,5 +152,15 @@ class SavedPortfolioPlanControllerTest {
                 new BigDecimal("200000000"),
                 List.of(new SavePlanRequest.HoldingItem(101L, "069500", "KODEX 200",
                         new BigDecimal("0.60"), new BigDecimal("120000000"))));
+    }
+
+    private SavedPlanResponse savedPlanResponse(Long id, PlanType planType) {
+        return new SavedPlanResponse(id, planType,
+                new BigDecimal("1680000"),
+                new BigDecimal("59.00"), new BigDecimal("84.00"),
+                new BigDecimal("900000"), BigDecimal.ZERO,
+                new BigDecimal("200000000"),
+                List.of(),
+                LocalDateTime.of(2026, 7, 1, 12, 0, 0));
     }
 }
