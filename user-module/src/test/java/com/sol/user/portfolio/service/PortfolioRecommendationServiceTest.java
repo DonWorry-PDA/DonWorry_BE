@@ -89,6 +89,9 @@ class PortfolioRecommendationServiceTest {
         // 각 안에 배분+수령이 병합되어 있음
         assertThat(response.getPlans()).allSatisfy(plan -> {
             assertThat(plan.getMonthlyIncome()).isPositive();
+            // 순증분 = (N − 현재월현금흐름).max(0) — 표시 가치 과대 방지 1급 필드
+            assertThat(plan.getIncrementalMonthlyIncome()).isEqualByComparingTo(
+                    plan.getMonthlyIncome().subtract(response.getCurrentMonthlyCashFlow()).max(BigDecimal.ZERO));
             assertThat(plan.getAlphaCoverageRate()).isNotNull(); // NORMAL이라 충족률 존재
             assertThat(plan.getHoldings()).isNotEmpty();
             // 화면용 필드가 빚어져 있음

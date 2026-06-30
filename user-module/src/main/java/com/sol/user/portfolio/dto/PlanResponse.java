@@ -31,6 +31,9 @@ public class PlanResponse {
 
     // 수령 (STEP6)
     private BigDecimal monthlyIncome;              // 총인출 기준 (원금소진+자본차익 포함)
+    // 추천 운용으로 늘어나는 순월급 = (monthlyIncome − 현재월현금흐름).max(0). 국민연금은 양쪽 동일포함이라
+    // 상쇄돼 순수 운용 기여만 남는다. 음수(이 안 고르면 현재보다 줄어듦)는 0으로 막고 부족액 지표로 위임.
+    private BigDecimal incrementalMonthlyIncome;
     private BigDecimal alphaCoverageRate;          // α충족률 = 총인출 기준 (α≤0이면 null, 100캡)
     private BigDecimal sustainableCoverageRate;    // α충족률 = 지속가능 기준 (이자·배당만, 100캡)
     private BigDecimal inheritanceAmount;
