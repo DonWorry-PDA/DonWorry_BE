@@ -69,6 +69,7 @@ public class AssetMapper {
     /**
      * ETF holding을 한 번 순회해 ticker별 수량 목록과 DB 평가액 합계를 동시에 산출.
      * 동일 ETF를 여러 계좌에 나눠 보유한 경우 ticker 기준 수량 합산.
+     * 개별주식(productType=STOCK)은 {@link #toStockSnapshot}에서 따로 집계하므로 제외한다.
      */
     public EtfSnapshot toEtfSnapshot(AssetAggregator.AssetSnapshot snapshot) {
         Map<Long, ProductBatchItem> products = snapshot.products();
@@ -78,6 +79,7 @@ public class AssetMapper {
         for (HoldingWithProduct h : snapshot.holdings()) {
             ProductBatchItem p = products.get(h.getProductId());
             if (p == null || p.tickerCode() == null) continue;
+            if ("STOCK".equals(p.productType())) continue;
             quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
             snapshotAmount = snapshotAmount.add(nz(h.getEvaluationAmount()));
         }
@@ -89,6 +91,31 @@ public class AssetMapper {
     }
 
     public record EtfSnapshot(List<AssetHubResponse.EtfHoldingItem> holdings, BigDecimal snapshotAmount) {}
+
+    /**
+     * 개별주식(productType=STOCK) holding을 한 번 순회해 ticker별 수량 목록과 DB 평가액 합계를 산출.
+     * 동일 종목을 여러 계좌에 나눠 보유한 경우 ticker 기준 수량 합산. ({@link #toEtfSnapshot}과 대칭)
+     */
+    public StockSnapshot toStockSnapshot(AssetAggregator.AssetSnapshot snapshot) {
+        Map<Long, ProductBatchItem> products = snapshot.products();
+        Map<String, BigDecimal> quantityByTicker = new LinkedHashMap<>();
+        BigDecimal snapshotAmount = BigDecimal.ZERO;
+
+        for (HoldingWithProduct h : snapshot.holdings()) {
+            ProductBatchItem p = products.get(h.getProductId());
+            if (p == null || p.tickerCode() == null) continue;
+            if (!"STOCK".equals(p.productType())) continue;
+            quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
+            snapshotAmount = snapshotAmount.add(nz(h.getEvaluationAmount()));
+        }
+
+        List<AssetHubResponse.StockHoldingItem> holdings = quantityByTicker.entrySet().stream()
+                .map(e -> new AssetHubResponse.StockHoldingItem(e.getKey(), e.getValue()))
+                .toList();
+        return new StockSnapshot(holdings, snapshotAmount);
+    }
+
+    public record StockSnapshot(List<AssetHubResponse.StockHoldingItem> holdings, BigDecimal snapshotAmount) {}
 
     // ─────────────────────────────────────────────────────────────────
     // Composition
