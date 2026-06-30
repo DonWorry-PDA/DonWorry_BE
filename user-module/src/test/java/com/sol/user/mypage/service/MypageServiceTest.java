@@ -1,5 +1,6 @@
 package com.sol.user.mypage.service;
 
+import com.sol.user.mypage.dto.UserProfileResponse;
 import com.sol.user.mypage.dto.UserProfileUpdateRequest;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
@@ -47,10 +48,27 @@ class MypageServiceTest {
         when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.of(activePlan));
 
-        mypageService.updateProfile(USER_ID, request(money(3_500_000)));
+        UserProfileResponse response = mypageService.updateProfile(USER_ID, request(money(3_500_000)));
 
         assertThat(goal.getMonthlyTargetLivingCost()).isEqualByComparingTo("3500000");
+        assertThat(response.activePlanSuperseded()).isTrue();
         verify(activePlan).supersede();
+        verify(lifeStabilityService).recalculateFromUserDataIfReady(USER_ID);
+    }
+
+    @Test
+    void updateProfileReportsNoSupersedeWhenTargetChangesButNoActivePlan() {
+        User user = mock(User.class);
+        UserGoal goal = new UserGoal(user, money(3_000_000), money(350_000), LocalDateTime.now());
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(USER_ID)).thenReturn(Optional.of(goal));
+        when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
+                .thenReturn(Optional.empty());
+
+        UserProfileResponse response = mypageService.updateProfile(USER_ID, request(money(3_500_000)));
+
+        assertThat(response.activePlanSuperseded()).isFalse();
+        // 비활성화할 ACTIVE 설계안은 없어도 목표가 바뀌었으니 재계산은 수행한다.
         verify(lifeStabilityService).recalculateFromUserDataIfReady(USER_ID);
     }
 
@@ -61,8 +79,9 @@ class MypageServiceTest {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
         when(userGoalRepository.findTopByUserUserIdOrderByUpdatedAtDesc(USER_ID)).thenReturn(Optional.of(goal));
 
-        mypageService.updateProfile(USER_ID, request(money(3_000_000)));
+        UserProfileResponse response = mypageService.updateProfile(USER_ID, request(money(3_000_000)));
 
+        assertThat(response.activePlanSuperseded()).isFalse();
         verifyNoInteractions(salaryPlanRepository);
         verify(lifeStabilityService, never()).recalculateFromUserDataIfReady(USER_ID);
     }
