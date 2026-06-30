@@ -34,7 +34,9 @@ public class OperationGradeCalculator {
         BigDecimal essentialLivingCost = input.targetMonthlyLivingCost()
                 .multiply(input.essentialRatio());
         BigDecimal floorAsset = calcFloorAsset(input.monthlyNationalPension(), essentialLivingCost, remainingYears);
-        BigDecimal availableAsset = input.totalAsset().subtract(input.pensionSaving());
+        // 정기예금(pinnedSafe)은 약정이라 매수 실탄에서 제외 — totalAsset엔 남아 floor 불변식은 유지.
+        BigDecimal availableAsset = input.totalAsset().subtract(input.pensionSaving())
+                .subtract(input.pinnedSafeAsset());
         BigDecimal surplus = availableAsset.subtract(floorAsset).max(BigDecimal.ZERO);
 
         // STEP2 — 능력 점수
@@ -176,6 +178,7 @@ public class OperationGradeCalculator {
         requireNonNegative(input.monthlyNationalPension());
         requireNonNegative(input.totalAsset());
         requireNonNegative(input.pensionSaving());
+        requireNonNegative(input.pinnedSafeAsset());
         requireNonNegative(input.availableFinancialAsset());
         requireNonNegative(input.monthlyLoanRepayment());
         if (input.q1() < 0 || input.q1() > 3) throw new BaseException(ErrorCode.INVALID_INPUT);

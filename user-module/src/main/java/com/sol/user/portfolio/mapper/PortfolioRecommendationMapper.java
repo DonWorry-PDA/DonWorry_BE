@@ -50,7 +50,7 @@ public class PortfolioRecommendationMapper {
 
         List<PlanResponse> plans = allocation.getPlans().stream()
                 .map(plan -> toPlanResponse(plan, coverageByType, recommendedType, targetMonthlyLivingCost,
-                        existingEvalByProductId, maxBuyTotal, priceByProductId))
+                        currentMonthlyCashFlow, existingEvalByProductId, maxBuyTotal, priceByProductId))
                 .toList();
 
         String q3Label = coverage.getQ3Scenarios().isEmpty() ? null : Q3_REFERENCE_LABEL;
@@ -106,6 +106,7 @@ public class PortfolioRecommendationMapper {
                                         Map<PlanType, PlanCoverage> coverageByType,
                                         PlanType recommendedType,
                                         BigDecimal targetMonthlyLivingCost,
+                                        BigDecimal currentMonthlyCashFlow,
                                         Map<Long, BigDecimal> existingEvalByProductId,
                                         BigDecimal maxBuyTotal,
                                         Map<Long, BigDecimal> priceByProductId) {
@@ -120,6 +121,11 @@ public class PortfolioRecommendationMapper {
                 : PlanStatus.AVAILABLE;
 
         BigDecimal monthlyIncome = coverage.getMonthlyIncome();
+        // 추천 운용 순증분 = N − 현재월현금흐름(국민연금+현재배당, net). 국민연금 상쇄 → 순수 운용 기여.
+        BigDecimal incrementalMonthlyIncome = (monthlyIncome == null || currentMonthlyCashFlow == null)
+                ? BigDecimal.ZERO.setScale(RATIO_SCALE)
+                : monthlyIncome.subtract(currentMonthlyCashFlow).max(BigDecimal.ZERO)
+                        .setScale(RATIO_SCALE, RoundingMode.HALF_UP);
         BigDecimal totalCoverageRate = coverageRate(monthlyIncome, targetMonthlyLivingCost);
         BigDecimal residualShortfall = (targetMonthlyLivingCost == null || monthlyIncome == null)
                 ? BigDecimal.ZERO.setScale(RATIO_SCALE)
@@ -140,6 +146,7 @@ public class PortfolioRecommendationMapper {
                         coverage))
                 .allocations(buildAllocations(plan))
                 .monthlyIncome(monthlyIncome)
+                .incrementalMonthlyIncome(incrementalMonthlyIncome)
                 .alphaCoverageRate(coverage.getAlphaCoverageRate())
                 .sustainableCoverageRate(coverage.getSustainableCoverageRate())
                 .inheritanceAmount(coverage.getInheritanceAmount())

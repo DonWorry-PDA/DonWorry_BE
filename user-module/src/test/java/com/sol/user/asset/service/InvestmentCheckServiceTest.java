@@ -70,7 +70,7 @@ class InvestmentCheckServiceTest {
     void 자산을_4역할로_분해하고_비율합은_100() {
         // 현금 3천(연금예수 1천 포함→잠자는 2천) / 현금흐름 3천 / 연금종목 1천 / 주식 3천 = 순자산 1억
         stubBreakdown(new AssetBreakdown(
-                won(30_000_000), won(10_000_000), won(30_000_000), won(10_000_000), won(30_000_000)));
+                won(30_000_000), won(10_000_000), BigDecimal.ZERO, won(30_000_000), won(10_000_000), won(30_000_000)));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
@@ -88,7 +88,7 @@ class InvestmentCheckServiceTest {
         // 현금흐름·잠자는 돈·성장 각 1천만 = 33.33%씩. 내림 33+33+33=99, 잔여 1은 소수부 동률→
         // 선언 순서상 CASHFLOW가 먼저 +1 → CASHFLOW 34. 독립 HALF_UP(33)이면 헤드라인이 도넛과 어긋난다.
         stubBreakdown(new AssetBreakdown(
-                won(10_000_000), BigDecimal.ZERO, won(10_000_000), BigDecimal.ZERO, won(10_000_000)));
+                won(10_000_000), BigDecimal.ZERO, BigDecimal.ZERO, won(10_000_000), BigDecimal.ZERO, won(10_000_000)));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
@@ -102,7 +102,7 @@ class InvestmentCheckServiceTest {
     void 금액이_0인_역할은_분해에서_제외된다() {
         // 잠자는 5천 / 성장 5천만. 현금흐름·연금 0 → 두 역할만.
         stubBreakdown(new AssetBreakdown(
-                won(50_000_000), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(50_000_000)));
+                won(50_000_000), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(50_000_000)));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
@@ -114,7 +114,7 @@ class InvestmentCheckServiceTest {
     @Test
     void 현금흐름_월배당은_보유ETF_실분배로_계산된다() {
         stubBreakdown(new AssetBreakdown(
-                won(20_000_000), BigDecimal.ZERO, won(30_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
+                won(20_000_000), BigDecimal.ZERO, BigDecimal.ZERO, won(30_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
         // 100주×300원/월 + 50주×600원÷3개월 = 30,000 + 10,000 = 40,000원/월(gross)
         when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
                 .thenReturn(List.of(etf(101L, 100, "300", 1), etf(102L, 50, "600", 3)));
@@ -128,7 +128,7 @@ class InvestmentCheckServiceTest {
     @Test
     void 현금흐름_ETF실분배_데이터가_없으면_대표배당률_폴백() {
         stubBreakdown(new AssetBreakdown(
-                won(20_000_000), BigDecimal.ZERO, won(30_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
+                won(20_000_000), BigDecimal.ZERO, BigDecimal.ZERO, won(30_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
         // findDividendCalendarInputsByUserId 미스텁 → 빈 리스트 → 폴백
 
         InvestmentCheckResponse response = service.check(USER_ID);
@@ -232,7 +232,7 @@ class InvestmentCheckServiceTest {
     void 분배데이터가_있고_공백종목이_있으면_경고에_금액과_종목명이_담긴다() {
         // 현금흐름 자산 5천 = 분배되는 ETF(101) 3천 + 분배없는 채권혼합(999) 2천
         AssetBreakdown breakdown = new AssetBreakdown(
-                BigDecimal.ZERO, BigDecimal.ZERO, won(50_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(50_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
         stubSnapshot(breakdown,
                 List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),
                         holding(2L, 999L, 20_000_000, "BROKERAGE")),
@@ -252,7 +252,7 @@ class InvestmentCheckServiceTest {
     @Test
     void 분배데이터가_전무하면_폴백추정이라_경고는_null() {
         AssetBreakdown breakdown = new AssetBreakdown(
-                BigDecimal.ZERO, BigDecimal.ZERO, won(20_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(20_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
         stubSnapshot(breakdown,
                 List.of(holding(1L, 999L, 20_000_000, "BROKERAGE")),
                 Map.of(999L, product(999L, "SOL 코스피200채권혼합50", "FUND")));
@@ -266,7 +266,7 @@ class InvestmentCheckServiceTest {
     @Test
     void 개별주와_연금보유는_현금흐름_공백경고_대상이_아니다() {
         AssetBreakdown breakdown = new AssetBreakdown(
-                BigDecimal.ZERO, BigDecimal.ZERO, won(30_000_000), won(10_000_000), won(20_000_000));
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(30_000_000), won(10_000_000), won(20_000_000));
         stubSnapshot(breakdown,
                 List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),   // 커버됨
                         holding(2L, 500L, 20_000_000, "BROKERAGE"),   // STOCK → 제외
@@ -287,7 +287,7 @@ class InvestmentCheckServiceTest {
     void 같은_공백종목을_여러계좌로_보유하면_금액은_합산되고_종목명은_한_번만() {
         // 분배없는 채권혼합(999)을 두 계좌에 각 2천·1천 보유 → amount 3천 합산, 종목명은 1회
         AssetBreakdown breakdown = new AssetBreakdown(
-                BigDecimal.ZERO, BigDecimal.ZERO, won(60_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, won(60_000_000), BigDecimal.ZERO, BigDecimal.ZERO);
         stubSnapshot(breakdown,
                 List.of(holding(1L, 101L, 30_000_000, "BROKERAGE"),
                         holding(2L, 999L, 20_000_000, "BROKERAGE"),
@@ -322,12 +322,12 @@ class InvestmentCheckServiceTest {
 
     private AssetBreakdown zeroBreakdown() {
         return new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
     private AssetBreakdown stockOnlyBreakdown(long stock) {
         return new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, won(stock));
+                BigDecimal.ZERO, BigDecimal.ZERO, won(stock));
     }
 
     private StockDividendProjection stock(long productId, String name, long eval, String yield) {

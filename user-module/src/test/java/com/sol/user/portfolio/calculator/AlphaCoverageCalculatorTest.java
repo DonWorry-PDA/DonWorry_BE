@@ -395,7 +395,8 @@ class AlphaCoverageCalculatorTest {
                 .monthlyNationalPension(BigDecimal.valueOf(1_000_000))
                 .otherRegularIncome(BigDecimal.ZERO)
                 .floorAsset(BigDecimal.valueOf(50_000_000))
-                .pensionSaving(BigDecimal.valueOf(50_000_000));
+                .pensionSaving(BigDecimal.valueOf(50_000_000))
+                .pinnedSafe(BigDecimal.ZERO);
     }
 
     private AllocationResult normalAllocation() {

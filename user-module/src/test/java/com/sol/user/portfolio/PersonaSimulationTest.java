@@ -95,6 +95,7 @@ class PersonaSimulationTest {
                 .floorAsset(grade.getFloorAsset())
                 .totalAsset(input.totalAsset())
                 .pensionSaving(input.pensionSaving())
+                .pinnedSafe(input.pinnedSafeAsset())
                 .propensity(input.investmentPropensity())
                 .shortTermBucket(BigDecimal.ZERO)
                 .pool(pool())
@@ -134,6 +135,7 @@ class PersonaSimulationTest {
                 .otherRegularIncome(otherIncome)
                 .floorAsset(grade.getFloorAsset())
                 .pensionSaving(input.pensionSaving())
+                .pinnedSafe(input.pinnedSafeAsset())
                 .build();
         CoverageResult cov = coverageCalc.calculate(covInput);
 
@@ -200,6 +202,7 @@ class PersonaSimulationTest {
         return OperationGradeInput.builder()
                 .targetMonthlyLivingCost(BigDecimal.valueOf(3_000_000))
                 .essentialRatio(new BigDecimal("0.72"))
+                .pinnedSafeAsset(BigDecimal.ZERO)
                 .hasLossInsurance(true)
                 .hasMajorIllnessInsurance(true)
                 .monthlyLoanRepayment(BigDecimal.ZERO)

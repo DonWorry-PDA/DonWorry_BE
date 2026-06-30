@@ -18,6 +18,7 @@ public record CoverageInput(
         BigDecimal monthlyNationalPension, // 국민연금
         BigDecimal otherRegularIncome,   // 기타정기수입 (α에만 반영)
         BigDecimal floorAsset,           // 바닥자산 (원금보존, 이자만)
-        BigDecimal pensionSaving         // 연금저축
+        BigDecimal pensionSaving,        // 연금저축
+        BigDecimal pinnedSafe            // 정기예금 — safe yield 1회 기여, 상속분 포함
 ) {
 }

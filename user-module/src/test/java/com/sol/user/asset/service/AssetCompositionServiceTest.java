@@ -170,6 +170,7 @@ class AssetCompositionServiceTest {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
+                BigDecimal.ZERO,
                 BigDecimal.ZERO
         );
         return new AssetAggregator.AssetSnapshot(breakdown, List.of(), List.of(), Map.of());
@@ -180,6 +181,7 @@ class AssetCompositionServiceTest {
             List<HoldingWithProduct> holdings,
             Map<Long, ProductBatchItem> products) {
         AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 holdingTotal,

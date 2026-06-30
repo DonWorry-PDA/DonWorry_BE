@@ -254,7 +254,7 @@ class MonthlyReportServiceTest {
 
     private void stubDefaults() {
         AssetBreakdown breakdown = new AssetBreakdown(
-                won(250_000_000), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                won(250_000_000), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         when(assetAggregator.aggregate(USER_ID)).thenReturn(breakdown);
 
         when(reportRepository.findByUserUserIdAndCurrentMonth(eq(USER_ID), any()))

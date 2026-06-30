@@ -149,6 +149,7 @@ class CalibrationHarness {
                 .age(age)
                 .totalAsset(total)
                 .pensionSaving(BigDecimal.valueOf(pensionSaving))
+                .pinnedSafeAsset(BigDecimal.ZERO)
                 .targetMonthlyLivingCost(BigDecimal.valueOf(livingCost))
                 .essentialRatio(new BigDecimal("0.72"))
                 .monthlyNationalPension(BigDecimal.valueOf(nationalPension))

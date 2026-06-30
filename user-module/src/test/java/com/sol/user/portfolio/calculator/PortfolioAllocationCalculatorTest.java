@@ -331,6 +331,7 @@ class PortfolioAllocationCalculatorTest {
                 .floorAsset(BigDecimal.valueOf(50_000_000))
                 .totalAsset(BigDecimal.valueOf(600_000_000))
                 .pensionSaving(BigDecimal.ZERO)
+                .pinnedSafe(BigDecimal.ZERO)
                 .shortTermBucket(null)
                 .pool(pool());
     }

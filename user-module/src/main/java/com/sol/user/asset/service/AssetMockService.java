@@ -1022,9 +1022,9 @@ public class AssetMockService {
                     InvestmentPropensity.AGGRESSIVE,
                     List.of(
                             asset("CMA", "신한투자증권", 50_000_000),
-                            asset("DEPOSIT", "신한은행", 50_000_000),
-                            // 예수금만 계약: 종목 가치는 holdings 보유 → BROKERAGE 예수금 0.
-                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("DEPOSIT", "신한은행", 0),
+                            // 예수금만 계약: 종목 가치는 holdings 보유 → BROKERAGE 예수금은 자유현금 5천만.
+                            asset("BROKERAGE", "신한투자증권", 50_000_000),
                             asset("IRP", "신한투자증권", 200_000_000),
                             asset("PENSION_SAVING", "신한투자증권", 80_000_000)
                     ),
