@@ -22,7 +22,7 @@ public record StockPricePayload(
                 Long.parseLong(price.trim()),
                 Long.parseLong(change.trim()),
                 new BigDecimal(drate.trim()),
-                sign != null ? sign.trim() : "3"
+                (sign != null && !sign.isBlank()) ? sign.trim() : "3"
         );
     }
 }

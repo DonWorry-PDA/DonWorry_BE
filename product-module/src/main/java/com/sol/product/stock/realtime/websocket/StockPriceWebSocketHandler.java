@@ -13,10 +13,12 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 프론트 WebSocket 연결 관리 및 실시간 개별주식 가격 broadcast.
- * 연결된 모든 클라이언트에게 가격 업데이트를 push한다. (ETF 핸들러와 대칭)
+ * broadcast는 별도 스레드에서 실행해 LS 수신 스레드를 블로킹하지 않는다. (ETF 핸들러와 대칭)
  */
 @Slf4j
 @Component
@@ -25,6 +27,7 @@ public class StockPriceWebSocketHandler extends TextWebSocketHandler {
 
     private final ObjectMapper objectMapper;
     private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
+    private final ExecutorService broadcastExecutor = Executors.newCachedThreadPool();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -43,18 +46,25 @@ public class StockPriceWebSocketHandler extends TextWebSocketHandler {
         try {
             TextMessage message = new TextMessage(objectMapper.writeValueAsString(payload));
             for (WebSocketSession session : sessions) {
-                if (session.isOpen()) {
-                    synchronized (session) {
-                        try {
-                            session.sendMessage(message);
-                        } catch (IOException e) {
-                            log.warn("프론트 주식 WebSocket 전송 실패: {}", session.getId());
-                        }
-                    }
-                }
+                broadcastExecutor.submit(() -> send(session, message));
             }
         } catch (Exception e) {
-            log.error("주식 가격 broadcast 실패: {}", payload.ticker(), e);
+            log.error("주식 가격 broadcast 직렬화 실패: {}", payload.ticker(), e);
+        }
+    }
+
+    private void send(WebSocketSession session, TextMessage message) {
+        if (!session.isOpen()) {
+            sessions.remove(session);
+            return;
+        }
+        synchronized (session) {
+            try {
+                session.sendMessage(message);
+            } catch (IOException e) {
+                log.warn("프론트 주식 WebSocket 전송 실패: {}", session.getId());
+                sessions.remove(session);
+            }
         }
     }
 }

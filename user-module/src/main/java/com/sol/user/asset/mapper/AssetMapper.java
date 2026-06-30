@@ -103,10 +103,12 @@ public class AssetMapper {
 
         for (HoldingWithProduct h : snapshot.holdings()) {
             ProductBatchItem p = products.get(h.getProductId());
-            if (p == null || p.tickerCode() == null) continue;
+            if (p == null) continue;
             if (!"STOCK".equals(p.productType())) continue;
-            quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
             snapshotAmount = snapshotAmount.add(nz(h.getEvaluationAmount()));
+            if (p.tickerCode() != null) {
+                quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
+            }
         }
 
         List<AssetHubResponse.StockHoldingItem> holdings = quantityByTicker.entrySet().stream()
