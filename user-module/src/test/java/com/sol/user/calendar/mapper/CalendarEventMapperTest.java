@@ -21,8 +21,9 @@ class CalendarEventMapperTest {
         assertThat(mapper.toCategory("CARD")).isEqualTo(CalendarEventCategory.TRANSACTION);
         assertThat(mapper.toCategory("LOAN")).isEqualTo(CalendarEventCategory.PAYMENT);
         assertThat(mapper.toCategory("TRANSPORT")).isEqualTo(CalendarEventCategory.TRANSACTION);
-        assertThat(mapper.toCategory("UTILITY")).isEqualTo(CalendarEventCategory.TRANSACTION);
-        assertThat(mapper.toCategory("PHONE")).isEqualTo(CalendarEventCategory.TRANSACTION);
+        // 공과금·통신비는 정기 고정비라 납입(PAYMENT)으로 분류 → 일정 영역 표시 (#294)
+        assertThat(mapper.toCategory("UTILITY")).isEqualTo(CalendarEventCategory.PAYMENT);
+        assertThat(mapper.toCategory("PHONE")).isEqualTo(CalendarEventCategory.PAYMENT);
         assertThat(mapper.toCategory("MEDICAL")).isEqualTo(CalendarEventCategory.TRANSACTION);
         assertThat(mapper.toCategory("MATURITY")).isEqualTo(CalendarEventCategory.MATURITY);
         assertThat(mapper.toCategory("UNKNOWN")).isEqualTo(CalendarEventCategory.ETC);
