@@ -40,9 +40,7 @@ public class EtfDividendCalculator {
      * 실패는 격리(fail-open)해 0으로 처리한다 — 외부 장애가 sync·재계산을 롤백시키지 않게 한다.
      */
     public BigDecimal monthlyDividend(Long userId) {
-        return monthlyDividendBreakdown(userId, Set.of())
-                .totalGross()
-                .setScale(0, RoundingMode.HALF_UP);
+        return monthlyDividendBreakdown(userId, Set.of()).totalGrossRounded();
     }
 
     /**
@@ -84,8 +82,19 @@ public class EtfDividendCalculator {
     public record DividendBreakdown(BigDecimal nonPensionGross, BigDecimal pensionGross) {
         public static final DividendBreakdown ZERO = new DividendBreakdown(BigDecimal.ZERO, BigDecimal.ZERO);
 
+        /** 반올림 전 원시 합계 — 세후 변환처럼 추가 연산이 따르는 소비처(현금흐름 진단)용. */
         public BigDecimal totalGross() {
             return nonPensionGross.add(pensionGross);
+        }
+
+        /**
+         * 화면 표시용 합계 — 스코프별로 반올림한 뒤 더한다. 자산분석은 비연금/연금을 각각 정수 원으로
+         * 표시(round(a)+round(b))하므로, 허브·생활안정도의 총 분배금도 같은 기준으로 맞춰 화면 간 1원
+         * 오차(round(a+b) ≠ round(a)+round(b))를 없앤다.
+         */
+        public BigDecimal totalGrossRounded() {
+            return nonPensionGross.setScale(0, RoundingMode.HALF_UP)
+                    .add(pensionGross.setScale(0, RoundingMode.HALF_UP));
         }
     }
 
