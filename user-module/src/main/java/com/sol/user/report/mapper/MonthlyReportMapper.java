@@ -41,8 +41,9 @@ public class MonthlyReportMapper {
     }
 
     public NextMonthPreviewSection toNextMonthPreview(
-            BigDecimal incomingTotal, BigDecimal nextPension,
-            BigDecimal nextDividend, BigDecimal outgoingTotal, boolean balanceSufficient) {
-        return new NextMonthPreviewSection(incomingTotal, nextPension, nextDividend, outgoingTotal, balanceSufficient);
+            BigDecimal incomingTotal, BigDecimal nextPension, BigDecimal nextDividend,
+            BigDecimal nextInterest, BigDecimal outgoingTotal, boolean balanceSufficient) {
+        return new NextMonthPreviewSection(
+                incomingTotal, nextPension, nextDividend, nextInterest, outgoingTotal, balanceSufficient);
     }
 }

@@ -6,6 +6,7 @@ import com.sol.user.asset.dto.MockAssetResponse;
 import com.sol.user.asset.type.MockType;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.repository.DebtRepository;
@@ -40,6 +41,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -337,8 +339,9 @@ class AssetMockServiceTest {
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
     void monthlyReportSnapshotsReconcileWithNetCashFlow() {
-        // 정합성 핵심(#256): 월별 총자산 스냅샷의 달간 증감 == 그 달 실제 순현금흐름
-        // (연금+이자 − 소비·보험·대출). 주식 매수/매도는 순자산 중립이라 제외. 배당은 mock 0.
+        // 정합성 핵심(#256): 월별 총자산 스냅샷의 달간 증감 == 그 달 실제 변화량
+        // = 순현금흐름(연금+이자 − 소비·관리비·보험·대출) + 배당(mock 0) + 시세변동(보유 평가액 × 월수익률).
+        // 주식 매수/매도는 순자산 중립이라 제외. 시세변동이 더해져 자산이 늘고 줄 수 있다.
         User user = mock(User.class);
         when(user.getNationalPensionReceiving()).thenReturn(true);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
@@ -362,6 +365,14 @@ class AssetMockServiceTest {
             netByMonth.merge(m, signed, BigDecimal::add);
         }
 
+        // 시세변동 베이스 = 저장된 보유 평가액 합계 (개별주는 evaluationAmount=null이라 제외)
+        ArgumentCaptor<Iterable> hCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(holdingRepository).saveAll(hCaptor.capture());
+        BigDecimal holdingsBase = toList((Iterable<Holding>) hCaptor.getValue()).stream()
+                .map(Holding::getEvaluationAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         // 저장된 12개월 스냅샷 수집
         ArgumentCaptor<MonthlyReport> snapCaptor = ArgumentCaptor.forClass(MonthlyReport.class);
         verify(monthlyReportRepository, atLeastOnce()).save(snapCaptor.capture());
@@ -371,19 +382,27 @@ class AssetMockServiceTest {
         YearMonth current = YearMonth.now();
         BigDecimal currentTotal = response.assetSummary().totalAsset();
 
-        // 현재월: 현재 총자산 − 전월 스냅샷 == 이번달 순현금흐름
+        // 현재월: 현재 총자산 − 전월 스냅샷 == 이번달 변화량(순현금흐름 + 시세변동; 배당 mock 0)
         BigDecimal prevSnap = snapByMonth.get(current.minusMonths(1).toString());
         assertThat(prevSnap).isNotNull();
         assertThat(currentTotal.subtract(prevSnap))
-                .isEqualByComparingTo(netByMonth.getOrDefault(current, BigDecimal.ZERO));
+                .isEqualByComparingTo(expectedDelta(netByMonth, holdingsBase, current));
 
         // 과거 연속 달도 동일하게 정합
         for (int i = 1; i <= 11; i++) {
             BigDecimal newer = snapByMonth.get(current.minusMonths(i).toString());
             BigDecimal older = snapByMonth.get(current.minusMonths(i + 1).toString());
             assertThat(newer.subtract(older))
-                    .isEqualByComparingTo(netByMonth.getOrDefault(current.minusMonths(i), BigDecimal.ZERO));
+                    .isEqualByComparingTo(expectedDelta(netByMonth, holdingsBase, current.minusMonths(i)));
         }
+    }
+
+    /** 그 달 자산 변화량 = 순현금흐름 + 배당(mock 0) + 시세변동(보유 평가액 × 월수익률). */
+    private static BigDecimal expectedDelta(Map<YearMonth, BigDecimal> netByMonth,
+                                            BigDecimal holdingsBase, YearMonth month) {
+        BigDecimal market = holdingsBase.multiply(MonthlyVariation.marketReturn(month))
+                .setScale(0, RoundingMode.HALF_UP);
+        return netByMonth.getOrDefault(month, BigDecimal.ZERO).add(market);
     }
 
     @Test

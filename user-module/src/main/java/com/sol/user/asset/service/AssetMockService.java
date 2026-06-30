@@ -12,6 +12,7 @@ import com.sol.user.asset.type.MockType;
 import com.sol.user.assetconnection.domain.ConnectedInstitutions;
 import com.sol.user.assetconnection.entity.AssetConnection;
 import com.sol.user.assetconnection.repository.AssetConnectionRepository;
+import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.debt.entity.Debt;
@@ -215,9 +216,14 @@ public class AssetMockService {
 
         // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
         AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
-        // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름"에서 역산해 백필 —
-        // 월간 리포트의 자산 변화가 그 달 수입·지출과 정합한다(임의 성장곡선 아님).
-        saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), events);
+        // 보유 평가액(현금 제외)은 월별 시세변동(평가손익)의 베이스 — 자산이 늘고 주는 출처.
+        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산(createAssetSummary와 동일).
+        BigDecimal holdingsValuation = holdings.stream()
+                .map(Holding::getEvaluationAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름 + 배당 + 시세변동"에서 역산해 백필.
+        saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), holdingsValuation, events);
 
         // 원천 데이터 저장 직후 생활 안정도를 재계산해 항상 최신 결과가 존재하도록 한다.
         // 온보딩(UserGoal) 전 사용자는 내부에서 스킵된다.
@@ -500,25 +506,33 @@ public class AssetMockService {
                                                   Scenario scenario, boolean recurring,
                                                   BigDecimal interestAmount, int interestDay) {
         String status = recurring ? "SCHEDULED" : "COMPLETED";
+        YearMonth ym = YearMonth.from(monthStart);
+        // 월 단위 공통 변동 계수: 그 달 이자·관리비·소비를 함께 흔들어 월 합계가 눈에 띄게 달라지게 한다.
+        BigDecimal cashFactor = MonthlyVariation.cashFactor(ym);
 
         List<CashFlowEvent> events = new ArrayList<>();
 
+        // 연금·보험·대출상환은 현실에서도 매달 고정이라 변동을 주지 않는다.
         if (Boolean.TRUE.equals(user.getNationalPensionReceiving())
                 && scenario.monthlyPensionIncome().signum() > 0) {
             events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
                     scenario.monthlyPensionIncome(), "INCOME", status, recurring));
         }
-        // 예금 이자: 실제 계좌 잔고 × 금리 / 1200 계산값, 지급일은 account.openedAt 기준.
-        // 배당은 보유 ETF(dividend_history) 기반 단일 출처로 통일했으므로 시드하지 않는다(#216).
+        // 예금 이자: 실제 계좌 잔고 × 금리 / 1200 계산값에 월별 계수를 적용해 매달 같은 값이 되지 않게 한다.
+        // 지급일은 account.openedAt 기준. 배당은 보유 ETF 단일 출처라 여기서 시드하지 않는다(#216).
         if (interestAmount.signum() > 0) {
-            int cappedDay = Math.min(interestDay, YearMonth.from(monthStart).lengthOfMonth());
+            BigDecimal monthInterest = interestAmount.multiply(cashFactor).setScale(0, RoundingMode.HALF_UP);
+            int cappedDay = Math.min(interestDay, ym.lengthOfMonth());
             events.add(event(user, monthStart.withDayOfMonth(cappedDay), "INTEREST", "예금 이자",
-                    interestAmount, "INCOME", status, recurring));
+                    monthInterest, "INCOME", status, recurring));
         }
 
+        // 관리비는 계절(냉난방)에 따라 변동이 자연스러우므로 월별 계수를 적용한다.
         if (scenario.monthlyMaintenanceExpense().signum() > 0) {
+            BigDecimal monthMaintenance = scenario.monthlyMaintenanceExpense()
+                    .multiply(cashFactor).setScale(0, RoundingMode.HALF_UP);
             events.add(event(user, monthStart.withDayOfMonth(10), "MAINTENANCE", "아파트 관리비",
-                    scenario.monthlyMaintenanceExpense(), "EXPENSE", status, recurring));
+                    monthMaintenance, "EXPENSE", status, recurring));
         }
         if (scenario.monthlyInsurancePremium().signum() > 0) {
             events.add(event(user, monthStart.withDayOfMonth(15), "INSURANCE", "신한라이프 보험료",
@@ -537,7 +551,7 @@ public class AssetMockService {
         for (int i = 0; i < templates.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = templates.get(i);
             int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
-            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), ym, i);
             events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
                     amount, "EXPENSE", "COMPLETED", false));
         }
@@ -547,11 +561,12 @@ public class AssetMockService {
 
     private List<CashFlowEvent> buildMonthStockEvents(User user, LocalDate monthStart, Scenario scenario) {
         List<MockTransactionTemplates.TransactionTemplate> trades = scenario.stockTrades();
+        YearMonth ym = YearMonth.from(monthStart);
         List<CashFlowEvent> events = new ArrayList<>();
         for (int i = 0; i < trades.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = trades.get(i);
             int day = STOCK_TRADE_DAYS[i % STOCK_TRADE_DAYS.length];
-            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), monthStart.getMonthValue(), i);
+            BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), ym, i);
             String flowType = "STOCK_BUY".equals(t.eventType()) ? "EXPENSE" : "INCOME";
             events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
                     amount, flowType, "COMPLETED", false));
@@ -559,9 +574,16 @@ public class AssetMockService {
         return events;
     }
 
-    private BigDecimal applyVariation(BigDecimal baseAmount, int monthNum, int templateIndex) {
-        BigDecimal factor = BigDecimal.valueOf(85 + ((monthNum * 7 + templateIndex * 3) % 31), 2);
-        return baseAmount.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+    /**
+     * 거래 금액에 변동을 준다. 핵심은 <b>월 단위 공통 계수</b>(그 달 전체를 함께 흔듦)에
+     * 거래별 미세 노이즈를 곱하는 것. 과거엔 거래별 노이즈만 줘서 합산하면 1.0 근처로 상쇄돼
+     * 월 합계가 거의 안 변했다(5월·4월 소비 총액이 685원밖에 차이 안 남).
+     */
+    private BigDecimal applyVariation(BigDecimal baseAmount, YearMonth month, int templateIndex) {
+        BigDecimal monthFactor = MonthlyVariation.cashFactor(month);                       // 0.90 ~ 1.10
+        BigDecimal itemFactor = BigDecimal.valueOf(
+                94 + ((month.getMonthValue() * 7 + templateIndex * 3) % 13), 2);            // 0.94 ~ 1.06
+        return baseAmount.multiply(monthFactor).multiply(itemFactor).setScale(0, RoundingMode.HALF_UP);
     }
 
     private List<CashFlowEvent> saveCashflowEvents(User user, Scenario scenario, List<Account> accounts) {
@@ -720,30 +742,42 @@ public class AssetMockService {
     /**
      * 월별 총자산 스냅샷(과거 12개월) 백필 — "자산 변화"의 정합성 핵심.
      *
-     * <p>월간 리포트는 (이번달 총자산 − 전월 스냅샷)으로 자산 변화를 보여준다. 임의 성장곡선이 아니라
-     * 그 달의 <b>실제 순현금흐름</b>에서 역산해, 자산 변화가 그 달 수입·지출과 정확히 맞물리게 한다:
-     * <pre>순현금흐름(월) = (연금 + 이자 + 배당) − (소비 + 관리비 + 보험 + 대출상환)</pre>
-     * 주식 매수/매도는 현금↔보유종목 전환이라 순자산 중립 → 제외한다(평가손익은 현 모델에서 미반영).
-     * 현재 총자산에서 최근 달부터 순현금흐름을 한 달씩 빼며 거슬러 올라가므로,
-     * {@code snapshot(M-1) = currentTotal − netCashFlow(M)} 가 성립한다. 현재월 스냅샷은
-     * 스냅샷 스케줄러가 소유하므로 건드리지 않는다(과거 12개월만 쓴다).
+     * <p>월간 리포트는 (그 달 스냅샷 − 전월 스냅샷)으로 자산 변화를 보여준다. 임의 성장곡선이 아니라
+     * 그 달의 실제 변화량에서 역산한다:
+     * <pre>변화량(월) = 순현금흐름 + 배당 + 시세변동
+     *   순현금흐름 = (연금 + 이자) − (소비 + 관리비 + 보험 + 대출상환)
+     *   배당      = 보유 ETF 월배당 × 배당 월별계수
+     *   시세변동   = 보유 평가액 × 시세 월수익률(±)   ← 자산이 늘고 주는 출처</pre>
+     * 주식 매수/매도는 현금↔보유종목 전환이라 순자산 중립 → 순현금흐름에서 제외한다.
+     * 현재 총자산에서 최근 달부터 변화량을 한 달씩 빼며 거슬러 올라가므로,
+     * {@code snapshot(M-1) = snapshot(M) − 변화량(M)} 이 성립한다. 배당·시세 계수는 결정적
+     * (MonthlyVariation)이라 리포트 읽기 경로와 같은 값이 나온다. 현재월 스냅샷은 스냅샷
+     * 스케줄러가 소유하므로 건드리지 않는다(과거 12개월만 쓴다).
      */
-    private void saveMonthlyReportSnapshots(User user, Long userId,
-                                            BigDecimal currentTotal, List<CashFlowEvent> events) {
+    private void saveMonthlyReportSnapshots(User user, Long userId, BigDecimal currentTotal,
+                                            BigDecimal holdingsValuation, List<CashFlowEvent> events) {
         if (currentTotal == null || currentTotal.signum() <= 0) {
             return;
         }
         Map<YearMonth, BigDecimal> netCashFlowByMonth = netCashFlowByMonth(events);
-        // 배당은 시드 이벤트가 아니라 보유 ETF 단일 출처(#216)다. 보유가 12개월 내내 고정이므로 매월 동일액으로 가산한다.
-        BigDecimal monthlyDividend = nz(etfDividendCalculator.monthlyDividend(userId));
+        // 배당은 시드 이벤트가 아니라 보유 ETF 단일 출처(#216)다. 보유수량은 고정이지만,
+        // 실제 분배는 달마다 들쭉날쭉하므로 월별 계수를 적용한다(리포트와 같은 값 — MonthlyVariation).
+        BigDecimal baseDividend = nz(etfDividendCalculator.monthlyDividend(userId));
+        BigDecimal holdingsBase = nz(holdingsValuation);
 
         LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
         BigDecimal running = currentTotal;
         for (int i = 1; i <= 12; i++) {
-            // i번째 거슬러가기: (i-1)개월 전 달의 순현금흐름만큼 빼면 i개월 전 말 잔액이 된다.
+            // i번째 거슬러가기: (i-1)개월 전 달의 변화량만큼 빼면 i개월 전 말 잔액이 된다.
             YearMonth changedMonth = YearMonth.from(currentMonth.minusMonths(i - 1));
+            BigDecimal dividend = baseDividend.multiply(MonthlyVariation.dividendFactor(changedMonth))
+                    .setScale(0, RoundingMode.HALF_UP);
+            // 시세변동(평가손익): 순현금흐름만으론 자산이 단조 증가만 하므로, 이걸로 늘고 줄게 만든다.
+            BigDecimal marketChange = holdingsBase.multiply(MonthlyVariation.marketReturn(changedMonth))
+                    .setScale(0, RoundingMode.HALF_UP);
             BigDecimal delta = netCashFlowByMonth.getOrDefault(changedMonth, BigDecimal.ZERO)
-                    .add(monthlyDividend);
+                    .add(dividend)
+                    .add(marketChange);
             running = running.subtract(delta);
 
             String month = YearMonth.from(currentMonth.minusMonths(i)).toString();
