@@ -110,6 +110,33 @@ class AssetHubServiceTest {
     }
 
     @Test
+    void totalAsset은_개별주식_DB평가액이_아닌_breakdown_현재가평가액을_사용한다() {
+        HoldingWithProduct holding = mock(HoldingWithProduct.class);
+        when(holding.getProductId()).thenReturn(2001L);
+        when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(8_000_000));
+        ProductBatchItem product = new ProductBatchItem(2001L, "삼성전자", "STOCK", "005930");
+
+        stubCashFlow(1_300_000, 2_200_000);
+        stubMonthlyFlows();
+        stubLifeStability(59);
+        when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
+                new AssetAggregator.AssetSnapshot(
+                        new AssetBreakdown(BigDecimal.valueOf(80_000_000), BigDecimal.ZERO,
+                                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(30_000_000)),
+                        List.of(account("DEPOSIT", 80_000_000)),
+                        List.of(holding),
+                        Map.of(2001L, product)));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        assertThat(response.totalAsset()).isEqualByComparingTo("110000000");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::category)
+                .containsExactly("예금", "주식");
+        assertThat(response.allocation()).extracting(AssetAllocationItem::ratio)
+                .containsExactly(73, 27);
+    }
+
+    @Test
     void 상품메타데이터_누락_보유종목은_현재계약상_기타로_집계된다() {
         // 현 계약: product 배치 응답에 없으면 fromProductType(null) → ETC(기타) 폴백.
         // (fail-closed 전환은 별도 결정 — 본 테스트는 현재 동작을 고정한다.)
@@ -447,7 +474,7 @@ class AssetHubServiceTest {
     private void stubSnapshot(List<Account> accounts, HoldingAndProduct holdingAndProduct) {
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(
-                        breakdownPlaceholder(), accounts,
+                        breakdownFor(accounts, List.of(holdingAndProduct.holding()), holdingAndProduct.products()), accounts,
                         List.of(holdingAndProduct.holding()), holdingAndProduct.products()));
     }
 
@@ -457,18 +484,49 @@ class AssetHubServiceTest {
         when(holding.getEvaluationAmount()).thenReturn(BigDecimal.valueOf(evaluationAmount));
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
                 new AssetAggregator.AssetSnapshot(
-                        breakdownPlaceholder(), accounts, List.of(holding), Map.of()));
+                        breakdownFor(accounts, List.of(holding), Map.of()), accounts, List.of(holding), Map.of()));
     }
 
     private void stubAccountsOnly(List<Account> accounts) {
         when(assetAggregator.aggregateSnapshot(USER_ID)).thenReturn(
-                new AssetAggregator.AssetSnapshot(breakdownPlaceholder(), accounts, List.of(), Map.of()));
+                new AssetAggregator.AssetSnapshot(breakdownFor(accounts, List.of(), Map.of()), accounts, List.of(), Map.of()));
     }
 
     /** 카테고리 집계 테스트는 AssetBreakdown 값 자체를 보지 않으므로 영(zero)으로 둔다. */
     private AssetBreakdown breakdownPlaceholder() {
         return new AssetBreakdown(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    private AssetBreakdown breakdownFor(
+            List<Account> accounts,
+            List<HoldingWithProduct> holdings,
+            Map<Long, ProductBatchItem> products
+    ) {
+        BigDecimal cash = accounts.stream()
+                .map(a -> a.getDepositBalance() == null ? BigDecimal.ZERO : a.getDepositBalance())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal pensionCash = accounts.stream()
+                .filter(a -> "IRP".equals(a.getAccountType()) || "PENSION_SAVING".equals(a.getAccountType()))
+                .map(a -> a.getDepositBalance() == null ? BigDecimal.ZERO : a.getDepositBalance())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal nonStock = BigDecimal.ZERO;
+        BigDecimal pensionHolding = BigDecimal.ZERO;
+        BigDecimal stock = BigDecimal.ZERO;
+
+        for (HoldingWithProduct holding : holdings) {
+            BigDecimal evaluationAmount = holding.getEvaluationAmount() == null
+                    ? BigDecimal.ZERO : holding.getEvaluationAmount();
+            ProductBatchItem product = products.get(holding.getProductId());
+            if (product != null && "STOCK".equals(product.productType())) {
+                stock = stock.add(evaluationAmount);
+            } else if ("IRP".equals(holding.getAccountType()) || "PENSION_SAVING".equals(holding.getAccountType())) {
+                pensionHolding = pensionHolding.add(evaluationAmount);
+            } else {
+                nonStock = nonStock.add(evaluationAmount);
+            }
+        }
+        return new AssetBreakdown(cash, pensionCash, nonStock, pensionHolding, stock);
     }
 
     private record HoldingAndProduct(HoldingWithProduct holding, Map<Long, ProductBatchItem> products) {

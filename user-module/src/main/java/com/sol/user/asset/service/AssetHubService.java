@@ -48,8 +48,7 @@ public class AssetHubService {
     public AssetHubResponse getHub(Long userId) {
         AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
         Map<AssetCategory, BigDecimal> byCategory = aggregateByCategory(snapshot);
-        BigDecimal totalAsset = byCategory.values().stream()
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalAsset = snapshot.breakdown().grossTotal();
 
         YearMonth thisMonth = YearMonth.now();
         LocalDate start = thisMonth.atDay(1);
@@ -102,8 +101,15 @@ public class AssetHubService {
                 }
                 ProductBatchItem product = products.get(holding.getProductId());
                 String productType = product == null ? null : product.productType();
+                if ("STOCK".equals(productType)) {
+                    continue;
+                }
                 map.merge(AssetCategory.fromProductType(productType), eval, BigDecimal::add);
             }
+        }
+        BigDecimal stockHoldingValue = snapshot.breakdown().stockHoldingValue();
+        if (stockHoldingValue.signum() > 0) {
+            map.merge(AssetCategory.STOCK, stockHoldingValue, BigDecimal::add);
         }
         return map;
     }
