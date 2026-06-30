@@ -62,6 +62,8 @@ class MonthlyReportControllerTest {
                 .andExpect(jsonPath("$.data.income.dividendAmount").value(100_000))
                 .andExpect(jsonPath("$.data.income.dividendChangeRate").value(12.4))
                 .andExpect(jsonPath("$.data.spending.judgment").value("적정"))
+                .andExpect(jsonPath("$.data.nextMonthPreview.incomingTotal").value(1_332_450))
+                .andExpect(jsonPath("$.data.nextMonthPreview.interestAmount").value(32_450))
                 .andExpect(jsonPath("$.data.nextMonthPreview.balanceSufficient").value(true));
     }
 

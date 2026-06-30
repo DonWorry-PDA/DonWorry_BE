@@ -365,11 +365,12 @@ class AssetMockServiceTest {
             netByMonth.merge(m, signed, BigDecimal::add);
         }
 
-        // 시세변동 베이스 = 저장된 보유 평가액 합계
+        // 시세변동 베이스 = 저장된 보유 평가액 합계 (개별주는 evaluationAmount=null이라 제외)
         ArgumentCaptor<Iterable> hCaptor = ArgumentCaptor.forClass(Iterable.class);
         verify(holdingRepository).saveAll(hCaptor.capture());
         BigDecimal holdingsBase = toList((Iterable<Holding>) hCaptor.getValue()).stream()
                 .map(Holding::getEvaluationAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 저장된 12개월 스냅샷 수집

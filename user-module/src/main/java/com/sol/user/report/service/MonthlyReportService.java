@@ -86,9 +86,11 @@ public class MonthlyReportService {
         // 다음 달 예금 이자 추정 = 이번 달 이자(고정 잔고 기준). 들어올 돈에 이자가 빠져 있던 버그 수정.
         BigDecimal nextInterest = interestAmount;
         BigDecimal incomingTotal = nextPension.add(nextDividend).add(nextInterest);
-        // 나갈 돈 = recurring 고정지출(관리비·보험·대출) × 다음 달 계수. 날짜창에 묶지 않아 어느 달을 봐도 0이 되지 않는다.
+        // 나갈 돈 = recurring 고정지출(관리비·보험·대출) 합계. 날짜창에 묶지 않아 어느 달을 봐도 0이 되지 않는다.
+        // 시드 단계에서 관리비엔 이미 그 달 cashFactor가 반영돼 있고 보험·대출은 고정이므로(buildMonthEvents),
+        // 여기서 다시 계수를 곱하면 관리비 이중 변동·고정항목 흔들림이 생긴다 → 저장값을 그대로 합산한다.
+        // (들어올 돈의 이자도 이번 달 값을 그대로 쓰는 것과 대칭.)
         BigDecimal outgoingTotal = cashFlowEventRepository.sumRecurringExpense(userId)
-                .multiply(MonthlyVariation.cashFactor(nextYm))
                 .setScale(0, RoundingMode.HALF_UP);
         BigDecimal currentBalance = accountRepository.findByUserUserId(userId).stream()
                 .map(Account::getDepositBalance)

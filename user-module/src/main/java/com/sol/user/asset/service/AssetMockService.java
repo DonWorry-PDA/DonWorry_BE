@@ -217,8 +217,10 @@ public class AssetMockService {
         // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
         AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
         // 보유 평가액(현금 제외)은 월별 시세변동(평가손익)의 베이스 — 자산이 늘고 주는 출처.
+        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산(createAssetSummary와 동일).
         BigDecimal holdingsValuation = holdings.stream()
                 .map(Holding::getEvaluationAmount)
+                .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름 + 배당 + 시세변동"에서 역산해 백필.
         saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), holdingsValuation, events);
