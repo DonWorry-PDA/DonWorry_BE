@@ -82,6 +82,7 @@ class AssetMockServiceTest {
     @Mock TradeHistoryRepository tradeHistoryRepository;
     @Mock MonthlyReportRepository monthlyReportRepository;
     @Mock EtfDividendCalculator etfDividendCalculator;
+    @Mock com.sol.user.portfolio.infra.rest.ProductBatchClient productBatchClient;
 
     @InjectMocks AssetMockService assetMockService;
 

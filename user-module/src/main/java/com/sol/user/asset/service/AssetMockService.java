@@ -28,6 +28,7 @@ import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.report.entity.MonthlyReport;
@@ -82,6 +83,7 @@ public class AssetMockService {
     private final TradeHistoryRepository tradeHistoryRepository;
     private final MonthlyReportRepository monthlyReportRepository;
     private final EtfDividendCalculator etfDividendCalculator;
+    private final ProductBatchClient productBatchClient;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -217,11 +219,8 @@ public class AssetMockService {
         // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
         AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
         // 보유 평가액(현금 제외)은 월별 시세변동(평가손익)의 베이스 — 자산이 늘고 주는 출처.
-        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산(createAssetSummary와 동일).
-        BigDecimal holdingsValuation = holdings.stream()
-                .map(Holding::getEvaluationAmount)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 개별주는 '수량 × 현재가'로 평가(createAssetSummary와 동일).
+        BigDecimal holdingsValuation = holdingsMarketValue(holdings);
         // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름 + 배당 + 시세변동"에서 역산해 백필.
         saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), holdingsValuation, events);
 
@@ -378,11 +377,24 @@ public class AssetMockService {
             desired.add(new Holding(brokerage, etfTickerToProductId.get(seed.ticker()),
                     seed.evaluationAmount(), seed.quantity()));
         }
+        // 개별주는 평가액을 저장하지 않고 '수량 × 실시간 현재가'로 산출된다(AssetAggregator). 따라서
+        // 시드 수량을 시세와 무관하게 박으면 표시 평가액이 의도와 크게 어긋난다(예: 삼성 40M 의도인데
+        // 570주 × 33.9만 = 1.93억). 시드 시점에 실제 현재가를 조회해 '수량 = 목표평가액 ÷ 현재가'로 맞춘다.
+        Map<String, Long> resolvedStockIds = stockTickerToProductId;
+        List<Long> stockProductIds = stockSeeds.stream()
+                .map(s -> resolvedStockIds.get(s.ticker()))
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Long> stockPrices = safeFetchStockPrices(stockProductIds);
         for (HoldingSeed seed : stockSeeds) {
-            Long stockProductId = stockTickerToProductId.get(seed.ticker());
+            Long stockProductId = resolvedStockIds.get(seed.ticker());
             if (stockProductId != null) {
-                // 개별주 평가액은 실시간 현재가 × 수량으로 산출하므로 DB에는 저장하지 않는다.
-                desired.add(new Holding(brokerage, stockProductId, null, seed.quantity()));
+                long price = stockPrices.getOrDefault(stockProductId, 0L);
+                // 현재가 조회 불가(0)면 시드 수량으로 폴백(예: 단위 테스트·시세 미구독 환경).
+                BigDecimal quantity = price > 0
+                        ? seed.evaluationAmount().divide(BigDecimal.valueOf(price), 0, RoundingMode.HALF_UP)
+                                .max(BigDecimal.ONE)
+                        : seed.quantity();
+                desired.add(new Holding(brokerage, stockProductId, null, quantity));
             }
         }
         // 재동기화 시 (account, productId) 기준 upsert — 기존 보유행을 재사용해 holdingId를 유지한다.
@@ -861,11 +873,9 @@ public class AssetMockService {
                 grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
 
         // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
-        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산.
-        BigDecimal holdingsTotal = holdings.stream()
-                .map(Holding::getEvaluationAmount)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 개별주는 평가액=null(현재가 기반)이라 AssetAggregator와 동일하게 '수량 × 현재가'로 평가해야
+        // 응답·스냅샷 총자산이 실제 표시값과 일치한다(이게 빠지면 자산변화에 거대 점프가 생긴다).
+        BigDecimal holdingsTotal = holdingsMarketValue(holdings);
         if (holdingsTotal.signum() > 0) {
             grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
         }
@@ -886,6 +896,40 @@ public class AssetMockService {
 
     private static BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    /**
+     * 보유 종목 시가총액 = ETF(저장 평가액) + 개별주(수량 × 실시간 현재가).
+     * 개별주는 평가액을 저장하지 않으므로 AssetAggregator와 동일하게 현재가로 산출한다.
+     * 현재가 조회 실패는 fail-open(0) — 시드/요약이 외부 장애로 깨지지 않게 한다.
+     */
+    private BigDecimal holdingsMarketValue(List<Holding> holdings) {
+        BigDecimal nonStock = holdings.stream()
+                .map(Holding::getEvaluationAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Long> stockProductIds = holdings.stream()
+                .filter(h -> h.getEvaluationAmount() == null)
+                .map(Holding::getProductId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Long> prices = safeFetchStockPrices(stockProductIds);
+        BigDecimal stock = holdings.stream()
+                .filter(h -> h.getEvaluationAmount() == null)
+                .map(h -> nz(h.getQuantity())
+                        .multiply(BigDecimal.valueOf(prices.getOrDefault(h.getProductId(), 0L))))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return nonStock.add(stock);
+    }
+
+    private Map<Long, Long> safeFetchStockPrices(List<Long> stockProductIds) {
+        if (stockProductIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return productBatchClient.fetchStockPrices(stockProductIds);
+        } catch (RuntimeException e) {
+            return Map.of();
+        }
     }
 
     private Scenario scenarioOf(MockType mockType) {
