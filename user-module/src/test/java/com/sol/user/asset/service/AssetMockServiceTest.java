@@ -82,6 +82,7 @@ class AssetMockServiceTest {
     @Mock TradeHistoryRepository tradeHistoryRepository;
     @Mock MonthlyReportRepository monthlyReportRepository;
     @Mock EtfDividendCalculator etfDividendCalculator;
+    @Mock com.sol.user.portfolio.infra.rest.ProductBatchClient productBatchClient;
 
     @InjectMocks AssetMockService assetMockService;
 
@@ -133,6 +134,41 @@ class AssetMockServiceTest {
                         tuple(2002L, null, new BigDecimal("40")),
                         tuple(2003L, null, new BigDecimal("25"))
                 );
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void valuesStockHoldingsByCurrentPriceWhenAvailable() {
+        // #289 시드 폭주 방지의 핵심 경로: 현재가가 조회되면 개별주 수량 = 목표평가액 ÷ 현재가로 맞추고,
+        // 총자산엔 '수량 × 현재가'가 반영된다. (현재가 0 폴백 경로는 위 테스트가 검증)
+        User user = mock(User.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+        // 현재가 stub: 삼성 10만 / SK하이닉스 20만 / 현대차 30만 (목표평가액의 약수로 잡아 나눗셈이 정확히 떨어지게)
+        when(productBatchClient.fetchStockPrices(any()))
+                .thenReturn(Map.of(2001L, 100_000L, 2002L, 200_000L, 2003L, 300_000L));
+
+        MockAssetResponse response = assetMockService.create(1L, MockType.NEED_IMPROVEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(holdingRepository).saveAll(captor.capture());
+        List<Holding> holdings = toList((Iterable<Holding>) captor.getValue());
+
+        assertThat(holdings)
+                .extracting(Holding::getProductId, Holding::getEvaluationAmount, Holding::getQuantity)
+                .containsExactly(
+                        // ETF는 평가액 저장(현재가 경로 미적용)
+                        tuple(1001L, new BigDecimal("40000000"), new BigDecimal("2000")),
+                        tuple(1002L, new BigDecimal("40000000"), new BigDecimal("2500")),
+                        // 개별주: 수량 = 목표평가액 ÷ 현재가 (12M/10만=120, 8M/20만=40, 6M/30만=20)
+                        tuple(2001L, null, new BigDecimal("120")),
+                        tuple(2002L, null, new BigDecimal("40")),
+                        tuple(2003L, null, new BigDecimal("20"))
+                );
+
+        // 총자산 = 계좌 43M + ETF 80M + 개별주(수량×현재가) 26M = 149M.
+        // (현재가 0 폴백 시 개별주 제외 123M인 것과 대비 — 현재가 반영분 +26M)
+        assertThat(response.assetSummary().totalAsset()).isEqualByComparingTo("149000000");
     }
 
     @Test

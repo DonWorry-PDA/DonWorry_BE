@@ -28,6 +28,7 @@ import com.sol.user.insurance.repository.InsurancePolicyRepository;
 import com.sol.user.pension.entity.Pension;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.dto.EtfInfo;
+import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.portfolio.provider.EtfPoolProvider;
 import com.sol.user.portfolio.type.InvestmentPropensity;
 import com.sol.user.report.entity.MonthlyReport;
@@ -82,6 +83,7 @@ public class AssetMockService {
     private final TradeHistoryRepository tradeHistoryRepository;
     private final MonthlyReportRepository monthlyReportRepository;
     private final EtfDividendCalculator etfDividendCalculator;
+    private final ProductBatchClient productBatchClient;
 
     /**
      * 마이데이터 연동 목업은 사용자가 시나리오를 직접 고르지 않는다.
@@ -214,14 +216,12 @@ public class AssetMockService {
         List<CashFlowEvent> events = saveCashflowEvents(user, scenario, accounts);
         saveTradeHistory(accounts, holdings);
 
+        // 보유 평가액(현금 제외)은 ① 응답 총자산(BROKERAGE 합산)과 ② 월별 시세변동 스냅샷 베이스에 함께 쓰인다.
+        // 개별주는 '수량 × 현재가'라 현재가 조회(RestClient)가 필요한데, 두 용도가 같은 결과를 재사용하도록
+        // 한 번만 계산한다(중복 HTTP 호출 제거 + 응답·스냅샷 평가 기준 동일 보장).
+        BigDecimal holdingsValuation = holdingsMarketValue(holdings);
         // 자산 요약은 한 번만 계산해 월별 스냅샷 백필과 응답에 함께 쓴다.
-        AssetSummaryResponse assetSummary = createAssetSummary(accounts, holdings, scenario.debtBalance());
-        // 보유 평가액(현금 제외)은 월별 시세변동(평가손익)의 베이스 — 자산이 늘고 주는 출처.
-        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산(createAssetSummary와 동일).
-        BigDecimal holdingsValuation = holdings.stream()
-                .map(Holding::getEvaluationAmount)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        AssetSummaryResponse assetSummary = createAssetSummary(accounts, scenario.debtBalance(), holdingsValuation);
         // 월별 총자산 스냅샷(과거 12개월)을 "실제 월별 순현금흐름 + 배당 + 시세변동"에서 역산해 백필.
         saveMonthlyReportSnapshots(user, userId, assetSummary.totalAsset(), holdingsValuation, events);
 
@@ -378,11 +378,24 @@ public class AssetMockService {
             desired.add(new Holding(brokerage, etfTickerToProductId.get(seed.ticker()),
                     seed.evaluationAmount(), seed.quantity()));
         }
+        // 개별주는 평가액을 저장하지 않고 '수량 × 실시간 현재가'로 산출된다(AssetAggregator). 따라서
+        // 시드 수량을 시세와 무관하게 박으면 표시 평가액이 의도와 크게 어긋난다(예: 삼성 40M 의도인데
+        // 570주 × 33.9만 = 1.93억). 시드 시점에 실제 현재가를 조회해 '수량 = 목표평가액 ÷ 현재가'로 맞춘다.
+        Map<String, Long> resolvedStockIds = stockTickerToProductId;
+        List<Long> stockProductIds = stockSeeds.stream()
+                .map(s -> resolvedStockIds.get(s.ticker()))
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Long> stockPrices = safeFetchStockPrices(stockProductIds);
         for (HoldingSeed seed : stockSeeds) {
-            Long stockProductId = stockTickerToProductId.get(seed.ticker());
+            Long stockProductId = resolvedStockIds.get(seed.ticker());
             if (stockProductId != null) {
-                // 개별주 평가액은 실시간 현재가 × 수량으로 산출하므로 DB에는 저장하지 않는다.
-                desired.add(new Holding(brokerage, stockProductId, null, seed.quantity()));
+                long price = stockPrices.getOrDefault(stockProductId, 0L);
+                // 현재가 조회 불가(0)면 시드 수량으로 폴백(예: 단위 테스트·시세 미구독 환경).
+                BigDecimal quantity = price > 0
+                        ? seed.evaluationAmount().divide(BigDecimal.valueOf(price), 0, RoundingMode.HALF_UP)
+                                .max(BigDecimal.ONE)
+                        : seed.quantity();
+                desired.add(new Holding(brokerage, stockProductId, null, quantity));
             }
         }
         // 재동기화 시 (account, productId) 기준 upsert — 기존 보유행을 재사용해 holdingId를 유지한다.
@@ -854,18 +867,16 @@ public class AssetMockService {
      * {@code saveHoldings}가 증권계좌 부재나 ETF 풀 조회 실패로 빈 리스트를 반환하면
      * DB엔 종목이 없으므로, 시나리오 평가액을 더하면 응답과 실제 저장이 어긋난다.
      */
-    private AssetSummaryResponse createAssetSummary(List<Account> accounts, List<Holding> holdings,
-                                                    BigDecimal debtBalance) {
+    private AssetSummaryResponse createAssetSummary(List<Account> accounts, BigDecimal debtBalance,
+                                                    BigDecimal holdingsTotal) {
         Map<String, BigDecimal> grouped = new LinkedHashMap<>();
         accounts.forEach(account ->
                 grouped.merge(account.getAccountType(), nz(account.getDepositBalance()), BigDecimal::add));
 
         // 예수금만 계약: 증권 종목 평가액은 BROKERAGE 예수금(deposit_balance)에 없으므로 따로 더한다.
-        // 개별주 보유는 evaluationAmount=null(현재가 기반 산출)이므로 null 제외 후 합산.
-        BigDecimal holdingsTotal = holdings.stream()
-                .map(Holding::getEvaluationAmount)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 개별주는 평가액=null(현재가 기반)이라 AssetAggregator와 동일하게 '수량 × 현재가'로 평가해야
+        // 응답·스냅샷 총자산이 실제 표시값과 일치한다(이게 빠지면 자산변화에 거대 점프가 생긴다).
+        // holdingsTotal은 호출부에서 holdingsMarketValue로 1회 계산해 전달(스냅샷 베이스와 동일 값).
         if (holdingsTotal.signum() > 0) {
             grouped.merge("BROKERAGE", holdingsTotal, BigDecimal::add);
         }
@@ -886,6 +897,40 @@ public class AssetMockService {
 
     private static BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    /**
+     * 보유 종목 시가총액 = ETF(저장 평가액) + 개별주(수량 × 실시간 현재가).
+     * 개별주는 평가액을 저장하지 않으므로 AssetAggregator와 동일하게 현재가로 산출한다.
+     * 현재가 조회 실패는 fail-open(0) — 시드/요약이 외부 장애로 깨지지 않게 한다.
+     */
+    private BigDecimal holdingsMarketValue(List<Holding> holdings) {
+        BigDecimal nonStock = holdings.stream()
+                .map(Holding::getEvaluationAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Long> stockProductIds = holdings.stream()
+                .filter(h -> h.getEvaluationAmount() == null)
+                .map(Holding::getProductId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Long> prices = safeFetchStockPrices(stockProductIds);
+        BigDecimal stock = holdings.stream()
+                .filter(h -> h.getEvaluationAmount() == null)
+                .map(h -> nz(h.getQuantity())
+                        .multiply(BigDecimal.valueOf(prices.getOrDefault(h.getProductId(), 0L))))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return nonStock.add(stock);
+    }
+
+    private Map<Long, Long> safeFetchStockPrices(List<Long> stockProductIds) {
+        if (stockProductIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return productBatchClient.fetchStockPrices(stockProductIds);
+        } catch (RuntimeException e) {
+            return Map.of();
+        }
     }
 
     private Scenario scenarioOf(MockType mockType) {
@@ -999,6 +1044,139 @@ public class AssetMockService {
                     // 연금 비중 확대(IRP 2억·PENSION_SAVING 8천만)로 q3 소진비율 스윙(0.3↔1.0) 확대.
                     // 생활비 하향(250만→185만)으로 바닥자산↓ → 여유분(소진레버)↑·바닥이자↓ → q3 스윙 20%+ 확보.
                     58, true, true, money(1_850_000), money(500_000), 2, 1, 1
+            );
+            // ── 현실 케이스 확장(realistic) ──
+            case GROWTH_CONCENTRATED -> new Scenario(
+                    InvestmentPropensity.ACTIVE,
+                    List.of(
+                            asset("CMA", "신한은행", 10_000_000),
+                            asset("DEPOSIT", "신한은행", 20_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    // ETF는 최소(쏠림 강조) — 1종
+                    List.of(
+                            holding("433330", 30_000_000, 1_500)   // SOL 미국S&P500
+                    ),
+                    // 개별주 6종 1.4억(70% 쏠림) — 투자검진 성장자산 쏠림·배당공백·역할불균형 시연
+                    List.of(
+                            stock("005930", 40_000_000, 570),   // 삼성전자
+                            stock("000660", 30_000_000, 150),   // SK하이닉스
+                            stock("005380", 25_000_000, 100),   // 현대차
+                            stock("373220", 20_000_000, 50),    // LG에너지솔루션
+                            stock("035420", 15_000_000, 80),    // NAVER
+                            stock("035720", 10_000_000, 250)    // 카카오
+                    ),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(5_000_000), money(900_000), money(0),
+                    money(150_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    MockTransactionTemplates.NEED_IMPROVEMENT_STOCKS,
+                    new BigDecimal("0.6"),
+                    // 개별주 몰빵 — 60세 은퇴·연금수령, 생활비 300만·의료 50만, 위험선호 설문
+                    60, true, true, money(3_000_000), money(500_000), 3, 1, 1
+            );
+            case PRE_RETIREMENT -> new Scenario(
+                    InvestmentPropensity.NEUTRAL,
+                    List.of(
+                            asset("DEPOSIT", "신한은행", 100_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 100_000_000)
+                    ),
+                    List.of(
+                            holding("433330", 50_000_000, 2_500),  // SOL 미국S&P500
+                            holding("446720", 50_000_000, 4_500)   // SOL 미국배당다우존스
+                    ),
+                    List.of(),
+                    money(100_000_000), money(500_000), new BigDecimal("3.50"),
+                    money(4_000_000), money(1_200_000), money(0),
+                    money(150_000), money(200_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 은퇴 임박 — 59세 미은퇴·국민연금 미수령(기대 120만), 생활비 350만·의료 50만, 중립 설문
+                    59, false, false, money(3_500_000), money(500_000), 2, 1, 1
+            );
+            case STRUCTURAL_SHORTAGE -> new Scenario(
+                    InvestmentPropensity.STABLE,
+                    List.of(
+                            asset("DEPOSIT", "신한은행", 40_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    List.of(
+                            holding("446720", 12_000_000, 1_000),  // SOL 미국배당다우존스
+                            holding("438560", 8_000_000, 70)       // SOL 국고채3년
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(3_000_000), money(700_000), money(0),
+                    money(100_000), money(150_000), MockTransactionTemplates.STABLE,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 구조적 부족 — 67세 은퇴·연금수령(70만), 생활비 200만·의료 40만 → 충당률<100%, 안정 설문
+                    67, true, true, money(2_000_000), money(400_000), 1, 1, 1
+            );
+            case PENSION_SUFFICIENT -> new Scenario(
+                    InvestmentPropensity.STABLE_SEEKING,
+                    List.of(
+                            asset("CMA", "신한은행", 30_000_000),
+                            asset("DEPOSIT", "신한은행", 90_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 80_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 40_000_000)
+                    ),
+                    List.of(
+                            holding("446720", 30_000_000, 2_500),  // SOL 미국배당다우존스
+                            holding("438560", 20_000_000, 180),    // SOL 국고채3년
+                            holding("433330", 10_000_000, 500)     // SOL 미국S&P500
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(7_000_000), money(1_800_000), money(0),
+                    money(180_000), money(180_000), MockTransactionTemplates.STABLE,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 연금 충분 여유 — 70세 은퇴·연금수령(180만)으로 생활비(200만) 충당, 의료 40만, 안정추구 설문
+                    70, true, true, money(2_000_000), money(400_000), 1, 2, 1
+            );
+            case HIGH_DEBT -> new Scenario(
+                    InvestmentPropensity.ACTIVE,
+                    List.of(
+                            asset("CMA", "신한은행", 10_000_000),
+                            asset("DEPOSIT", "신한은행", 10_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0)
+                    ),
+                    List.of(
+                            holding("433330", 12_000_000, 600),    // SOL 미국S&P500
+                            holding("476030", 8_000_000, 400)      // SOL 미국나스닥100
+                    ),
+                    List.of(),
+                    money(200_000_000), money(1_200_000), new BigDecimal("5.50"),
+                    money(2_000_000), money(1_000_000), money(0),
+                    money(120_000), money(180_000), MockTransactionTemplates.NEED_IMPROVEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 고부채 위기 — 58세 미은퇴·국민연금 미수령(기대 100만), 부채 2억, 생활비 300만·의료 50만, 위험선호 설문
+                    58, false, false, money(3_000_000), money(500_000), 3, 1, 1
+            );
+            case PRIVATE_PENSION_RICH -> new Scenario(
+                    InvestmentPropensity.NEUTRAL,
+                    List.of(
+                            asset("CMA", "신한은행", 20_000_000),
+                            asset("DEPOSIT", "신한은행", 10_000_000),
+                            asset("BROKERAGE", "신한투자증권", 0),
+                            asset("IRP", "신한투자증권", 120_000_000),
+                            asset("PENSION_SAVING", "신한투자증권", 80_000_000)
+                    ),
+                    List.of(
+                            holding("446720", 12_000_000, 1_000),  // SOL 미국배당다우존스
+                            holding("433330", 8_000_000, 400)      // SOL 미국S&P500
+                    ),
+                    List.of(),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    money(5_000_000), money(1_200_000), money(0),
+                    money(150_000), money(180_000), MockTransactionTemplates.NEED_COMPLEMENT,
+                    List.of(),
+                    new BigDecimal("0.6"),
+                    // 사적연금 빵빵 — 63세 은퇴·연금수령(120만), IRP·연금저축 비중↑, 생활비 250만·의료 40만, 중립 설문
+                    63, true, true, money(2_500_000), money(400_000), 2, 1, 1
             );
         };
     }
