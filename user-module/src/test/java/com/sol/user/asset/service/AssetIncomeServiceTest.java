@@ -6,11 +6,11 @@ import com.sol.user.asset.dto.AssetIncomeResponse;
 import com.sol.user.asset.dto.AssetIncomeResponse.IncomeSource;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
-import com.sol.user.holding.dto.HoldingWithQuantityAndType;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.EtfDividendCalculator;
+import com.sol.user.holding.service.EtfDividendCalculator.DividendBreakdown;
 import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.pension.repository.PensionRepository;
-import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,8 +24,11 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -43,11 +46,11 @@ class AssetIncomeServiceTest {
     @Mock
     private AccountRepository accountRepository;
     @Mock
-    private ProductBatchClient productBatchClient;
-    @Mock
     private DepositDetailClient depositDetailClient;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private EtfDividendCalculator etfDividendCalculator;
 
     private AssetIncomeService service;
 
@@ -57,11 +60,14 @@ class AssetIncomeServiceTest {
                 pensionRepository,
                 holdingRepository,
                 accountRepository,
-                productBatchClient,
                 depositDetailClient,
                 userRepository,
-                new AssetMapper()
+                new AssetMapper(),
+                etfDividendCalculator
         );
+        // 기본값: 분배금 없음. 분배금 있는 테스트는 개별 stub으로 덮어쓴다.
+        lenient().when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
+                .thenReturn(DividendBreakdown.ZERO);
         // 국민연금 수령 게이팅: 수령 중(true)일 때만 income에 국민연금이 포함된다.
         User user = mock(User.class);
         lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
@@ -76,19 +82,9 @@ class AssetIncomeServiceTest {
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.of(new BigDecimal("300000")));
 
-        // 비연금 ETF 보유: productId=100, quantity=100
-        HoldingWithQuantityAndType brokerageHolding = mockHolding(100L, new BigDecimal("100"), "BROKERAGE");
-        // 연금 ETF 보유: productId=200, quantity=50
-        HoldingWithQuantityAndType pensionHolding = mockHolding(200L, new BigDecimal("50"), "IRP");
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of(brokerageHolding, pensionHolding));
-
-        // ETF 비연금 배당: 100 * 2000 = 200,000
-        given(productBatchClient.fetchEtfMonthlyDividends(List.of(100L)))
-                .willReturn(Map.of(100L, new BigDecimal("2000")));
-        // ETF 연금 배당: 50 * 5000 = 250,000
-        given(productBatchClient.fetchEtfMonthlyDividends(List.of(200L)))
-                .willReturn(Map.of(200L, new BigDecimal("5000")));
+        // 분배금 단일 출처: 비연금 200,000 / 연금 250,000 (세전)
+        given(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
+                .willReturn(new DividendBreakdown(new BigDecimal("200000"), new BigDecimal("250000")));
 
         // DEPOSIT 계좌: balance=12,000,000, interestRate=1.0 → 12,000,000 * 1.0 / 1200 = 10,000
         Account depositAccount = mockDepositAccount(300L, new BigDecimal("12000000"));
@@ -136,11 +132,9 @@ class AssetIncomeServiceTest {
     @Test
     @DisplayName("금액이 0인 수입원은 sources 목록에 포함되지 않는다")
     void getIncome_zeroAmountSource_excludedFromList() {
-        // Arrange — 국민연금 없음, ETF 없음, 예금 없음, 연금ETF 없음
+        // Arrange — 국민연금 없음, ETF 없음, 예금 없음, 연금ETF 없음 (분배금은 setUp 기본 ZERO)
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.empty());
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of());
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of());
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))
@@ -162,8 +156,6 @@ class AssetIncomeServiceTest {
         // Arrange — 국민연금만 있음
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.of(new BigDecimal("500000")));
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of());
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of());
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))
@@ -180,21 +172,15 @@ class AssetIncomeServiceTest {
     @Test
     @DisplayName("연금계좌(IRP, PENSION_SAVING) 보유 ETF는 PENSION_DIVIDEND로 분류된다")
     void getIncome_pensionAccountHoldings_classifiedAsPensionDividend() {
-        // Arrange — IRP와 PENSION_SAVING 각각 1개씩
-        HoldingWithQuantityAndType irpHolding = mockHolding(201L, new BigDecimal("10"), "IRP");
-        HoldingWithQuantityAndType savingHolding = mockHolding(202L, new BigDecimal("20"), "PENSION_SAVING");
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of(irpHolding, savingHolding));
+        // Arrange — 연금 ETF 분배금만 50,000 (비연금 0)
+        given(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
+                .willReturn(new DividendBreakdown(BigDecimal.ZERO, new BigDecimal("50000")));
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.empty());
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of());
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))
                 .willReturn(BigDecimal.ZERO);
-
-        // ETF 연금 배당: 10*1000 + 20*2000 = 50,000
-        given(productBatchClient.fetchEtfMonthlyDividends(List.of(201L, 202L)))
-                .willReturn(Map.of(201L, new BigDecimal("1000"), 202L, new BigDecimal("2000")));
 
         // Act
         AssetIncomeResponse response = service.getIncome(USER_ID);
@@ -216,8 +202,6 @@ class AssetIncomeServiceTest {
 
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.empty());
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of());
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of(depositAccountNoProduct));
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))
@@ -237,8 +221,6 @@ class AssetIncomeServiceTest {
         // Arrange
         given(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .willReturn(Optional.empty());
-        given(holdingRepository.findHoldingsWithQuantityAndTypeByUserId(USER_ID))
-                .willReturn(List.of());
         given(accountRepository.findByUserUserId(USER_ID))
                 .willReturn(List.of());
         given(holdingRepository.sumUnrealizedGainLossByUserId(USER_ID))
@@ -253,14 +235,6 @@ class AssetIncomeServiceTest {
     }
 
     // --- helpers ---
-
-    private HoldingWithQuantityAndType mockHolding(Long productId, BigDecimal quantity, String accountType) {
-        HoldingWithQuantityAndType h = mock(HoldingWithQuantityAndType.class);
-        when(h.getProductId()).thenReturn(productId);
-        when(h.getQuantity()).thenReturn(quantity);
-        when(h.getAccountType()).thenReturn(accountType);
-        return h;
-    }
 
     private Account mockDepositAccount(Long productId, BigDecimal balance) {
         Account a = mock(Account.class);

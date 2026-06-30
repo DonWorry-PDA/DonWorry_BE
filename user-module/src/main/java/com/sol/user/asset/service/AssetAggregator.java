@@ -100,7 +100,7 @@ public class AssetAggregator {
             // 보유종목이 없으면 product-module 조회 없이 예수금만으로 확정.
             AssetBreakdown breakdown =
                     new AssetBreakdown(cash, pensionCash, pinnedSafe, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-            return new AssetSnapshot(breakdown, accounts, holdings, Map.of(), Map.of());
+            return new AssetSnapshot(breakdown, accounts, holdings, Map.of());
         }
 
         Map<Long, ProductBatchItem> products = productBatchClient.fetchProducts(
@@ -146,24 +146,35 @@ public class AssetAggregator {
             }
         }
         AssetBreakdown breakdown = new AssetBreakdown(cash, pensionCash, pinnedSafe, nonStock, pensionHolding, stock);
-        return new AssetSnapshot(breakdown, accounts, holdings, products, etfPrices);
+        return new AssetSnapshot(breakdown, accounts, holdings, products, stockPrices, etfPrices);
     }
 
-    /** {@link #aggregate} 산출의 원본 데이터(accounts/holdings/products)까지 포함한 스냅샷. */
+    /**
+     * {@link #aggregate} 산출의 원본 데이터까지 포함한 스냅샷.
+     *
+     * <p>{@code stockPrices}(productId→현재가)는 개별주 평가의 단일 출처다. 개별주는
+     * {@code holding.evaluation_amount}가 null이라 표시용 매퍼가 evaluationAmount를 읽으면 0이 된다 —
+     * 총자산(grossTotal)은 여기 실시간가로 평가하므로, 화면 표시도 반드시 이 맵으로 수량×현재가를 써야
+     * "총자산엔 주식 포함, 표시엔 0"인 불일치(#305)가 안 생긴다.
+     */
     public record AssetSnapshot(
             AssetBreakdown breakdown,
             List<Account> accounts,
             List<HoldingWithProduct> holdings,
             Map<Long, ProductBatchItem> products,
+            Map<Long, Long> stockPrices,
             Map<Long, Long> etfPrices
     ) {
-        public AssetSnapshot(
-                AssetBreakdown breakdown,
-                List<Account> accounts,
-                List<HoldingWithProduct> holdings,
-                Map<Long, ProductBatchItem> products
-        ) {
-            this(breakdown, accounts, holdings, products, Map.of());
+        /** stockPrices 없는 하위호환 생성자 — 보유종목 없음/주식 없음 경로 및 테스트용(빈 맵). */
+        public AssetSnapshot(AssetBreakdown breakdown, List<Account> accounts,
+                             List<HoldingWithProduct> holdings, Map<Long, ProductBatchItem> products) {
+            this(breakdown, accounts, holdings, products, Map.of(), Map.of());
+        }
+
+        public AssetSnapshot(AssetBreakdown breakdown, List<Account> accounts,
+                             List<HoldingWithProduct> holdings, Map<Long, ProductBatchItem> products,
+                             Map<Long, Long> stockPrices) {
+            this(breakdown, accounts, holdings, products, stockPrices, Map.of());
         }
     }
 

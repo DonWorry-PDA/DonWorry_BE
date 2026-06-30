@@ -99,6 +99,7 @@ public class AssetMapper {
      */
     public StockSnapshot toStockSnapshot(AssetAggregator.AssetSnapshot snapshot) {
         Map<Long, ProductBatchItem> products = snapshot.products();
+        Map<Long, Long> stockPrices = snapshot.stockPrices();
         Map<String, BigDecimal> quantityByTicker = new LinkedHashMap<>();
         BigDecimal snapshotAmount = BigDecimal.ZERO;
 
@@ -106,7 +107,9 @@ public class AssetMapper {
             ProductBatchItem p = products.get(h.getProductId());
             if (p == null) continue;
             if (!"STOCK".equals(p.productType())) continue;
-            snapshotAmount = snapshotAmount.add(nz(h.getEvaluationAmount()));
+            // 개별주 평가액 = 수량 × 실시간 현재가. evaluationAmount(null)이 아니라 AssetAggregator와
+            // 동일한 stockPrices를 써야 총자산과 어긋나지 않는다(#305).
+            snapshotAmount = snapshotAmount.add(stockValue(h, stockPrices));
             if (p.tickerCode() != null) {
                 quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
             }
@@ -125,11 +128,23 @@ public class AssetMapper {
     // ─────────────────────────────────────────────────────────────────
 
     public AssetHoldingItem toHoldingItem(HoldingWithProduct holding, ProductBatchItem product) {
+        // 비STOCK(ETF·예금 등) 전용 — 개별주가 없는 그룹(연금·예금 등)에서 호출.
+        return toHoldingItem(holding, product, Map.of());
+    }
+
+    /**
+     * 개별주는 evaluationAmount(null) 대신 수량×실시간가로 평가한다(#305). ETF 등 비STOCK은
+     * 기존대로 evaluationAmount. {@code stockPrices}는 {@link AssetAggregator.AssetSnapshot}에서 온다.
+     */
+    public AssetHoldingItem toHoldingItem(HoldingWithProduct holding, ProductBatchItem product,
+                                          Map<Long, Long> stockPrices) {
+        boolean isStock = product != null && "STOCK".equals(product.productType());
+        BigDecimal amount = isStock ? stockValue(holding, stockPrices) : nz(holding.getEvaluationAmount());
         return AssetHoldingItem.builder()
                 .productName(product == null ? "알 수 없음" : product.productName())
                 .tickerCode(product == null ? null : product.tickerCode())
                 .quantity(holding.getQuantity())
-                .evaluationAmount(nz(holding.getEvaluationAmount()))
+                .evaluationAmount(amount)
                 .build();
     }
 
@@ -215,6 +230,7 @@ public class AssetMapper {
                                                List<Account> accounts,
                                                Map<Long, List<HoldingWithProduct>> holdingsByAccountId,
                                                Map<Long, ProductBatchItem> products,
+                                               Map<Long, Long> stockPrices,
                                                boolean stockOnly) {
         List<AssetAccountItem> accountItems = new ArrayList<>();
         for (Account account : accounts) {
@@ -227,7 +243,8 @@ public class AssetMapper {
                         boolean isStock = "STOCK".equals(p.productType());
                         return stockOnly ? isStock : !isStock;
                     })
-                    .map(h -> toHoldingItem(h, products.get(h.getProductId())))
+                    // STOCK 그룹은 수량×실시간가로 평가(evaluationAmount=null → 0이라 그룹 누락되던 #305 수정).
+                    .map(h -> toHoldingItem(h, products.get(h.getProductId()), stockPrices))
                     .toList();
             if (balance.signum() == 0 && holdingItems.isEmpty()) continue;
             accountItems.add(AssetAccountItem.builder()
@@ -348,6 +365,12 @@ public class AssetMapper {
         return holding.getQuantity()
                 .multiply(BigDecimal.valueOf(price))
                 .setScale(0, RoundingMode.HALF_UP);
+    }
+
+    /** 개별주 평가액 = 수량 × 실시간 현재가. 현재가 미조회 시 0(AssetAggregator와 동일 폴백). */
+    private BigDecimal stockValue(HoldingWithProduct holding, Map<Long, Long> stockPrices) {
+        long price = stockPrices.getOrDefault(holding.getProductId(), 0L);
+        return nz(holding.getQuantity()).multiply(BigDecimal.valueOf(price));
     }
 
     private static final class Bucket {
