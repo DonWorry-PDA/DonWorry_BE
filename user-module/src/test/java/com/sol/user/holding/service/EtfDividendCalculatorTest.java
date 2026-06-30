@@ -1,5 +1,7 @@
 package com.sol.user.holding.service;
 
+import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.holding.service.EtfDividendCalculator.DividendBreakdown;
@@ -7,6 +9,8 @@ import com.sol.user.portfolio.infra.rest.ProductBatchClient;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,6 +113,56 @@ class EtfDividendCalculatorTest {
         verify(productBatchClient).fetchEtfMonthlyDividends(List.of(101L));
     }
 
+    @Test
+    void actualMonthlyDividend_실제지급이_있는_달은_그_금액을_반환한다() {
+        YearMonth ym = YearMonth.of(2026, 3);  // March (quarterly ETF pays in March)
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        // Actual payment: productId=101, quantity=10, amountPerUnit=2700, paymentDate=2026-03-15
+        HoldingDividendPaymentProjection actual = payment(101L, new BigDecimal("10"), new BigDecimal("2700"), LocalDate.of(2026, 3, 15));
+        given(holdingRepository.findDividendPaymentsByUserId(1L, from, to)).willReturn(List.of(actual));
+        given(holdingRepository.findDividendCalendarInputsByUserId(1L)).willReturn(List.of()); // no projections
+
+        // 10 × 2700 = 27,000
+        assertThat(calculator.actualMonthlyDividend(1L, ym)).isEqualByComparingTo("27000");
+    }
+
+    @Test
+    void actualMonthlyDividend_실제지급이_없고_그리드가_해당월에_걸리면_예상금액을_반환한다() {
+        YearMonth ym = YearMonth.of(2026, 6);  // June
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        given(holdingRepository.findDividendPaymentsByUserId(1L, from, to)).willReturn(List.of());
+
+        // ETF with latestPaymentDate=2026-03-15, interval=3 → grid: Mar, Jun, Sep, Dec
+        // Jun is on the grid → contributes 5 × 1000 = 5,000
+        HoldingDividendCalendarProjection projection = calendarInput(
+                201L, new BigDecimal("5"), new BigDecimal("1000"),
+                LocalDate.of(2026, 3, 15), 3);
+        given(holdingRepository.findDividendCalendarInputsByUserId(1L)).willReturn(List.of(projection));
+
+        assertThat(calculator.actualMonthlyDividend(1L, ym)).isEqualByComparingTo("5000");
+    }
+
+    @Test
+    void actualMonthlyDividend_그리드가_해당월에_안_걸리면_0을_반환한다() {
+        YearMonth ym = YearMonth.of(2026, 4);  // April — quarterly ETF does NOT pay in April if grid is Mar/Jun/Sep/Dec
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        given(holdingRepository.findDividendPaymentsByUserId(1L, from, to)).willReturn(List.of());
+
+        // ETF with latestPaymentDate=2026-03-15, interval=3 → grid: Mar, Jun, Sep, Dec → April is NOT on the grid
+        HoldingDividendCalendarProjection projection = calendarInput(
+                201L, new BigDecimal("5"), new BigDecimal("1000"),
+                LocalDate.of(2026, 3, 15), 3);
+        given(holdingRepository.findDividendCalendarInputsByUserId(1L)).willReturn(List.of(projection));
+
+        assertThat(calculator.actualMonthlyDividend(1L, ym)).isEqualByComparingTo("0");
+    }
+
     private HoldingWithProduct holding(Long holdingId, Long productId, BigDecimal quantity, String accountType) {
         return new HoldingWithProduct() {
             @Override public Long getHoldingId() { return holdingId; }
@@ -117,6 +171,29 @@ class EtfDividendCalculatorTest {
             @Override public BigDecimal getEvaluationAmount() { return null; }
             @Override public BigDecimal getQuantity() { return quantity; }
             @Override public String getAccountType() { return accountType; }
+        };
+    }
+
+    private HoldingDividendPaymentProjection payment(Long productId, BigDecimal quantity,
+            BigDecimal amountPerUnit, LocalDate paymentDate) {
+        return new HoldingDividendPaymentProjection() {
+            @Override public Long getProductId() { return productId; }
+            @Override public String getProductName() { return "ETF"; }
+            @Override public BigDecimal getQuantity() { return quantity; }
+            @Override public BigDecimal getAmountPerUnit() { return amountPerUnit; }
+            @Override public LocalDate getPaymentDate() { return paymentDate; }
+        };
+    }
+
+    private HoldingDividendCalendarProjection calendarInput(Long productId, BigDecimal quantity,
+            BigDecimal amountPerUnit, LocalDate latestPaymentDate, int intervalMonths) {
+        return new HoldingDividendCalendarProjection() {
+            @Override public Long getProductId() { return productId; }
+            @Override public String getProductName() { return "ETF"; }
+            @Override public BigDecimal getQuantity() { return quantity; }
+            @Override public BigDecimal getAmountPerUnit() { return amountPerUnit; }
+            @Override public LocalDate getLatestPaymentDate() { return latestPaymentDate; }
+            @Override public Integer getDistributionIntervalMonths() { return intervalMonths; }
         };
     }
 }

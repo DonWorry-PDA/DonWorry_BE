@@ -6,10 +6,8 @@ import com.sol.user.asset.dto.AssetBreakdown;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.asset.service.AssetAggregator;
-import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.service.EtfDividendCalculator;
-import com.sol.user.holding.service.EtfDividendCalculator.DividendBreakdown;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.report.dto.MonthlyReportResponse;
 import com.sol.user.report.entity.MonthlyReport;
@@ -100,16 +98,14 @@ class MonthlyReportServiceTest {
         when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
                 eq(USER_ID), eq("INTEREST"), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(won(32_450));
-        // 배당 런레이트는 단일 출처(EtfDividendCalculator): 세전 100,000
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(new DividendBreakdown(new BigDecimal("100000"), BigDecimal.ZERO));
+        // 배당은 실제 분배 이벤트 기준(Option B): 27,000
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), eq(JUNE)))
+                .thenReturn(new BigDecimal("27000"));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
         assertThat(response.income().pensionAmount()).isEqualByComparingTo("1200000");
-        // 배당은 보유 런레이트(100,000)에 그 달의 결정적 배당 계수를 곱한 값(#월별 변동)
-        assertThat(response.income().dividendAmount())
-                .isEqualByComparingTo(won(100_000).multiply(MonthlyVariation.dividendFactor(JUNE)));
+        assertThat(response.income().dividendAmount()).isEqualByComparingTo("27000");
         assertThat(response.income().interestAmount()).isEqualByComparingTo("32450");
     }
 
@@ -196,19 +192,18 @@ class MonthlyReportServiceTest {
         when(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .thenReturn(Optional.of(won(1_200_000)));
 
-        // 배당 런레이트 세전 100,000 (단일 출처)
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(new DividendBreakdown(new BigDecimal("100000"), BigDecimal.ZERO));
+        // 이번 달(6월) 배당 = 0 (stubDefaults가 이미 0으로 stub)
+        // 다음 달(7월) 배당 = 분기 ETF가 7월에 분배하지 않으면 0
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), eq(JULY)))
+                .thenReturn(new BigDecimal("0"));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
-        // 다음 달(7월) 배당 = 런레이트 × 7월 배당 계수, 들어올 돈 = 연금 + 배당 + 이자(여기선 0)
-        BigDecimal nextDividend = won(100_000).multiply(MonthlyVariation.dividendFactor(JULY));
+        // 들어올 돈 = 연금(1,200,000) + 배당(0) + 이자(0)
         assertThat(response.nextMonthPreview().pensionAmount()).isEqualByComparingTo("1200000");
-        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo(nextDividend);
+        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo("0");
         assertThat(response.nextMonthPreview().interestAmount()).isEqualByComparingTo("0");
-        assertThat(response.nextMonthPreview().incomingTotal())
-                .isEqualByComparingTo(won(1_200_000).add(nextDividend));
+        assertThat(response.nextMonthPreview().incomingTotal()).isEqualByComparingTo("1200000");
     }
 
     @Test
@@ -287,8 +282,8 @@ class MonthlyReportServiceTest {
 
         when(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
                 .thenReturn(Optional.empty());
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(DividendBreakdown.ZERO);
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(YearMonth.class)))
+                .thenReturn(BigDecimal.ZERO);
         when(accountRepository.findByUserUserId(USER_ID))
                 .thenReturn(List.of(accountWithBalance(won(5_000_000))));
         when(summaryGenerator.generate(any(), any(), anyInt(), anyBoolean()))

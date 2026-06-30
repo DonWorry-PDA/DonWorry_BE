@@ -5,7 +5,6 @@ import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.infra.rest.DepositDetailClient;
 import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.asset.service.AssetAggregator;
-import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
 import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.pension.repository.PensionRepository;
@@ -24,7 +23,6 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -62,9 +60,9 @@ public class MonthlyReportService {
         // 연금·배당·이자 (이번 달 실제 수령액)
         BigDecimal receivedPension = cashFlowEventRepository
                 .sumAmountByEventTypeInPeriod(userId, "PENSION", start, end);
-        // 배당은 시드 이벤트가 아니라 보유 ETF 기반 단일 출처로 계산한다(#216).
-        // 보유수량은 고정이지만 실제 분배는 달마다 들쭉날쭉하므로 월별 계수(MonthlyVariation)를 적용한다 —
-        // 자산 변화 백필과 같은 계수라 정합한다. 전월 대비 증감률은 별도 산출하지 않는다(null).
+        // 배당은 시드 이벤트가 아니라 실제 분배 이벤트 기준으로 계산한다(#216, #301).
+        // 캘린더 화면과 동일한 그리드 알고리즘을 사용해 당월에 분배가 있는 ETF만 합산한다.
+        // 전월 대비 증감률은 별도 산출하지 않는다(null).
         BigDecimal dividendAmount = calcMonthlyEtfDividend(userId, ym);
         BigDecimal dividendChangeRate = null;
         BigDecimal interestAmount = cashFlowEventRepository
@@ -129,13 +127,12 @@ public class MonthlyReportService {
     }
 
     /**
-     * 보유 ETF 월 배당(런레이트)에 그 달의 배당 계수를 곱한다. 런레이트(base)는 분배금 단일 출처
-     * {@link EtfDividendCalculator}에서 받아 화면 간 정합을 보장하고(#307), 실제 분배는 달마다
-     * 들쭉날쭉하므로 결정적 월별 계수(MonthlyVariation)로 흔든다 — 자산 변화 백필과 같은 계수(정합).
+     * 특정 달(ym)에 실제로 분배 이벤트가 있는 ETF만 합산한 세전 배당(원, 반올림).
+     * 이전의 스무딩(런레이트 × MonthlyVariation 계수) 방식 대신, 캘린더 화면과 동일한
+     * 실제 분배 그리드 기반 계산을 사용한다.
      */
     private BigDecimal calcMonthlyEtfDividend(Long userId, YearMonth ym) {
-        BigDecimal base = etfDividendCalculator.monthlyDividendBreakdown(userId, Set.of()).totalGross();
-        return base.multiply(MonthlyVariation.dividendFactor(ym)).setScale(0, RoundingMode.HALF_UP);
+        return etfDividendCalculator.actualMonthlyDividend(userId, ym);
     }
 
     /**

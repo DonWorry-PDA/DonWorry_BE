@@ -67,7 +67,8 @@ class AssetHubServiceTest {
         lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.empty());
         // 분배금 단일 출처 — 기본 0. 분배금 합산을 검증하는 테스트만 override.
-        lenient().when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.ZERO);
+        lenient().when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(BigDecimal.ZERO);
     }
 
     @Test
@@ -98,28 +99,24 @@ class AssetHubServiceTest {
 
     @Test
     void 이번_달_수입에_ETF_분배금이_더해진다() {
-        // 배당 이벤트는 #216에서 제거됐으므로 단일 출처(EtfDividendCalculator)로 더해져야 한다(#303).
-        // 분배금은 월간 리포트와 정합을 위해 MonthlyVariation.dividendFactor가 곱해진다.
+        // 배당 이벤트는 #216에서 제거됐으므로 실제 분배 이벤트 기준(#301)으로 더해져야 한다(#303).
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();   // INCOME 이벤트 합(연금+이자) = 1,300,000
         stubLifeStability(59);
-        BigDecimal baseDividend = BigDecimal.valueOf(200_000);
-        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(baseDividend);
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(BigDecimal.valueOf(200_000));
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
-        BigDecimal expectedDividend = baseDividend
-                .multiply(com.sol.user.cashflow.MonthlyVariation.dividendFactor(java.time.YearMonth.now()));
-        BigDecimal expectedMonthlyIncome = BigDecimal.valueOf(1_300_000).add(expectedDividend);
-        assertThat(response.monthlyIncome()).isEqualByComparingTo(expectedMonthlyIncome);
+        // monthlyIncome = INCOME 이벤트(1,300,000) + ETF 실분배금(200,000)
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1500000");
     }
 
     @Test
-    void monthlyIncome에_ETF_배당은_이번달_dividendFactor가_곱해진다() {
-        // 월간 리포트는 분배금에 MonthlyVariation.dividendFactor를 곱해 표시하므로(#정합),
-        // 홈 monthlyIncome도 동일 계수를 곱해야 두 화면의 숫자가 일치한다.
-        BigDecimal baseDividend = BigDecimal.valueOf(1_000_000);
-        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(baseDividend);
+    void monthlyIncome에_ETF_배당은_이번달_실제_분배금이_반영된다() {
+        // actualMonthlyDividend는 이번 달 실제 그리드에 해당하는 분배금만 반환한다(#301).
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(new BigDecimal("27000"));
         stubCashFlow(0, 2_000_000);
         stubMonthlyFlows();
         lenient().when(lifeStabilityService.getLatest(USER_ID))
@@ -127,10 +124,8 @@ class AssetHubServiceTest {
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
-        BigDecimal expectedDividend = baseDividend
-                .multiply(com.sol.user.cashflow.MonthlyVariation.dividendFactor(java.time.YearMonth.now()));
-        BigDecimal expectedMonthlyIncome = BigDecimal.valueOf(1_300_000).add(expectedDividend);
-        assertThat(response.monthlyIncome()).isEqualByComparingTo(expectedMonthlyIncome);
+        // monthlyIncome = INCOME 이벤트(1,300,000) + ETF 실분배금(27,000)
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1327000");
     }
 
     @Test
