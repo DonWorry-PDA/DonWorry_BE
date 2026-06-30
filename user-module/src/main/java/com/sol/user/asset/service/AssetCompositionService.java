@@ -65,9 +65,11 @@ public class AssetCompositionService {
         List<Account> brokerageAccounts = accountsByCategory.getOrDefault(AssetCategory.ETF, List.of());
         if (!brokerageAccounts.isEmpty()) {
             AssetGroupItem etfGroup = assetMapper.toBrokerageGroupItem(
-                    AssetCategory.ETF, brokerageAccounts, holdingsByAccountId, snapshot.products(), false);
+                    AssetCategory.ETF, brokerageAccounts, holdingsByAccountId,
+                    snapshot.products(), snapshot.stockPrices(), false);
             AssetGroupItem stockGroup = assetMapper.toBrokerageGroupItem(
-                    AssetCategory.STOCK, brokerageAccounts, holdingsByAccountId, snapshot.products(), true);
+                    AssetCategory.STOCK, brokerageAccounts, holdingsByAccountId,
+                    snapshot.products(), snapshot.stockPrices(), true);
             if (etfGroup.getTotalAmount().signum() > 0) groups.add(etfGroup);
             if (stockGroup.getTotalAmount().signum() > 0) groups.add(stockGroup);
         }

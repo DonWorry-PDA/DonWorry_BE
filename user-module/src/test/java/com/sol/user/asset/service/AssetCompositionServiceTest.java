@@ -160,6 +160,47 @@ class AssetCompositionServiceTest {
         assertThat(holdingCount).isZero();
     }
 
+    @Test
+    @DisplayName("개별주(STOCK)는 수량×실시간가로 STOCK 그룹에 집계되고 그룹 합이 총자산과 일치한다 (#305)")
+    void getComposition_stockHolding_valuedByRealtimePrice() {
+        // 개별주는 evaluationAmount가 null이라 예전엔 STOCK 그룹이 0→누락돼 그룹합≠총자산이었다.
+        HoldingWithProduct stock = mock(HoldingWithProduct.class);
+        when(stock.getAccountId()).thenReturn(1L);
+        when(stock.getProductId()).thenReturn(2001L);
+        when(stock.getQuantity()).thenReturn(new BigDecimal("100"));
+        ProductBatchItem product = new ProductBatchItem(2001L, "삼성전자", "STOCK", "005930");
+
+        Account account = mock(Account.class);
+        when(account.getAccountId()).thenReturn(1L);
+        when(account.getAccountType()).thenReturn("BROKERAGE");
+        when(account.getDepositBalance()).thenReturn(BigDecimal.ZERO);
+        when(account.getInstitutionName()).thenReturn("신한투자증권");
+
+        // breakdown.stock = 100 × 80,000 = 8,000,000 → totalAsset(grossTotal) 8,000,000
+        AssetBreakdown breakdown = new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("8000000"));
+        AssetAggregator.AssetSnapshot snapshot = new AssetAggregator.AssetSnapshot(
+                breakdown, List.of(account), List.of(stock),
+                Map.of(2001L, product), Map.of(2001L, 80_000L));
+
+        given(assetAggregator.aggregateSnapshot(1L)).willReturn(snapshot);
+        given(debtRepository.sumBalanceByUserId(1L)).willReturn(BigDecimal.ZERO);
+        lenient().when(depositDetailClient.fetchDepositDetails(anyList())).thenReturn(Map.of());
+
+        AssetCompositionResponse response = service.getComposition(1L);
+
+        AssetCompositionResponse.AssetGroupItem stockGroup = response.getGroups().stream()
+                .filter(g -> "STOCK".equals(g.getCategory()))
+                .findFirst().orElseThrow();
+        assertThat(stockGroup.getTotalAmount()).isEqualByComparingTo("8000000");
+
+        BigDecimal groupSum = response.getGroups().stream()
+                .map(AssetCompositionResponse.AssetGroupItem::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(groupSum).isEqualByComparingTo(response.getTotalAsset());
+    }
+
     /**
      * AssetSnapshot 레코드: (AssetBreakdown, List<Account>, List<HoldingWithProduct>, Map<Long, ProductBatchItem>)
      * cash 파라미터를 전체 예수금 합으로 사용해 grossTotal = cash + 0 + 0 + 0 = cash
