@@ -73,6 +73,7 @@ public class AssetMapper {
      */
     public EtfSnapshot toEtfSnapshot(AssetAggregator.AssetSnapshot snapshot) {
         Map<Long, ProductBatchItem> products = snapshot.products();
+        Map<Long, Long> etfPrices = snapshot.etfPrices() == null ? Map.of() : snapshot.etfPrices();
         Map<String, BigDecimal> quantityByTicker = new LinkedHashMap<>();
         BigDecimal snapshotAmount = BigDecimal.ZERO;
 
@@ -81,7 +82,7 @@ public class AssetMapper {
             if (p == null || p.tickerCode() == null) continue;
             if ("STOCK".equals(p.productType())) continue;
             quantityByTicker.merge(p.tickerCode(), nz(h.getQuantity()), BigDecimal::add);
-            snapshotAmount = snapshotAmount.add(nz(h.getEvaluationAmount()));
+            snapshotAmount = snapshotAmount.add(currentEtfValuationOrStored(h, p, etfPrices));
         }
 
         List<AssetHubResponse.EtfHoldingItem> holdings = quantityByTicker.entrySet().stream()
@@ -347,6 +348,23 @@ public class AssetMapper {
 
     private BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal currentEtfValuationOrStored(
+            HoldingWithProduct holding,
+            ProductBatchItem product,
+            Map<Long, Long> etfPrices
+    ) {
+        if (!"ETF".equals(product.productType())) {
+            return nz(holding.getEvaluationAmount());
+        }
+        long price = etfPrices.getOrDefault(holding.getProductId(), 0L);
+        if (price <= 0 || holding.getQuantity() == null) {
+            return nz(holding.getEvaluationAmount());
+        }
+        return holding.getQuantity()
+                .multiply(BigDecimal.valueOf(price))
+                .setScale(0, RoundingMode.HALF_UP);
     }
 
     /** 개별주 평가액 = 수량 × 실시간 현재가. 현재가 미조회 시 0(AssetAggregator와 동일 폴백). */

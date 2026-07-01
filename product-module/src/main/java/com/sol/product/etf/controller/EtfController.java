@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "ETF", description = "ETF 상품 조회 API")
 @RestController
@@ -84,5 +85,12 @@ public class EtfController {
     @GetMapping("/{productId}/price")
     public ResponseEntity<ApiResponse<Long>> getCurrentPrice(@PathVariable Long productId) {
         return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getCurrentPriceByProductId(productId)));
+    }
+
+    @Operation(summary = "ETF 현재가 배치 조회 (productId 목록별 가격)")
+    @GetMapping("/prices")
+    public ResponseEntity<ApiResponse<Map<Long, Long>>> getBatchPrices(
+            @RequestParam List<Long> productIds) {
+        return ResponseEntity.ok(ApiResponse.ok(etfRealtimeService.getBatchPrices(productIds)));
     }
 }
