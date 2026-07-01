@@ -340,7 +340,7 @@ public class AssetMapper {
     private String roleNote(AssetRole role) {
         return switch (role) {
             case CASHFLOW -> "정기예금, ETF·펀드처럼 이자나 분배금이 꾸준히 들어오는 돈이에요.";
-            case GROWTH -> "개별주식처럼 매달 현금이 나오기보다 오를 때를 노리고 넣어둔 돈이에요.";
+            case GROWTH -> "개별주식처럼 시세가 오를 때를 노리고 넣어둔 돈이에요.";
             case IDLE -> "정기예금도, 투자도 하지 않고 계좌에 그냥 남아있는 현금이에요.";
             case PENSION -> "IRP·연금저축 안에 있는 돈 전부예요. 예수금이든 ETF든 55세 전엔 찾을 수 없어요.";
         };
