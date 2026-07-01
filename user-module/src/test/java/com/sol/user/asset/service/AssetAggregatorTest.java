@@ -59,6 +59,23 @@ class AssetAggregatorTest {
         assertThat(breakdown.operatingTotal()).isEqualByComparingTo("650000000");
     }
 
+    @Test
+    void etfPriceAvailable_usesCurrentPriceTimesQuantity() {
+        Account brokerage = mockAccount(1L, "BROKERAGE", 10_000_000);
+        given(accountRepository.findByUserUserId(1L)).willReturn(List.of(brokerage));
+
+        HoldingWithProduct holding = mockHolding(10L, 100L, "BROKERAGE", 50_000, 10);
+        given(holdingRepository.findHoldingsWithAccountTypeByUserId(1L)).willReturn(List.of(holding));
+        given(productBatchClient.fetchProducts(any())).willReturn(Map.of(
+                100L, new ProductBatchItem(100L, "SOL ETF A", "ETF", "123456")));
+        given(productBatchClient.fetchEtfPrices(List.of(100L))).willReturn(Map.of(100L, 12_000L));
+
+        AssetBreakdown breakdown = aggregator.aggregate(1L);
+
+        assertThat(breakdown.nonStockHoldingValue()).isEqualByComparingTo("120000");
+        assertThat(breakdown.grossTotal()).isEqualByComparingTo("10120000");
+    }
+
     private void stubData() {
         Account brokerage = mockAccount(1L, "BROKERAGE", 100_000_000);
         Account deposit = mockAccount(2L, "DEPOSIT", 50_000_000);
@@ -82,11 +99,16 @@ class AssetAggregatorTest {
     }
 
     private HoldingWithProduct mockHolding(Long holdingId, Long productId, String accountType, long eval) {
+        return mockHolding(holdingId, productId, accountType, eval, 0);
+    }
+
+    private HoldingWithProduct mockHolding(Long holdingId, Long productId, String accountType, long eval, long quantity) {
         HoldingWithProduct holding = mock(HoldingWithProduct.class);
         given(holding.getHoldingId()).willReturn(holdingId);
         given(holding.getProductId()).willReturn(productId);
         given(holding.getAccountType()).willReturn(accountType);
         given(holding.getEvaluationAmount()).willReturn(BigDecimal.valueOf(eval));
+        given(holding.getQuantity()).willReturn(BigDecimal.valueOf(quantity));
         return holding;
     }
 }

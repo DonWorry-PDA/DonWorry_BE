@@ -156,6 +156,66 @@ class CalendarQueryServiceTest {
     }
 
     @Test
+    void backfillsPastMonthsAtRegularCadenceBeforeLatestPayment() {
+        // 최신지급일(5월)보다 과거인 2월을 조회해도, 격자(매월)에 맞춰 예상 분배금이 채워진다(#307).
+        // 예전엔 "최신지급일+interval"부터 미래로만 깔려 과거 달이 비었다.
+        LocalDate from = LocalDate.of(2026, 2, 1);
+        LocalDate to = LocalDate.of(2026, 2, 28);
+        HoldingDividendCalendarProjection input = mock(HoldingDividendCalendarProjection.class);
+        when(input.getProductId()).thenReturn(100L);
+        when(input.getProductName()).thenReturn("SOL 월배당");
+        when(input.getQuantity()).thenReturn(BigDecimal.TEN);
+        when(input.getAmountPerUnit()).thenReturn(new BigDecimal("100"));
+        when(input.getLatestPaymentDate()).thenReturn(LocalDate.of(2026, 5, 15));
+        when(input.getDistributionIntervalMonths()).thenReturn(1);
+        when(cashFlowEventRepository.findCalendarEvents(1L, from, to)).thenReturn(List.of());
+        when(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(1L, from, to))
+                .thenReturn(List.of());
+        when(holdingRepository.findDividendCalendarInputsByUserId(1L)).thenReturn(List.of(input));
+
+        var result = service.getMonth(1L, 2026, 2);
+
+        var schedule = result.schedules().get("2026-02-15").get(0);
+        assertThat(schedule.category()).isEqualTo(CalendarEventCategory.DIVIDEND);
+        assertThat(schedule.estimated()).isTrue();
+        assertThat(result.events().get("2026-02-15").get(0).amountKrw()).isEqualByComparingTo("1000");
+    }
+
+    @Test
+    void projectionSkipsMonthWithActualPaymentToAvoidDuplicate() {
+        // 같은 달에 실지급(actual)이 있으면 투영(expected)은 그 달을 건너뛴다(중복 방지, #307).
+        LocalDate from = LocalDate.of(2026, 6, 1);
+        LocalDate to = LocalDate.of(2026, 6, 30);
+        HoldingDividendPaymentProjection actual = mock(HoldingDividendPaymentProjection.class);
+        when(actual.getProductId()).thenReturn(100L);
+        when(actual.getProductName()).thenReturn("SOL 월배당");
+        when(actual.getQuantity()).thenReturn(BigDecimal.TEN);
+        when(actual.getAmountPerUnit()).thenReturn(new BigDecimal("100"));
+        when(actual.getPaymentDate()).thenReturn(LocalDate.of(2026, 6, 3));
+        HoldingDividendCalendarProjection proj = mock(HoldingDividendCalendarProjection.class);
+        when(proj.getProductId()).thenReturn(100L);
+        when(proj.getQuantity()).thenReturn(BigDecimal.TEN);
+        when(proj.getAmountPerUnit()).thenReturn(new BigDecimal("100"));
+        when(proj.getLatestPaymentDate()).thenReturn(LocalDate.of(2026, 6, 3));
+        when(proj.getDistributionIntervalMonths()).thenReturn(1);
+        when(cashFlowEventRepository.findCalendarEvents(1L, from, to)).thenReturn(List.of());
+        when(debtRepository.findByUserUserIdAndMaturityDateBetweenOrderByMaturityDateAscIdAsc(1L, from, to))
+                .thenReturn(List.of());
+        when(holdingRepository.findDividendPaymentsByUserId(1L, from, to)).thenReturn(List.of(actual));
+        when(holdingRepository.findDividendCalendarInputsByUserId(1L)).thenReturn(List.of(proj));
+
+        var result = service.getMonth(1L, 2026, 6);
+
+        // 6월엔 실지급 1건만(투영이 중복으로 추가되지 않음)
+        long juneDividends = result.schedules().values().stream()
+                .flatMap(List::stream)
+                .filter(s -> s.category() == CalendarEventCategory.DIVIDEND)
+                .count();
+        assertThat(juneDividends).isEqualTo(1);
+        assertThat(result.schedules().get("2026-06-03").get(0).estimated()).isFalse();
+    }
+
+    @Test
     void showsActualDividendPaymentAsConfirmedOnPaymentDate() {
         LocalDate from = LocalDate.of(2026, 6, 1);
         LocalDate to = LocalDate.of(2026, 6, 30);
