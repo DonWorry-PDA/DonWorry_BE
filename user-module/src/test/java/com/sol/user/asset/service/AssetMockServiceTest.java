@@ -319,7 +319,7 @@ class AssetMockServiceTest {
                 .toList();
 
         // 현재월: 정기 수입·고정비는 recurring=true, 일회성 소비는 recurring=false (#177 — 캘린더 미래 투영 방지)
-        Set<String> recurringTypes = Set.of("PENSION", "INTEREST", "MAINTENANCE", "INSURANCE", "LOAN");
+        Set<String> recurringTypes = Set.of("PENSION", "FINANCIAL_INCOME", "INTEREST", "MAINTENANCE", "INSURANCE", "LOAN");
         assertThat(thisMonth).isNotEmpty();
         assertThat(thisMonth).filteredOn(e -> recurringTypes.contains(e.getEventType()))
                 .isNotEmpty()
@@ -329,6 +329,32 @@ class AssetMockServiceTest {
                 .allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
         assertThat(pastMonths).isNotEmpty();
         assertThat(pastMonths).allSatisfy(e -> assertThat(e.getRecurring()).isFalse());
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void 현재달_미래_날짜_소비이벤트는_PENDING_상태로_저장된다() {
+        User user = mock(User.class);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(2L, MockType.NEED_COMPLEMENT);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        LocalDate today = LocalDate.now();
+
+        // 현재달의 미래 날짜 소비 이벤트는 PENDING 이어야 한다
+        List<CashFlowEvent> futureConsumptionEvents = saved.stream()
+                .filter(e -> "EXPENSE".equals(e.getFlowType())
+                        && !Boolean.TRUE.equals(e.getRecurring())
+                        && e.getEventDate() != null
+                        && e.getEventDate().isAfter(today))
+                .toList();
+        assertThat(futureConsumptionEvents).isNotEmpty();
+        assertThat(futureConsumptionEvents).allSatisfy(e -> assertThat(e.getStatus()).isEqualTo("PENDING"));
     }
 
     @Test
@@ -502,6 +528,27 @@ class AssetMockServiceTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
+    void stableScenarioSeed_savesFinancialIncomeEvent() {
+        // STABLE 시나리오의 monthlyFinancialIncome = 464,000원. buildMonthEvents가 연금·이자·관리비
+        // 이벤트는 저장하면서 금융수입(FINANCIAL_INCOME)은 누락하던 버그의 회귀 테스트.
+        User user = mock(User.class);
+        when(userRepository.findById(3L)).thenReturn(Optional.of(user));
+        returnArgumentsFromSaveAll();
+
+        assetMockService.create(3L, MockType.STABLE);
+
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(cashFlowEventRepository).saveAll(captor.capture());
+        List<CashFlowEvent> saved = toList((Iterable<CashFlowEvent>) captor.getValue());
+
+        boolean hasFinancialIncome = saved.stream()
+                .anyMatch(e -> "FINANCIAL_INCOME".equals(e.getEventType())
+                        && "INCOME".equals(e.getFlowType()));
+        assertThat(hasFinancialIncome).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
     void pensionSaving_hasOpenedAt_afterCreate() {
         User user = mock(User.class);
         when(user.getUserId()).thenReturn(1L);
@@ -565,13 +612,15 @@ class AssetMockServiceTest {
         // holdingCount = ETF + 개별주 보유행 수 (개별주도 DB에 저장되므로 총 카운트에 포함).
         // cashflowEvents = 12개월치(현재월 + 과거 11개월) buildMonthEvents 합산 (#256: 6→12개월 확장).
         // PENSION events (1/month × 12 months = 12) only appear when the flag is TRUE.
+        // FINANCIAL_INCOME events (1/month × 12 months = 12) appear for all three scenarios
+        // since monthlyFinancialIncome > 0 for NEED_IMPROVEMENT/NEED_COMPLEMENT/STABLE.
         return Stream.of(
                 Arguments.of(MockType.NEED_IMPROVEMENT, 123_000_000L, 75_000_000L, 48_000_000L, 5,
-                        InvestmentPropensity.ACTIVE, 444),
+                        InvestmentPropensity.ACTIVE, 456),
                 Arguments.of(MockType.NEED_COMPLEMENT, 208_000_000L, 30_000_000L, 178_000_000L, 4,
-                        InvestmentPropensity.NEUTRAL, 360),
+                        InvestmentPropensity.NEUTRAL, 372),
                 Arguments.of(MockType.STABLE, 435_000_000L, 0L, 435_000_000L, 4,
-                        InvestmentPropensity.STABLE, 324)
+                        InvestmentPropensity.STABLE, 336)
         );
     }
 

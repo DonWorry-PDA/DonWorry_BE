@@ -121,8 +121,8 @@ class InvestmentCheckServiceTest {
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        // 실분배가 있으므로 폴백(3천만×3.5%/12)이 아니라 실값. net = 40,000 × (1−0.154) = 33,840.
-        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("33840");
+        // 실분배가 있으므로 폴백(3천만×3.5%/12)이 아니라 실값. gross = 40,000 (원천징수 차감 없음).
+        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("40000");
     }
 
     @Test
@@ -133,21 +133,21 @@ class InvestmentCheckServiceTest {
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        // 3천만 × 0.035 / 12 = 87,500(gross) → net = 87,500 × 0.846 = 74,025
-        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("74025");
+        // 3천만 × 0.035 / 12 = 87,500(gross) — 원천징수 차감 없음.
+        assertThat(role(response, "CASHFLOW").monthlyCashflow()).isEqualByComparingTo("87500");
     }
 
     @Test
     void 성장_월배당은_개별주_실배당으로_계산된다() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // 1천만 × 6.00% / 12 = 50,000원/월(gross) → net = 50,000 × 0.846 = 42,300
+        // 1천만 × 6.00% / 12 = 50,000원/월(gross) — 원천징수 차감 없음.
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(201L, "현대차", 10_000_000, "6.00")));
 
         InvestmentCheckResponse response = service.check(USER_ID);
 
-        assertThat(role(response, "GROWTH").monthlyCashflow()).isEqualByComparingTo("42300");
-        assertThat(response.growthAsset().currentMonthlyDividend()).isEqualByComparingTo("42300");
+        assertThat(role(response, "GROWTH").monthlyCashflow()).isEqualByComparingTo("50000");
+        assertThat(response.growthAsset().currentMonthlyDividend()).isEqualByComparingTo("50000");
     }
 
     @Test
@@ -201,28 +201,28 @@ class InvestmentCheckServiceTest {
     @Test
     void 저배당_성장주는_배당ETF로_옮기면_이득_멘트() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // gross 8,333(1천만×1%/12) → net 7,050. 배당ETF 전환 gross 29,167 → net 24,675 → delta +양수
+        // gross 8,333(1천만×1%/12). 배당ETF 전환 gross 29,167 → delta +양수 — 원천징수 차감 없음.
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(1L, "삼성바이오로직스", 10_000_000, "1.00")));
 
         GrowthAsset growth = service.check(USER_ID).growthAsset();
 
-        assertThat(growth.currentMonthlyDividend()).isEqualByComparingTo("7050");   // 8333×0.846=7049.7→7050
-        assertThat(growth.convertedMonthlyDividend()).isEqualByComparingTo("24675"); // 29167×0.846=24675.3→24675
-        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("17625");      // 24675−7050
+        assertThat(growth.currentMonthlyDividend()).isEqualByComparingTo("8333");   // 1천만×1%/12
+        assertThat(growth.convertedMonthlyDividend()).isEqualByComparingTo("29167"); // 1천만×3.5%/12
+        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("20834");     // 29167−8333
         assertThat(growth.suggestion()).contains("옮기면").contains("더");
     }
 
     @Test
     void 고배당주는_옮기면_손해_멘트로_플립() {
         stubBreakdown(stockOnlyBreakdown(10_000_000));
-        // gross 58,333(7%) → net 49,350 > 배당ETF 전환 net 24,675 → delta 음수
+        // gross 58,333(1천만×7%/12) > 배당ETF 전환 gross 29,167 → delta 음수 — 원천징수 차감 없음.
         when(holdingRepository.findStockDividendsByUserId(USER_ID))
                 .thenReturn(List.of(stock(1L, "현대해상", 10_000_000, "7.00")));
 
         GrowthAsset growth = service.check(USER_ID).growthAsset();
 
-        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("-24675"); // 24675−49350
+        assertThat(growth.deltaMonthlyDividend()).isEqualByComparingTo("-29166"); // 29167−58333
         assertThat(growth.suggestion()).contains("오히려 줄");
     }
 
@@ -301,6 +301,27 @@ class InvestmentCheckServiceTest {
 
         assertThat(response.uncoveredCashflow().amount()).isEqualByComparingTo("30000000");
         assertThat(response.uncoveredCashflow().productNames()).containsExactly("SOL 코스피200채권혼합50");
+    }
+
+    @Test
+    void ETF_현금흐름_배당은_세전_gross로_반환된다() {
+        // 수량 100주, 분배/주 1,000원, 분기배당(interval=3) → 월배당 gross = 100 × 1000 / 3 = 33,333원
+        // nonStockHoldingValue=1천만 → CASHFLOW 역할이 도넛에 포함되고, cashflowMonthlyDividend는 실분배 경로를 탄다.
+        stubBreakdown(new AssetBreakdown(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.valueOf(10_000_000), BigDecimal.ZERO, BigDecimal.ZERO));
+        when(holdingRepository.findStockDividendsByUserId(USER_ID)).thenReturn(List.of());
+        when(holdingRepository.findDividendCalendarInputsByUserId(USER_ID))
+                .thenReturn(List.of(etf(1L, 100, "1000", 3)));
+
+        InvestmentCheckResponse response = service.check(USER_ID);
+
+        // gross = 33,333 (15.4% 차감 없음) — 이전 동작: 33,333 × (1-0.154) = 28,179
+        RoleContribution cashflow = response.roles().stream()
+                .filter(r -> "CASHFLOW".equals(r.role()))
+                .findFirst().orElseThrow();
+        assertThat(cashflow.monthlyCashflow())
+                .isEqualByComparingTo(BigDecimal.valueOf(33_333));
     }
 
     // ── helpers ──

@@ -7,7 +7,6 @@ import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
-import com.sol.user.portfolio.config.PortfolioConstants;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
 import com.sol.user.usergoal.repository.UserGoalRepository;
@@ -38,12 +37,12 @@ public class CashFlowDiagnosisService {
             throw new BaseException(ErrorCode.USER_NOT_FOUND);
         }
 
-        // 실수령(net) 반영: 국민연금은 면세 근사(0%), 분배금은 15.4% 원천징수 차감.
-        BigDecimal nationalPension = netNationalPension(pensionRepository
+        // 세전(gross) 기준: 홈·월간리포트와 동일 기준으로 화면 간 정합한다.
+        BigDecimal nationalPension = pensionRepository
                 .findMonthlyAmount(userId, NATIONAL_PENSION_TYPE)
-                .orElse(BigDecimal.ZERO));
+                .orElse(BigDecimal.ZERO);
 
-        BigDecimal dividendIncome = netFinancial(calcMonthlyDividendIncome(userId));
+        BigDecimal dividendIncome = calcMonthlyDividendIncome(userId);
 
         BigDecimal targetMonthlyLivingCost = userGoalRepository.findByUserUserId(userId)
                 .map(UserGoal::getMonthlyTargetLivingCost)
@@ -72,16 +71,6 @@ public class CashFlowDiagnosisService {
                 salaryAssetExclusionRepository.findAssetKeysByUserId(userId));
         // 현금흐름 진단은 연금·비연금 구분 없이 전체 분배금을 본다(생활비 충당 관점).
         return etfDividendCalculator.monthlyDividendBreakdown(userId, excludedHoldingIds).totalGross();
-    }
-
-    /** 이자·배당소득 원천징수(15.4%) 차감 후 실수령. */
-    private BigDecimal netFinancial(BigDecimal value) {
-        return value.multiply(BigDecimal.ONE.subtract(PortfolioConstants.WITHHOLDING_FINANCIAL));
-    }
-
-    /** 국민연금 실수령 — 연금소득공제로 면세 근사(현재 0%). 향후 종합과세 정밀화 시 세율만 조정. */
-    private BigDecimal netNationalPension(BigDecimal value) {
-        return value.multiply(BigDecimal.ONE.subtract(PortfolioConstants.NATIONAL_PENSION_TAX_RATE));
     }
 
     private BigDecimal toWon(BigDecimal value) {

@@ -1,5 +1,7 @@
 package com.sol.user.holding.service;
 
+import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
+import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
 import com.sol.user.holding.dto.HoldingWithProduct;
 import com.sol.user.holding.repository.HoldingRepository;
 import com.sol.user.portfolio.infra.rest.ProductBatchClient;
@@ -8,6 +10,9 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -96,6 +101,73 @@ public class EtfDividendCalculator {
             return nonPensionGross.setScale(0, RoundingMode.HALF_UP)
                     .add(pensionGross.setScale(0, RoundingMode.HALF_UP));
         }
+    }
+
+    /**
+     * 특정 달(ym)에 실제로 분배가 발생하는 ETF만 합산한 세전 배당(원, 반올림).
+     * 캘린더 화면과 동일한 알고리즘을 사용한다:
+     * <ol>
+     *   <li>당월 실지급 내역을 합산하고, 해당 종목·월을 actualMonths 셋에 기록한다.</li>
+     *   <li>보유 ETF의 분배 그리드(latestPaymentDate + interval)를 걸어 당월에 착지하는 종목만
+     *       합산한다(단, actualMonths에 이미 있으면 중복 제외).</li>
+     * </ol>
+     * @see com.sol.user.calendar.service.CalendarQueryService — 그리드 투영 알고리즘 원본(변경 시 동기화 필요)
+     */
+    public BigDecimal actualMonthlyDividend(Long userId, YearMonth ym) {
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        // Step 1 — 실제 지급 확정 내역
+        List<HoldingDividendPaymentProjection> actuals =
+                holdingRepository.findDividendPaymentsByUserId(userId, from, to);
+        Set<String> actualMonths = new HashSet<>();
+        BigDecimal total = BigDecimal.ZERO;
+        for (HoldingDividendPaymentProjection p : actuals) {
+            if (p.getProductId() == null || p.getQuantity() == null
+                    || p.getAmountPerUnit() == null || p.getPaymentDate() == null) {
+                continue;
+            }
+            total = total.add(
+                    p.getAmountPerUnit().multiply(p.getQuantity()).setScale(0, RoundingMode.HALF_UP));
+            actualMonths.add(p.getProductId() + "-" + YearMonth.from(p.getPaymentDate()));
+        }
+
+        // Step 2 — 그리드 기반 투영(실지급이 없는 종목만)
+        List<HoldingDividendCalendarProjection> inputs =
+                holdingRepository.findDividendCalendarInputsByUserId(userId);
+        for (HoldingDividendCalendarProjection input : inputs) {
+            if (!canProject(input)) continue;
+            long interval = input.getDistributionIntervalMonths();
+            LocalDate projected = input.getLatestPaymentDate();
+            // 그리드를 from 이전까지 역방향으로 이동
+            while (projected.isAfter(from)) {
+                projected = projected.minusMonths(interval);
+            }
+            // 그리드를 from 이상인 첫 날짜로 순방향 이동
+            while (projected.isBefore(from)) {
+                projected = projected.plusMonths(interval);
+            }
+            // projected 는 이제 from 이상인 첫 그리드 날짜
+            while (!projected.isAfter(to)) {
+                String key = input.getProductId() + "-" + YearMonth.from(projected);
+                if (!actualMonths.contains(key)) {
+                    total = total.add(
+                            input.getAmountPerUnit().multiply(input.getQuantity())
+                                    .setScale(0, RoundingMode.HALF_UP));
+                }
+                projected = projected.plusMonths(interval);
+            }
+        }
+        return total;
+    }
+
+    private boolean canProject(HoldingDividendCalendarProjection input) {
+        return input.getProductId() != null
+                && input.getQuantity() != null
+                && input.getAmountPerUnit() != null
+                && input.getLatestPaymentDate() != null
+                && input.getDistributionIntervalMonths() != null
+                && input.getDistributionIntervalMonths() > 0;
     }
 
     private BigDecimal nz(BigDecimal value) {

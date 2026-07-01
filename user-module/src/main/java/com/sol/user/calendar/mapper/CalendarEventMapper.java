@@ -20,7 +20,7 @@ public class CalendarEventMapper {
             case "INTEREST" -> CalendarEventCategory.INTEREST;
             case "PAYMENT", "TRANSFER", "CONTRIBUTION",
                     "MAINTENANCE", "INSURANCE", "LOAN",
-                    "UTILITY", "PHONE" -> CalendarEventCategory.PAYMENT;
+                    "UTILITY", "PHONE", "FINANCIAL_INCOME" -> CalendarEventCategory.PAYMENT;
             case "CARD", "TRANSPORT", "MEDICAL" -> CalendarEventCategory.TRANSACTION;
             case "STOCK_BUY", "STOCK_SELL" -> CalendarEventCategory.INVESTMENT;
             case "MATURITY" -> CalendarEventCategory.MATURITY;

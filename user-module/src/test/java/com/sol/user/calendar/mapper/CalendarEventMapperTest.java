@@ -31,6 +31,12 @@ class CalendarEventMapperTest {
     }
 
     @Test
+    void FINANCIAL_INCOME은_PAYMENT_카테고리로_매핑된다() {
+        assertThat(mapper.toCategory("FINANCIAL_INCOME"))
+                .isEqualTo(CalendarEventCategory.PAYMENT);
+    }
+
+    @Test
     void signsAmountsFromFlowType() {
         assertThat(mapper.toSignedAmount(BigDecimal.valueOf(100), "INCOME"))
                 .isEqualByComparingTo("100");

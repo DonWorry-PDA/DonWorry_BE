@@ -67,7 +67,8 @@ class AssetHubServiceTest {
         lenient().when(salaryPlanRepository.findByUserUserIdAndStatus(USER_ID, SalaryPlan.STATUS_ACTIVE))
                 .thenReturn(Optional.empty());
         // 분배금 단일 출처 — 기본 0. 분배금 합산을 검증하는 테스트만 override.
-        lenient().when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.ZERO);
+        lenient().when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(BigDecimal.ZERO);
     }
 
     @Test
@@ -98,16 +99,33 @@ class AssetHubServiceTest {
 
     @Test
     void 이번_달_수입에_ETF_분배금이_더해진다() {
-        // 배당 이벤트는 #216에서 제거됐으므로 단일 출처(EtfDividendCalculator)로 더해져야 한다(#303).
+        // 배당 이벤트는 #216에서 제거됐으므로 실제 분배 이벤트 기준(#301)으로 더해져야 한다(#303).
         stubCashFlow(1_300_000, 2_200_000);
         stubMonthlyFlows();   // INCOME 이벤트 합(연금+이자) = 1,300,000
         stubLifeStability(59);
-        when(etfDividendCalculator.monthlyDividend(USER_ID)).thenReturn(BigDecimal.valueOf(200_000));
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(BigDecimal.valueOf(200_000));
 
         AssetHubResponse response = assetHubService.getHub(USER_ID);
 
-        // 1,300,000(이벤트) + 200,000(분배금) = 1,500,000
+        // monthlyIncome = INCOME 이벤트(1,300,000) + ETF 실분배금(200,000)
         assertThat(response.monthlyIncome()).isEqualByComparingTo("1500000");
+    }
+
+    @Test
+    void monthlyIncome에_ETF_배당은_이번달_실제_분배금이_반영된다() {
+        // actualMonthlyDividend는 이번 달 실제 그리드에 해당하는 분배금만 반환한다(#301).
+        when(etfDividendCalculator.actualMonthlyDividend(eq(USER_ID), any(java.time.YearMonth.class)))
+                .thenReturn(new BigDecimal("27000"));
+        stubCashFlow(0, 2_000_000);
+        stubMonthlyFlows();
+        lenient().when(lifeStabilityService.getLatest(USER_ID))
+                .thenThrow(new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        AssetHubResponse response = assetHubService.getHub(USER_ID);
+
+        // monthlyIncome = INCOME 이벤트(1,300,000) + ETF 실분배금(27,000)
+        assertThat(response.monthlyIncome()).isEqualByComparingTo("1327000");
     }
 
     @Test

@@ -531,6 +531,14 @@ public class AssetMockService {
             events.add(event(user, monthStart.withDayOfMonth(5), "PENSION", "국민연금 입금",
                     scenario.monthlyPensionIncome(), "INCOME", status, recurring));
         }
+        // 금융수입(이자·배당 외 기타 금융소득)도 월별 변동 계수를 적용해 매달 같은 값이 되지 않게 한다.
+        if (scenario.monthlyFinancialIncome() != null
+                && scenario.monthlyFinancialIncome().signum() > 0) {
+            BigDecimal monthFinancial = scenario.monthlyFinancialIncome()
+                    .multiply(cashFactor).setScale(0, RoundingMode.HALF_UP);
+            events.add(event(user, monthStart.withDayOfMonth(5), "FINANCIAL_INCOME", "금융수입",
+                    monthFinancial, "INCOME", status, recurring));
+        }
         // 예금 이자: 실제 계좌 잔고 × 금리 / 1200 계산값에 월별 계수를 적용해 매달 같은 값이 되지 않게 한다.
         // 지급일은 account.openedAt 기준. 배당은 보유 ETF 단일 출처라 여기서 시드하지 않는다(#216).
         if (interestAmount.signum() > 0) {
@@ -560,13 +568,18 @@ public class AssetMockService {
         // 현재월 호출(recurring=true) 때 소비까지 recurring=true가 되면, 캘린더가 recurring 이벤트를
         // 이후 모든 달로 투영해 7·8·9월…에 같은 소비가 반복 표시된다(#177). 정기 수입/고정비만
         // recurring을 유지하고, 소비는 제 달에만 보이도록 한다.
+        // 단, 현재달 안에서도 오늘보다 미래 날짜의 소비는 아직 발생하지 않은 내역이므로 PENDING으로
+        // 시드한다. 과거 달은 today 이후 날짜가 존재할 수 없어 항상 COMPLETED로 남는다.
+        LocalDate today = LocalDate.now();
         List<MockTransactionTemplates.TransactionTemplate> templates = scenario.transactions();
         for (int i = 0; i < templates.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = templates.get(i);
             int day = TEMPLATE_DAYS[i % TEMPLATE_DAYS.length];
             BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), ym, i);
-            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
-                    amount, "EXPENSE", "COMPLETED", false));
+            LocalDate eventDate = monthStart.withDayOfMonth(day);
+            String consumptionStatus = eventDate.isAfter(today) ? "PENDING" : "COMPLETED";
+            events.add(event(user, eventDate, t.eventType(), t.title(),
+                    amount, "EXPENSE", consumptionStatus, false));
         }
 
         return events;
@@ -575,14 +588,17 @@ public class AssetMockService {
     private List<CashFlowEvent> buildMonthStockEvents(User user, LocalDate monthStart, Scenario scenario) {
         List<MockTransactionTemplates.TransactionTemplate> trades = scenario.stockTrades();
         YearMonth ym = YearMonth.from(monthStart);
+        LocalDate today = LocalDate.now();
         List<CashFlowEvent> events = new ArrayList<>();
         for (int i = 0; i < trades.size(); i++) {
             MockTransactionTemplates.TransactionTemplate t = trades.get(i);
             int day = STOCK_TRADE_DAYS[i % STOCK_TRADE_DAYS.length];
             BigDecimal amount = applyVariation(BigDecimal.valueOf(t.baseAmount()), ym, i);
             String flowType = "STOCK_BUY".equals(t.eventType()) ? "EXPENSE" : "INCOME";
-            events.add(event(user, monthStart.withDayOfMonth(day), t.eventType(), t.title(),
-                    amount, flowType, "COMPLETED", false));
+            LocalDate eventDate = monthStart.withDayOfMonth(day);
+            String tradeStatus = eventDate.isAfter(today) ? "PENDING" : "COMPLETED";
+            events.add(event(user, eventDate, t.eventType(), t.title(),
+                    amount, flowType, tradeStatus, false));
         }
         return events;
     }
