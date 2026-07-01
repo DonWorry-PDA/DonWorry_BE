@@ -3,14 +3,12 @@ package com.sol.user.report.service;
 import com.sol.user.account.entity.Account;
 import com.sol.user.account.repository.AccountRepository;
 import com.sol.user.asset.dto.AssetBreakdown;
-import com.sol.user.asset.infra.rest.DepositDetailClient;
-import com.sol.user.asset.infra.rest.DepositDetailItem;
 import com.sol.user.asset.service.AssetAggregator;
-import com.sol.user.cashflow.MonthlyVariation;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
-import com.sol.user.holding.service.EtfDividendCalculator;
-import com.sol.user.holding.service.EtfDividendCalculator.DividendBreakdown;
-import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection.ProjectedEvent;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection.ProjectedMonth;
+import com.sol.user.holding.service.DividendScheduleService;
 import com.sol.user.report.dto.MonthlyReportResponse;
 import com.sol.user.report.entity.MonthlyReport;
 import com.sol.user.report.mapper.MonthlyReportMapper;
@@ -26,10 +24,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,10 +48,9 @@ class MonthlyReportServiceTest {
     @Mock AssetAggregator assetAggregator;
     @Mock MonthlyReportRepository reportRepository;
     @Mock CashFlowEventRepository cashFlowEventRepository;
-    @Mock PensionRepository pensionRepository;
     @Mock AccountRepository accountRepository;
-    @Mock DepositDetailClient depositDetailClient;
-    @Mock EtfDividendCalculator etfDividendCalculator;
+    @Mock MonthlyCashFlowProjection projection;
+    @Mock DividendScheduleService dividendScheduleService;
     @Mock MonthlyReportSummaryGenerator summaryGenerator;
     @Spy MonthlyReportMapper mapper;
 
@@ -73,7 +68,7 @@ class MonthlyReportServiceTest {
 
         assertThat(response.assetChange().changeAmount()).isNull();
         assertThat(response.assetChange().previousTotal()).isNull();
-        assertThat(response.assetChange().currentTotal()).isEqualByComparingTo("250_000_000".replace("_", ""));
+        assertThat(response.assetChange().currentTotal()).isEqualByComparingTo("250000000");
     }
 
     @Test
@@ -92,24 +87,18 @@ class MonthlyReportServiceTest {
     // ─── 연금·배당·이자 ──────────────────────────────────────────────
 
     @Test
-    void 연금_배당_이자를_각각_별도_집계한다() {
+    void 연금_이자는_투영으로_배당은_스케줄로_집계한다() {
         stubDefaults();
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), eq("PENSION"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(won(1_200_000));
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), eq("INTEREST"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(won(32_450));
-        // 배당 런레이트는 단일 출처(EtfDividendCalculator): 세전 100,000
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(new DividendBreakdown(new BigDecimal("100000"), BigDecimal.ZERO));
+        // 정기수입은 recurring을 조회월로 투영해 집계한다(시드월 다음 달에도 사라지지 않음).
+        when(projection.project(USER_ID, JUNE))
+                .thenReturn(pm(pension(1_200_000), interest(32_450)));
+        // 분배금은 캘린더와 같은 스케줄 소스 — 월별 계수 없이 그 달 스케줄 값 그대로.
+        when(dividendScheduleService.monthlyGross(USER_ID, JUNE)).thenReturn(won(100_000));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
         assertThat(response.income().pensionAmount()).isEqualByComparingTo("1200000");
-        // 배당은 보유 런레이트(100,000)에 그 달의 결정적 배당 계수를 곱한 값(#월별 변동)
-        assertThat(response.income().dividendAmount())
-                .isEqualByComparingTo(won(100_000).multiply(MonthlyVariation.dividendFactor(JUNE)));
+        assertThat(response.income().dividendAmount()).isEqualByComparingTo("100000");
         assertThat(response.income().interestAmount()).isEqualByComparingTo("32450");
     }
 
@@ -128,7 +117,6 @@ class MonthlyReportServiceTest {
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
-        // 배당이 보유ETF 기반(월 변동 없음)으로 바뀌어 전월 대비 증감률은 표시하지 않는다(#216).
         assertThat(response.income().dividendChangeRate()).isNull();
     }
 
@@ -188,27 +176,33 @@ class MonthlyReportServiceTest {
         assertThat(response.spending().judgment()).isEqualTo("과다");
     }
 
-    // ─── 다음 달 미리보기 ──────────────────────────────────────────
-
     @Test
-    void 들어올돈은_연금과_배당의_합() {
+    void 소비비율_수입에_분배금도_포함된다() {
         stubDefaults();
-        when(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
-                .thenReturn(Optional.of(won(1_200_000)));
-
-        // 배당 런레이트 세전 100,000 (단일 출처)
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(new DividendBreakdown(new BigDecimal("100000"), BigDecimal.ZERO));
+        // 수입(캐시플로우) 1,000,000 + 분배금 1,000,000 = 2,000,000, 지출 1,000,000 → 50%
+        stubSpending(won(1_000_000), won(1_000_000));
+        when(dividendScheduleService.monthlyGross(USER_ID, JUNE)).thenReturn(won(1_000_000));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
-        // 다음 달(7월) 배당 = 런레이트 × 7월 배당 계수, 들어올 돈 = 연금 + 배당 + 이자(여기선 0)
-        BigDecimal nextDividend = won(100_000).multiply(MonthlyVariation.dividendFactor(JULY));
+        assertThat(response.spending().spendingRatio()).isEqualTo(50);
+    }
+
+    // ─── 다음 달 미리보기 ──────────────────────────────────────────
+
+    @Test
+    void 들어올돈은_연금과_배당과_이자의_합() {
+        stubDefaults();
+        // 다음 달(7월)도 이번 달과 같은 투영·스케줄 소스로 산출한다.
+        when(projection.project(USER_ID, JULY)).thenReturn(pm(pension(1_200_000)));
+        when(dividendScheduleService.monthlyGross(USER_ID, JULY)).thenReturn(won(100_000));
+
+        MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
+
         assertThat(response.nextMonthPreview().pensionAmount()).isEqualByComparingTo("1200000");
-        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo(nextDividend);
+        assertThat(response.nextMonthPreview().dividendAmount()).isEqualByComparingTo("100000");
         assertThat(response.nextMonthPreview().interestAmount()).isEqualByComparingTo("0");
-        assertThat(response.nextMonthPreview().incomingTotal())
-                .isEqualByComparingTo(won(1_200_000).add(nextDividend));
+        assertThat(response.nextMonthPreview().incomingTotal()).isEqualByComparingTo("1300000");
     }
 
     @Test
@@ -247,17 +241,10 @@ class MonthlyReportServiceTest {
     }
 
     @Test
-    void 다음달_들어올돈에_예금이자가_잔고기준으로_추정되어_포함된다() {
-        // 이번 달 실제 이자(0일 수 있음) 복사가 아니라 잔고×금리로 산출돼 누락되지 않는다(#309).
+    void 다음달_들어올돈에_이자가_투영으로_포함된다() {
+        // 정기 이자는 recurring 투영으로 다음 달에도 잡힌다(시드월 다음 달에도 0이 아님).
         stubDefaults();
-        Account deposit = mock(Account.class);
-        when(deposit.getAccountType()).thenReturn("DEPOSIT");
-        when(deposit.getProductId()).thenReturn(300L);
-        when(deposit.getDepositBalance()).thenReturn(won(120_000_000));
-        when(accountRepository.findByUserUserId(USER_ID)).thenReturn(List.of(deposit));
-        // 잔고 1.2억 × 금리 1.0% / 1200 = 100,000
-        when(depositDetailClient.fetchDepositDetails(List.of(300L)))
-                .thenReturn(Map.of(300L, new DepositDetailItem(300L, null, new BigDecimal("1.0"), 12)));
+        when(projection.project(USER_ID, JULY)).thenReturn(pm(interest(100_000)));
 
         MonthlyReportResponse response = service.getMonthlyReport(USER_ID, JUNE);
 
@@ -276,44 +263,43 @@ class MonthlyReportServiceTest {
         when(reportRepository.findByUserUserIdAndCurrentMonth(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        when(cashFlowEventRepository.sumAmountByEventTypeInPeriod(
-                eq(USER_ID), any(), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(BigDecimal.ZERO);
-        when(cashFlowEventRepository.sumAmountByFlowTypeInPeriod(
-                eq(USER_ID), any(), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(BigDecimal.ZERO);
+        when(projection.project(eq(USER_ID), any())).thenReturn(pm());
+        when(dividendScheduleService.monthlyGross(eq(USER_ID), any())).thenReturn(BigDecimal.ZERO);
         when(cashFlowEventRepository.sumRecurringExpense(eq(USER_ID)))
                 .thenReturn(BigDecimal.ZERO);
-
-        when(pensionRepository.findMonthlyAmount(USER_ID, "NATIONAL"))
-                .thenReturn(Optional.empty());
-        when(etfDividendCalculator.monthlyDividendBreakdown(eq(USER_ID), any()))
-                .thenReturn(DividendBreakdown.ZERO);
         when(accountRepository.findByUserUserId(USER_ID))
                 .thenReturn(List.of(accountWithBalance(won(5_000_000))));
         when(summaryGenerator.generate(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(List.of("line1", "line2", "line3"));
     }
 
+    /** 이번 달(JUNE) 소비/수입 투영 — 수입은 일반 INCOME 이벤트로, 지출은 EXPENSE 이벤트로 준다. */
     private void stubSpending(BigDecimal expense, BigDecimal income) {
-        when(cashFlowEventRepository.sumAmountByFlowTypeInPeriod(
-                eq(USER_ID), eq("EXPENSE"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(expense);
-        when(cashFlowEventRepository.sumAmountByFlowTypeInPeriod(
-                eq(USER_ID), eq("INCOME"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(income);
+        when(projection.project(USER_ID, JUNE)).thenReturn(pm(
+                new ProjectedEvent("SALARY", "INCOME", income),
+                new ProjectedEvent("MAINTENANCE", "EXPENSE", expense)));
+    }
+
+    private ProjectedMonth pm(ProjectedEvent... events) {
+        return new ProjectedMonth(List.of(events));
+    }
+
+    private ProjectedEvent pension(long amount) {
+        return new ProjectedEvent("PENSION", "INCOME", won(amount));
+    }
+
+    private ProjectedEvent interest(long amount) {
+        return new ProjectedEvent("INTEREST", "INCOME", won(amount));
     }
 
     private MonthlyReport snapshotOf(BigDecimal totalAsset) {
         User user = mock(User.class);
-        MonthlyReport report = MonthlyReport.snapshot(user, MAY.toString(), totalAsset);
-        return report;
+        return MonthlyReport.snapshot(user, MAY.toString(), totalAsset);
     }
 
     private Account accountWithBalance(BigDecimal balance) {
         User user = mock(User.class);
-        Account account = new Account(user, "DON_WORRY", "신한은행", "1234", balance, false);
-        return account;
+        return new Account(user, "DON_WORRY", "신한은행", "1234", balance, false);
     }
 
     private BigDecimal won(long amount) {

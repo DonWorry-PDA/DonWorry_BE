@@ -6,6 +6,7 @@ import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
+import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
 import com.sol.user.usergoal.repository.UserGoalRepository;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,7 +36,8 @@ class CashFlowDiagnosisServiceTest {
 
     @Test
     void 분배금은_15_4퍼센트_원천징수후_실수령으로_국민연금은_면세로_집계된다() {
-        given(userRepository.existsById(1L)).willReturn(true);
+        User user = receivingUser(true);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(pensionRepository.findMonthlyAmount(1L, "NATIONAL"))
                 .willReturn(Optional.of(BigDecimal.valueOf(1_000_000)));
 
@@ -56,5 +57,31 @@ class CashFlowDiagnosisServiceTest {
         assertThat(res.getNationalPension()).isEqualByComparingTo("1000000");
         // 합 = 1,084,600
         assertThat(res.getMonthlyCashFlow()).isEqualByComparingTo("1084600");
+    }
+
+    @Test
+    void 국민연금_미수령이면_예상연금이_있어도_계상하지_않는다() {
+        User user = receivingUser(false);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        // 미수령이라도 예상연금 값은 존재할 수 있으나, 현재 수령 중이 아니므로 계상하면 안 된다.
+        given(pensionRepository.findMonthlyAmount(1L, "NATIONAL"))
+                .willReturn(Optional.of(BigDecimal.valueOf(1_200_000)));
+        given(etfDividendCalculator.monthlyDividendBreakdown(eq(1L), any()))
+                .willReturn(DividendBreakdown.ZERO);
+
+        UserGoal goal = mock(UserGoal.class);
+        given(goal.getMonthlyTargetLivingCost()).willReturn(BigDecimal.valueOf(2_000_000));
+        given(userGoalRepository.findByUserUserId(1L)).willReturn(Optional.of(goal));
+
+        CashFlowDiagnosisResponse res = service.diagnose(1L);
+
+        assertThat(res.getNationalPension()).isEqualByComparingTo("0");
+        assertThat(res.getMonthlyCashFlow()).isEqualByComparingTo("0");
+    }
+
+    private User receivingUser(boolean receiving) {
+        User user = mock(User.class);
+        given(user.getNationalPensionReceiving()).willReturn(receiving);
+        return user;
     }
 }

@@ -8,9 +8,10 @@ import com.sol.user.asset.dto.AssetHubMenus;
 import com.sol.user.asset.dto.AssetHubResponse;
 import com.sol.user.asset.mapper.AssetMapper;
 import com.sol.user.asset.type.AssetCategory;
-import com.sol.user.cashflow.repository.CashFlowEventRepository;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection.ProjectedMonth;
 import com.sol.user.holding.dto.HoldingWithProduct;
-import com.sol.user.holding.service.EtfDividendCalculator;
+import com.sol.user.holding.service.DividendScheduleService;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.entity.SalaryPlan;
 import com.sol.user.monthlysalary.repository.SalaryPlanRepository;
@@ -24,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.EnumMap;
 import java.util.List;
@@ -39,13 +39,13 @@ public class AssetHubService {
     private static final String FLOW_INCOME = "INCOME";
     private static final String FLOW_EXPENSE = "EXPENSE";
 
-    private final CashFlowEventRepository cashFlowEventRepository;
+    private final MonthlyCashFlowProjection projection;
+    private final DividendScheduleService dividendScheduleService;
     private final CashFlowDiagnosisService cashFlowDiagnosisService;
     private final LifeStabilityService lifeStabilityService;
     private final AssetAggregator assetAggregator;
     private final SalaryPlanRepository salaryPlanRepository;
     private final AssetMapper assetMapper;
-    private final EtfDividendCalculator etfDividendCalculator;
 
     public AssetHubResponse getHub(Long userId) {
         AssetAggregator.AssetSnapshot snapshot = assetAggregator.aggregateSnapshot(userId);
@@ -53,8 +53,9 @@ public class AssetHubService {
         BigDecimal totalAsset = snapshot.breakdown().grossTotal();
 
         YearMonth thisMonth = YearMonth.now();
-        LocalDate start = thisMonth.atDay(1);
-        LocalDate end = thisMonth.atEndOfMonth();
+        // 정기수입(연금·이자)은 recurring을 이번 달로 투영해 집계한다 — 시드월 다음 달부터 0으로 빠지던 버그
+        // 수정. 분배금은 캘린더와 같은 스케줄 소스라 홈·리포트·캘린더 값이 일치한다.
+        ProjectedMonth month = projection.project(userId, thisMonth);
         AssetMapper.EtfSnapshot etfSnapshot = assetMapper.toEtfSnapshot(snapshot);
         AssetMapper.StockSnapshot stockSnapshot = assetMapper.toStockSnapshot(snapshot);
 
@@ -64,13 +65,9 @@ public class AssetHubService {
                 .changeAmount(null)
                 .changeDirection("FLAT")
                 .allocation(assetMapper.toCategoryAllocation(byCategory, totalAsset))
-                // 배당 이벤트는 #216에서 제거됐으므로, 보유 ETF 기반 단일 출처(EtfDividendCalculator)를
-                // 더해 '이번 달 수입'에 분배금이 빠지지 않게 한다(#303). 연금+이자(이벤트) + 분배금(세전).
-                .monthlyIncome(nz(cashFlowEventRepository
-                        .sumAmountByFlowTypeInPeriod(userId, FLOW_INCOME, start, end))
-                        .add(etfDividendCalculator.monthlyDividend(userId)))
-                .monthlyExpense(nz(cashFlowEventRepository
-                        .sumAmountByFlowTypeInPeriod(userId, FLOW_EXPENSE, start, end)))
+                .monthlyIncome(month.sumFlow(FLOW_INCOME)
+                        .add(dividendScheduleService.monthlyGross(userId, thisMonth)))
+                .monthlyExpense(month.sumFlow(FLOW_EXPENSE))
                 .etfHoldings(etfSnapshot.holdings())
                 .etfSnapshotAmount(etfSnapshot.snapshotAmount())
                 .stockHoldings(stockSnapshot.holdings())

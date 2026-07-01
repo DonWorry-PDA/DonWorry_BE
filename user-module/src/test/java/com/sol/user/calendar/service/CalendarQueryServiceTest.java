@@ -10,6 +10,7 @@ import com.sol.user.debt.repository.DebtRepository;
 import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
 import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
 import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.DividendScheduleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,10 +43,12 @@ class CalendarQueryServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 분배금 로직은 DividendScheduleService로 추출됐다 — 실제 서비스에 mock holdingRepository를 주입해
+        // 캘린더 표시 합과 monthlyGross가 같은 소스임을 그대로 검증한다.
         service = new CalendarQueryService(
                 cashFlowEventRepository,
                 debtRepository,
-                holdingRepository,
+                new DividendScheduleService(holdingRepository),
                 new CalendarEventMapper()
         );
     }

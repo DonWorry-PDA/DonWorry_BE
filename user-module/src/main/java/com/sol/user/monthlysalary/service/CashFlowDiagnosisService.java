@@ -8,6 +8,7 @@ import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
 import com.sol.user.monthlysalary.repository.SalaryAssetExclusionRepository;
 import com.sol.user.pension.repository.PensionRepository;
 import com.sol.user.portfolio.config.PortfolioConstants;
+import com.sol.user.user.entity.User;
 import com.sol.user.user.repository.UserRepository;
 import com.sol.user.usergoal.entity.UserGoal;
 import com.sol.user.usergoal.repository.UserGoalRepository;
@@ -34,14 +35,16 @@ public class CashFlowDiagnosisService {
 
     @Transactional(readOnly = true)
     public CashFlowDiagnosisResponse diagnose(Long userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new BaseException(ErrorCode.USER_NOT_FOUND);
-        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
+        // 국민연금은 '현재 수령 중'일 때만 계상한다 — 미수령(재직 등) 유저는 0.
+        // 자산분석 income(AssetIncomeService)과 동일 규칙: 플래그를 무시하고 예상연금을 넣던 버그 수정.
+        BigDecimal grossPension = Boolean.TRUE.equals(user.getNationalPensionReceiving())
+                ? pensionRepository.findMonthlyAmount(userId, NATIONAL_PENSION_TYPE).orElse(BigDecimal.ZERO)
+                : BigDecimal.ZERO;
         // 실수령(net) 반영: 국민연금은 면세 근사(0%), 분배금은 15.4% 원천징수 차감.
-        BigDecimal nationalPension = netNationalPension(pensionRepository
-                .findMonthlyAmount(userId, NATIONAL_PENSION_TYPE)
-                .orElse(BigDecimal.ZERO));
+        BigDecimal nationalPension = netNationalPension(grossPension);
 
         BigDecimal dividendIncome = netFinancial(calcMonthlyDividendIncome(userId));
 

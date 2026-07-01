@@ -10,27 +10,24 @@ import com.sol.user.calendar.mapper.CalendarEventMapper;
 import com.sol.user.calendar.type.CalendarEventCategory;
 import com.sol.user.cashflow.entity.CashFlowEvent;
 import com.sol.user.cashflow.repository.CashFlowEventRepository;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection;
 import com.sol.user.debt.entity.Debt;
 import com.sol.user.debt.repository.DebtRepository;
-import com.sol.user.holding.dto.HoldingDividendCalendarProjection;
-import com.sol.user.holding.dto.HoldingDividendPaymentProjection;
-import com.sol.user.holding.repository.HoldingRepository;
+import com.sol.user.holding.service.DividendScheduleService;
+import com.sol.user.holding.service.DividendScheduleService.DividendOccurrence;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +36,7 @@ public class CalendarQueryService {
 
     private final CashFlowEventRepository cashFlowEventRepository;
     private final DebtRepository debtRepository;
-    private final HoldingRepository holdingRepository;
+    private final DividendScheduleService dividendScheduleService;
     private final CalendarEventMapper calendarEventMapper;
 
     public CalendarMonthResponse getMonth(Long userId, int year, int month) {
@@ -50,10 +47,7 @@ public class CalendarQueryService {
         List<CalendarItem> items = new ArrayList<>();
         addCashFlowItems(items, userId, targetMonth, from, to);
         addDebtMaturityItems(items, userId, from, to);
-        // 실지급(actual)이 차지한 (상품, 월)을 모아, 투영(expected)이 같은 달을 덮어쓰지 않게 한다.
-        Set<String> actualDividendMonths = new HashSet<>();
-        addActualDividendItems(items, userId, from, to, actualDividendMonths);
-        addExpectedDividendItems(items, userId, from, to, actualDividendMonths);
+        addDividendItems(items, userId, from, to);
         items.sort(Comparator.comparing(CalendarItem::date).thenComparing(CalendarItem::id));
 
         Map<String, List<CalendarEventResponse>> events = new LinkedHashMap<>();
@@ -100,7 +94,9 @@ public class CalendarQueryService {
             LocalDate to
     ) {
         for (CashFlowEvent event : cashFlowEventRepository.findCalendarEvents(userId, from, to)) {
-            LocalDate date = resolveCashFlowDate(event, targetMonth);
+            // 정기수입 투영 규칙은 집계와 공유한다(MonthlyCashFlowProjection) — 캘린더와 리포트·홈이
+            // 같은 달에 같은 이벤트를 보게 하기 위함.
+            LocalDate date = MonthlyCashFlowProjection.resolveDate(event, targetMonth);
             if (date == null) {
                 continue;
             }
@@ -118,25 +114,6 @@ public class CalendarQueryService {
                     transactional
             ));
         }
-    }
-
-    private LocalDate resolveCashFlowDate(CashFlowEvent event, YearMonth targetMonth) {
-        LocalDate originalDate = event.getEventDate();
-        if (originalDate == null) {
-            return null;
-        }
-
-        if (!Boolean.TRUE.equals(event.getRecurring())) {
-            return targetMonth.equals(YearMonth.from(originalDate)) ? originalDate : null;
-        }
-
-        YearMonth originalMonth = YearMonth.from(originalDate);
-        if (targetMonth.isBefore(originalMonth)) {
-            return null;
-        }
-
-        int day = Math.min(originalDate.getDayOfMonth(), targetMonth.lengthOfMonth());
-        return targetMonth.atDay(day);
     }
 
     private void addDebtMaturityItems(
@@ -163,101 +140,29 @@ public class CalendarQueryService {
     }
 
     /**
-     * 과거·현재 달의 실제 지급된 분배금(확정). dividend_history의 실지급 행을 payment_date에 그대로 표시한다.
-     * 실지급이 차지한 (productId, 월)을 {@code actualMonths}에 모아, 투영이 같은 달을 중복 표시하지 않게 한다.
+     * 분배금(실지급 + 예상 투영)은 {@link DividendScheduleService} 단일 출처에서 받아 날짜에 찍는다.
+     * 그 서비스의 {@code monthlyGross}(리포트·홈이 쓰는 값)와 같은 목록이라, 캘린더 표시 합과 항상 일치한다.
      */
-    private void addActualDividendItems(
+    private void addDividendItems(
             List<CalendarItem> items,
             Long userId,
             LocalDate from,
-            LocalDate to,
-            Set<String> actualMonths
+            LocalDate to
     ) {
-        for (HoldingDividendPaymentProjection input
-                : holdingRepository.findDividendPaymentsByUserId(userId, from, to)) {
-            if (input.getProductId() == null || input.getQuantity() == null
-                    || input.getAmountPerUnit() == null || input.getPaymentDate() == null) {
-                continue;
-            }
-            BigDecimal amount = input.getAmountPerUnit()
-                    .multiply(input.getQuantity())
-                    .setScale(0, RoundingMode.HALF_UP);
-            String productName = isBlank(input.getProductName()) ? "ETF" : input.getProductName();
+        for (DividendOccurrence occurrence : dividendScheduleService.occurrences(userId, from, to)) {
+            String productName = isBlank(occurrence.productName()) ? "ETF" : occurrence.productName();
+            String idPrefix = occurrence.estimated() ? "etf-dividend-" : "etf-dividend-actual-";
+            String titleSuffix = occurrence.estimated() ? " 예상 분배금" : " 분배금";
             items.add(new CalendarItem(
-                    "etf-dividend-actual-" + input.getProductId() + "-" + input.getPaymentDate(),
-                    input.getPaymentDate(),
+                    idPrefix + occurrence.productId() + "-" + occurrence.date(),
+                    occurrence.date(),
                     CalendarEventCategory.DIVIDEND,
-                    productName + " 분배금",
-                    amount,
-                    false,
+                    productName + titleSuffix,
+                    occurrence.amount(),
+                    occurrence.estimated(),
                     false
             ));
-            actualMonths.add(dividendMonthKey(input.getProductId(), input.getPaymentDate()));
         }
-    }
-
-    /**
-     * 예상 분배금 투영(#307). 예전엔 "최신지급일+interval"부터 미래로만 깔려, 실지급 기록이 드문드문한
-     * 과거 달(예: 분기배당의 비지급 달)이 캘린더에서 비었다. 이제 최신지급일을 앵커로 interval 격자를
-     * 조회 구간 전체(과거·미래)에 깔고, 실지급(actual)이 있는 (productId, 월)만 건너뛴다.
-     */
-    private void addExpectedDividendItems(
-            List<CalendarItem> items,
-            Long userId,
-            LocalDate from,
-            LocalDate to,
-            Set<String> actualMonths
-    ) {
-        for (HoldingDividendCalendarProjection input
-                : holdingRepository.findDividendCalendarInputsByUserId(userId)) {
-            if (!canProjectDividend(input)) {
-                continue;
-            }
-
-            long interval = input.getDistributionIntervalMonths();
-            BigDecimal expectedAmount = input.getAmountPerUnit()
-                    .multiply(input.getQuantity())
-                    .setScale(0, RoundingMode.HALF_UP);
-
-            // 앵커(최신지급일)에서 interval 격자로 [from, to]를 덮는 첫 지점으로 이동.
-            LocalDate projectedDate = input.getLatestPaymentDate();
-            while (projectedDate.isAfter(from)) {
-                projectedDate = projectedDate.minusMonths(interval);
-            }
-            while (projectedDate.isBefore(from)) {
-                projectedDate = projectedDate.plusMonths(interval);
-            }
-
-            while (!projectedDate.isAfter(to)) {
-                if (!actualMonths.contains(dividendMonthKey(input.getProductId(), projectedDate))) {
-                    String productName = isBlank(input.getProductName()) ? "ETF" : input.getProductName();
-                    items.add(new CalendarItem(
-                            "etf-dividend-" + input.getProductId() + "-" + projectedDate,
-                            projectedDate,
-                            CalendarEventCategory.DIVIDEND,
-                            productName + " 예상 분배금",
-                            expectedAmount,
-                            true,
-                            false
-                    ));
-                }
-                projectedDate = projectedDate.plusMonths(interval);
-            }
-        }
-    }
-
-    /** 분배금 중복 방지 키 — (productId, 해당 월). 실지급과 같은 달의 투영을 막는다. */
-    private String dividendMonthKey(Long productId, LocalDate date) {
-        return productId + "-" + YearMonth.from(date);
-    }
-
-    private boolean canProjectDividend(HoldingDividendCalendarProjection input) {
-        return input.getProductId() != null
-                && input.getQuantity() != null
-                && input.getAmountPerUnit() != null
-                && input.getLatestPaymentDate() != null
-                && input.getDistributionIntervalMonths() != null
-                && input.getDistributionIntervalMonths() > 0;
     }
 
     private YearMonth toYearMonth(int year, int month) {
