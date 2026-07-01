@@ -2,6 +2,7 @@ package com.sol.user.monthlysalary.service;
 
 import com.sol.common.exception.BaseException;
 import com.sol.common.exception.ErrorCode;
+import com.sol.user.cashflow.service.MonthlyCashFlowProjection;
 import com.sol.user.holding.service.EtfDividendCalculator;
 import com.sol.user.monthlysalary.dto.CashFlowDiagnosisResponse;
 import com.sol.user.monthlysalary.mapper.SalaryAssetMapper;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.YearMonth;
 import java.util.Set;
 
 @Service
@@ -25,6 +27,7 @@ import java.util.Set;
 public class CashFlowDiagnosisService {
 
     private static final String NATIONAL_PENSION_TYPE = "NATIONAL";
+    private static final String INTEREST_EVENT_TYPE = "INTEREST";
 
     private final PensionRepository pensionRepository;
     private final UserGoalRepository userGoalRepository;
@@ -32,6 +35,7 @@ public class CashFlowDiagnosisService {
     private final SalaryAssetExclusionRepository salaryAssetExclusionRepository;
     private final SalaryAssetMapper salaryAssetMapper;
     private final EtfDividendCalculator etfDividendCalculator;
+    private final MonthlyCashFlowProjection projection;
 
     @Transactional(readOnly = true)
     public CashFlowDiagnosisResponse diagnose(Long userId) {
@@ -48,11 +52,17 @@ public class CashFlowDiagnosisService {
 
         BigDecimal dividendIncome = netFinancial(calcMonthlyDividendIncome(userId));
 
+        // 예금 이자도 생활비로 쓸 수 있는 실수령 현금흐름이라 셈에 넣는다 — 리포트·홈 수입 집계엔
+        // 이미 잡히는데 여기서만 빠져 "현재 수입"이 화면마다 다르게 보이던 버그.
+        // 정기수입 투영은 캘린더·리포트와 같은 공용 소스(MonthlyCashFlowProjection)를 쓴다.
+        BigDecimal interestIncome = netFinancial(
+                projection.project(userId, YearMonth.now()).sumEventType(INTEREST_EVENT_TYPE));
+
         BigDecimal targetMonthlyLivingCost = userGoalRepository.findByUserUserId(userId)
                 .map(UserGoal::getMonthlyTargetLivingCost)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal monthlyCashFlow = nationalPension.add(dividendIncome);
+        BigDecimal monthlyCashFlow = nationalPension.add(dividendIncome).add(interestIncome);
         BigDecimal monthlyShortfall = targetMonthlyLivingCost.subtract(monthlyCashFlow).max(BigDecimal.ZERO);
 
         // 반올림은 응답 단계에서만 (원 단위). 중간 계산은 전체 정밀도 유지.
@@ -60,6 +70,7 @@ public class CashFlowDiagnosisService {
                 .monthlyCashFlow(toWon(monthlyCashFlow))
                 .nationalPension(toWon(nationalPension))
                 .dividendIncome(toWon(dividendIncome))
+                .interestIncome(toWon(interestIncome))
                 .targetMonthlyLivingCost(toWon(targetMonthlyLivingCost))
                 .monthlyShortfall(toWon(monthlyShortfall))
                 .shortfallExists(monthlyShortfall.compareTo(BigDecimal.ZERO) > 0)
