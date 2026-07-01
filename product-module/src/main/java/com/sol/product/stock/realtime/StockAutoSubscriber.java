@@ -20,7 +20,7 @@ public class StockAutoSubscriber {
 
     @EventListener(ApplicationReadyEvent.class)
     public void subscribeAll() {
-        Set<String> tickers = stockTickerRegistry.getAll();
+        Set<String> tickers = Set.of("000660", "005380", "005930", "035420", "035720", "373220");
         if (tickers.isEmpty()) {
             log.info("구독할 주식 티커 없음 - 건너뜀");
             return;
